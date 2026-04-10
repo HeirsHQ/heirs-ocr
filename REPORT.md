@@ -1,0 +1,28 @@
+# Weekly Report (02/04/2026)
+
+- i-Academy Portal
+  - Progress
+    - MVP & Demo with Obong - 100%
+    - Architecture Diagram - 100%
+  - Next Steps
+    - Update UI based on feedback - (syncing with Mercy)
+    - Alpha testing - (syncing with Mercy)
+- HT Recruitment Portal
+  - Progress
+    - UI conversion - 100%
+    - API Spec - 100%
+    - Architecture Diagram - 20%
+  - Next Steps
+    - Complete the architecture diagram
+- Converge
+  - Progress
+    - Dashboard/Sidebar UI update & conversion - 100% (updated code sent to Model Carbon team)
+    - Next Steps
+      - Follow up with Model Carbon team to ensure the implementation of the updated code
+      - Review and test the updated code on the local and staging environment
+- Converge Landing Page
+  - Progress
+    - UI conversion (Warren promised COB today) - 0%
+- OCR API Service
+  - Progress
+    - API Spec - 100%
