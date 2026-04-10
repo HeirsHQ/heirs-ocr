@@ -8,8 +8,16 @@ if (env.CLAUDE_ENABLED === "true" && !env.ANTHROPIC_API_KEY) {
   errors.push("ANTHROPIC_API_KEY is required when CLAUDE_ENABLED is true");
 }
 
-if (env.GPT_ENABLED === "true" && !env.OPENAI_API_KEY) {
-  errors.push("OPENAI_API_KEY is required when GPT_ENABLED is true");
+if (
+  env.GPT_ENABLED === "true" &&
+  (!env.AZURE_OPENAI_API_KEY ||
+    !env.AZURE_OPENAI_API_VERSION ||
+    !env.AZURE_OPENAI_DEPLOYMENT_NAME ||
+    !env.AZURE_OPENAI_ENDPOINT)
+) {
+  errors.push(
+    "AZURE_OPENAI_API_KEY, AZURE_OPENAI_API_VERSION, AZURE_OPENAI_DEPLOYMENT_NAME, and AZURE_OPENAI_ENDPOINT are required when GPT_ENABLED is true",
+  );
 }
 
 if (env.CLAUDE_ENABLED === "false" && env.GPT_ENABLED === "false") {

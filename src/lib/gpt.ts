@@ -1,9 +1,12 @@
-import OpenAI from "openai";
+import { AzureOpenAI } from "openai";
 
 import { env } from "../common/env";
 
-const openai = new OpenAI({
-  apiKey: env.OPENAI_API_KEY,
+const openai = new AzureOpenAI({
+  apiKey: env.AZURE_OPENAI_API_KEY,
+  apiVersion: env.AZURE_OPENAI_API_VERSION,
+  endpoint: env.AZURE_OPENAI_ENDPOINT,
+  deployment: env.AZURE_OPENAI_DEPLOYMENT_NAME,
 });
 
 export interface GPTExtractionResult<T> {

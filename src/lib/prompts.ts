@@ -71,24 +71,22 @@ Extract values even if they are partially obscured or in unusual formats. Search
   return { system, user };
 }
 
-export function buildDocumentClassificationPrompt(ocrText: string) {
-  const system = `You are a document classification assistant. Classify the document into one of these categories:
-- letter_of_recommendation
-- code_of_conduct
-- photo_media_consent
-- disclaimer_indemnity
+export function buildDocumentClassificationPrompt(ocrText: string, expectedType: string) {
+  const system = `You are a document classification assistant. Analyze the document and detect its title and type, then check it against the expected type "${expectedType}".
 
 Return ONLY valid JSON with this exact structure (no explanation, no markdown):
 {
+  "documentTitle": string | null,
   "detectedType": string | null,
   "confidence": number,
   "matchedKeywords": string[]
 }
-- detectedType: one of the categories above, or null if it doesn't match any
-- confidence: 0.0 to 1.0
+- documentTitle: the title of the document as it appears in the text, or null if not found
+- detectedType: the document type inferred from the title and content, or null if unclear
+- confidence: 0.0 to 1.0 reflecting how confident you are that detectedType matches "${expectedType}"
 - matchedKeywords: key phrases from the text that led to the classification`;
 
-  const user = `Classify this document:\n\n--- DOCUMENT TEXT ---\n${ocrText}\n--- END ---`;
+  const user = `Classify this document and check if it matches the expected type "${expectedType}":\n\n--- DOCUMENT TEXT ---\n${ocrText}\n--- END ---`;
   return { system, user };
 }
 

@@ -63,7 +63,9 @@ export interface DocumentClassificationFields {
 }
 
 export interface DocumentClassificationResult {
+  documentTitle: string | null;
   detectedType: string | null;
+  isExpectedType: boolean;
   confidence: number;
   matchedKeywords: string[];
   pages: number;
