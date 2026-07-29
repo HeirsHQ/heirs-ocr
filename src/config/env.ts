@@ -36,6 +36,8 @@ const schema = z
       .positive()
       .default(50 * 1024 * 1024),
     NODE_ENV: z.enum(["development", "production", "test"]).default("development"),
+    /** OTLP/HTTP traces endpoint (e.g. http://collector:4318/v1/traces). Unset → traces not exported. */
+    OTEL_EXPORTER_OTLP_ENDPOINT: z.string().optional(),
     PORT: z.string().default("8080"),
     RATE_LIMIT_ENABLED: z.enum(["true", "false"]).default("true"),
     RATE_LIMIT_MAX: z.coerce.number().int().positive().default(60),

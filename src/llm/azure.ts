@@ -17,6 +17,11 @@ export type StructuredCompletion<T> = {
 export type StructuredRequest<T> = {
   system: string;
   user: string;
+  /**
+   * Optional image data URIs (`data:image/png;base64,...`) attached to the user
+   * turn for vision judgments (e.g. SIGNING crops). Ignored by text-only callers.
+   */
+  images?: string[];
   /** Zod schema of the expected result; also used to derive the JSON Schema sent to the model. */
   schema: ZodType<T>;
   /** Optional pre-computed JSON Schema (skips re-deriving from `schema`). */
@@ -24,6 +29,14 @@ export type StructuredRequest<T> = {
   schemaName?: string;
   maxTokens?: number;
   signal?: AbortSignal;
+};
+
+/** OpenAI user-turn content: plain text, or text plus attached image parts (vision). */
+type UserContent = string | Array<{ type: "text"; text: string } | { type: "image_url"; image_url: { url: string } }>;
+
+const buildUserContent = (text: string, images?: string[]): UserContent => {
+  if (!images?.length) return text;
+  return [{ type: "text", text }, ...images.map((url) => ({ type: "image_url" as const, image_url: { url } }))];
 };
 
 export interface LlmClient {
@@ -84,7 +97,7 @@ export class AzureLlmClient implements LlmClient {
         max_completion_tokens: req.maxTokens,
         messages: [
           { role: "system", content: req.system },
-          { role: "user", content: req.user },
+          { role: "user", content: buildUserContent(req.user, req.images) },
         ],
         response_format: {
           type: "json_schema",

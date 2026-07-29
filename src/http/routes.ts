@@ -6,10 +6,12 @@ import { sensitivity } from "./middleware/sensitivity";
 import { FILE_FIELD, upload } from "../ingest/upload";
 import { rateLimit } from "./middleware/rate-limit";
 import { runPipeline, type OcrRequest } from "../pipeline";
-import { sendSuccess } from "./respond";
+import { ocrQueue, type JobRecord } from "../jobs/queue";
+import { sendAccepted, sendSuccess } from "./respond";
 import { getPipelineDeps } from "./deps";
 import { auth } from "./middleware/auth";
 import { OcrError } from "./errors";
+import { env } from "../config/env";
 import "./context";
 
 /** Form field carrying the function arguments as a JSON string. */
@@ -63,8 +65,23 @@ ocrRouter.post(
         tenantId: req.tenantId!,
       };
 
-      // Sync path. The async queue (size/page threshold → 202 + statusUrl) is a
-      // later seam; both paths call the identical `runPipeline`.
+      // Large jobs go async (202 + statusUrl); both paths call the identical
+      // `runPipeline`. Gated to `standard` sensitivity — a `pii`/`restricted`
+      // file must never be persisted into the Redis-backed queue.
+      if (def.sensitivity === "standard" && (await shouldRunAsync(req.file.buffer))) {
+        let jobId: string;
+        try {
+          jobId = await ocrQueue.enqueue({ function: def.key, request });
+        } catch (err) {
+          throw new OcrError("PROVIDER_UNAVAILABLE", "Could not enqueue the async job", {
+            retryable: true,
+            details: err instanceof Error ? err.message : String(err),
+          });
+        }
+        sendAccepted(res, jobId);
+        return;
+      }
+
       const outcome = await runPipeline(def, request, getPipelineDeps());
       sendSuccess(res, 200, {
         requestId: request.requestId,
@@ -78,7 +95,48 @@ ocrRouter.post(
   },
 );
 
-ocrRouter.get("/jobs/:id", async (_req: Request, _res: Response, next: NextFunction) => {
-  // TODO: look up job status/result from the queue.
-  next(new OcrError("INTERPRETATION_FAILED", "Job lookup not implemented", { retryable: false }));
+ocrRouter.get("/jobs/:id", auth, rateLimit, async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const jobId = String(req.params.id ?? "");
+    const record = await ocrQueue.getStatus(jobId);
+
+    // Scope to the submitting tenant: a mismatch is reported as not-found so job
+    // ids can't be enumerated across tenants. Only enforced when auth is active
+    // (a tenant is present on both sides).
+    const crossTenant = !!record?.tenantId && !!req.tenantId && record.tenantId !== req.tenantId;
+    if (!record || crossTenant) {
+      throw new OcrError("NOT_FOUND", `Job '${jobId}' not found`);
+    }
+
+    res.status(200).json({ requestId: req.requestId, ...stripInternal(record) });
+  } catch (err) {
+    next(err);
+  }
 });
+
+/** Drops fields that are internal-only (tenant scoping) before returning to the client. */
+const stripInternal = ({ tenantId: _tenantId, ...rest }: JobRecord): Omit<JobRecord, "tenantId"> => rest;
+
+/**
+ * Async decision, made pre-extraction from cheap signals: total bytes, and (for
+ * PDFs) a page count read without a full OCR pass. Anything above the configured
+ * thresholds is queued rather than processed on the request.
+ */
+const shouldRunAsync = async (buffer: Buffer): Promise<boolean> => {
+  if (buffer.length > env.ASYNC_SIZE_THRESHOLD_BYTES) return true;
+  const pages = await pdfPageCount(buffer);
+  return pages > env.ASYNC_PAGE_THRESHOLD;
+};
+
+/** Page count for PDFs only (others have no meaningful pre-extraction count → 0). */
+const pdfPageCount = async (buffer: Buffer): Promise<number> => {
+  if (buffer.subarray(0, 5).toString("latin1") !== "%PDF-") return 0;
+  try {
+    const { PDFDocument } = await import("pdf-lib");
+    const doc = await PDFDocument.load(buffer, { updateMetadata: false });
+    return doc.getPageCount();
+  } catch {
+    // Encrypted/corrupt: let the sync path surface the real error rather than guess.
+    return 0;
+  }
+};

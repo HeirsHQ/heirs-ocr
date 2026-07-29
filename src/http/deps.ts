@@ -3,7 +3,7 @@ import { defaultProviderPolicy } from "../config/providers";
 import { logger } from "../observability/logger";
 import { providerRegistry } from "../providers";
 import type { PipelineDeps } from "../pipeline";
-import { noopCache } from "../cache";
+import { RedisExtractionCache } from "../cache";
 
 /**
  * Composition root for the request pipeline. Assembles the concrete
@@ -22,8 +22,7 @@ export const getPipelineDeps = (): PipelineDeps => {
       llm: buildLlmClient(),
       logger,
       providers: providerRegistry,
-      // TODO: swap for RedisExtractionCache once cache.ts is wired.
-      cache: noopCache,
+      cache: new RedisExtractionCache(),
       policy: defaultProviderPolicy,
     };
   }

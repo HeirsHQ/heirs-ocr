@@ -1,3 +1,5 @@
+import pLimit from "p-limit";
+
 /**
  * Splits multi-page PDFs into page-level image calls run with bounded
  * concurrency. GLM's throughput profile rewards page-parallel
@@ -11,10 +13,24 @@ export type PageChunk = {
   dataUri: string;
 };
 
-/** Rasterizes each PDF page to a PNG data URI via pdf-lib / pdf-to-img. */
-export const splitPdfToPageImages = async (_buffer: Buffer): Promise<PageChunk[]> => {
-  // TODO: render each page to PNG, encode as base64 data URI.
-  throw new Error("splitPdfToPageImages: not implemented");
+/**
+ * Rasterizes each PDF page to a PNG data URI via pdf-to-img (ESM-only → dynamic
+ * import). `pageRange` is a 1-based inclusive filter; omitted means every page.
+ */
+export const splitPdfToPageImages = async (buffer: Buffer, pageRange?: [number, number]): Promise<PageChunk[]> => {
+  const { pdf } = await import("pdf-to-img");
+  const doc = await pdf(buffer, { scale: 2 });
+  const [from, to] = pageRange ?? [1, doc.length];
+
+  const chunks: PageChunk[] = [];
+  let page = 0;
+  for await (const image of doc) {
+    page++;
+    if (page < from) continue;
+    if (page > to) break;
+    chunks.push({ page, dataUri: `data:image/png;base64,${image.toString("base64")}` });
+  }
+  return chunks;
 };
 
 /**
@@ -22,9 +38,10 @@ export const splitPdfToPageImages = async (_buffer: Buffer): Promise<PageChunk[]
  * Backed by `p-limit`.
  */
 export const mapWithConcurrency = async <T, R>(
-  _items: readonly T[],
-  _limit: number,
-  _task: (item: T, index: number) => Promise<R>,
+  items: readonly T[],
+  limit: number,
+  task: (item: T, index: number) => Promise<R>,
 ): Promise<R[]> => {
-  throw new Error("mapWithConcurrency: not implemented");
+  const run = pLimit(Math.max(1, limit));
+  return Promise.all(items.map((item, index) => run(() => task(item, index))));
 };

@@ -1,4 +1,6 @@
+import { logger } from "./observability/logger";
 import type { RecognizedDocument } from "./providers/types";
+import { getRedis } from "./redis";
 
 /**
  * Extraction-layer cache. Cache extraction, never interpretation:
@@ -15,10 +17,43 @@ export interface ExtractionCache {
   set(key: string, doc: RecognizedDocument, ttlSeconds: number): Promise<void>;
 }
 
-/** No-op cache used until Redis is wired. Always misses. */
+/** No-op cache. Always misses. Used in tests and as the disabled-cache default. */
 export const noopCache: ExtractionCache = {
   get: async () => undefined,
   set: async () => {},
 };
 
-// TODO: RedisExtractionCache backed by env.REDIS_URL with JSON (de)serialization.
+/**
+ * Redis-backed {@link ExtractionCache} over the shared client (`env.REDIS_URL`).
+ * {@link RecognizedDocument} is plain JSON (no Buffers), so store/load is
+ * `JSON.stringify`/`parse`.
+ *
+ * **Fail-open, like the rate limiter:** the cache is a cost optimization, never a
+ * dependency of correctness. Any Redis or deserialization error degrades to a
+ * miss on `get` and a swallowed warning on `set` — a cache outage must never turn
+ * into a request outage.
+ */
+export class RedisExtractionCache implements ExtractionCache {
+  async get(key: string): Promise<RecognizedDocument | undefined> {
+    try {
+      const raw = await getRedis().get(key);
+      if (raw === null) return undefined;
+      return JSON.parse(raw) as RecognizedDocument;
+    } catch (err) {
+      logger.warn("extraction cache get failed — treating as miss", {
+        err: err instanceof Error ? err.message : String(err),
+      });
+      return undefined;
+    }
+  }
+
+  async set(key: string, doc: RecognizedDocument, ttlSeconds: number): Promise<void> {
+    try {
+      await getRedis().set(key, JSON.stringify(doc), "EX", ttlSeconds);
+    } catch (err) {
+      logger.warn("extraction cache set failed — skipping", {
+        err: err instanceof Error ? err.message : String(err),
+      });
+    }
+  }
+}
