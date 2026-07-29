@@ -75,6 +75,7 @@ Thumbs.db
 
 # env files
 .env*
+!.env.example
 .yarn/
 .plan/
 .cursor/
@@ -82,7 +83,7 @@ Thumbs.db
 .claude/*
 .idea/
 postman/
-SETUP.md
+HANDOFF.md
 
 /texts
 

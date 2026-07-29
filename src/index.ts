@@ -1,16 +1,11 @@
 import "dotenv/config";
-
-import dotenv from "dotenv";
 import http from "http";
 
-import { env } from "./common/env";
+import { logger } from "./observability/logger";
+import { env } from "./config/env";
 import { main } from "./main";
-
-dotenv.config();
 
 const app = main();
 const server = http.createServer(app);
 
-server.listen(env.PORT || 8080, () =>
-  console.log(`service is now running, see docs at http://localhost:${env.PORT}/docs`),
-);
+server.listen(Number(env.PORT), () => logger.info(`service listening on http://localhost:${env.PORT}`));
