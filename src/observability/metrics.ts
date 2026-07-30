@@ -113,9 +113,14 @@ export const metrics: Metrics = {
       cached: String(m.cached),
       outcome: m.outcome,
     });
-    extractDurationMs.observe({ function: m.function, provider: m.provider }, m.extractMs);
-    interpretDurationMs.observe({ function: m.function }, m.interpretMs);
-    pageCount.observe({ function: m.function }, m.pageCount);
+    // Latency/page distributions describe *processed* documents; a failed request
+    // has partial or zero timings, so observing it would understate the histograms.
+    // The failure is still counted above via `outcome="error"`.
+    if (m.outcome === "success") {
+      extractDurationMs.observe({ function: m.function, provider: m.provider }, m.extractMs);
+      interpretDurationMs.observe({ function: m.function }, m.interpretMs);
+      pageCount.observe({ function: m.function }, m.pageCount);
+    }
     if (m.tokensUsed) tokensUsedTotal.inc({ function: m.function, provider: m.provider }, m.tokensUsed);
     if (m.estimatedCostNgn) estimatedCostNgnTotal.inc({ function: m.function }, m.estimatedCostNgn);
   },

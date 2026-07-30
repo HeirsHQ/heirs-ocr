@@ -1,6 +1,6 @@
 import "dotenv/config";
 
-import { generateApiKey, putTenant, revokeApiKey, type Tenant } from "../auth/tenants";
+import { generateApiKey, listTenants, putTenant, revokeApiKey, type Tenant } from "../auth/tenants";
 import { getRedis } from "../redis";
 
 /**
@@ -8,17 +8,21 @@ import { getRedis } from "../redis";
  * registry (see src/auth/tenants.ts) — no schema, no admin service.
  *
  *   ts-node src/scripts/provision-tenant.ts create <tenantId> [--rate N] [--origins a,b]
+ *   ts-node src/scripts/provision-tenant.ts list
  *   ts-node src/scripts/provision-tenant.ts revoke <apiKey>
  *
  * `create` prints the raw API key **once** — it is never stored (only its
- * sha256 is), so copy it now; it cannot be recovered.
+ * sha256 is), so copy it now; it cannot be recovered. `create`/`revoke` emit an
+ * audit line tagged with `--actor` (default: $USER) — the stdout log is the
+ * audit trail, since there is no database.
  */
 const usage = () => {
   console.error(
     [
       "Usage:",
-      "  provision-tenant create <tenantId> [--rate <perWindow>] [--functions <A,B>] [--origins <a,b,c>] [--name <name>]",
-      "  provision-tenant revoke <apiKey>",
+      "  provision-tenant create <tenantId> [--rate <perWindow>] [--functions <A,B>] [--origins <a,b,c>] [--name <name>] [--actor <who>]",
+      "  provision-tenant list",
+      "  provision-tenant revoke <apiKey> [--actor <who>]",
     ].join("\n"),
   );
 };
@@ -28,8 +32,31 @@ const getFlag = (args: string[], flag: string): string | undefined => {
   return i >= 0 ? args[i + 1] : undefined;
 };
 
+/** Who is making the change, for the audit trail: `--actor`, else $USER, else "unknown". */
+const resolveActor = (args: string[]): string => getFlag(args, "--actor") ?? process.env.USER ?? "unknown";
+
 const main = async (): Promise<number> => {
   const [command, positional, ...rest] = process.argv.slice(2);
+
+  if (command === "list") {
+    const tenants = await listTenants();
+    if (tenants.length === 0) {
+      console.log("No tenants provisioned.");
+      return 0;
+    }
+    console.log(`\nTenants (${tenants.length}):\n`);
+    for (const { keyHash, tenant } of tenants) {
+      const fns = tenant.allowedFunctions?.length ? tenant.allowedFunctions.join(",") : "ALL";
+      const rate = tenant.rateLimit ?? "default";
+      const state = tenant.disabled ? " [disabled]" : "";
+      console.log(`  ${tenant.tenantId}${state}`);
+      console.log(`    key-hash:  ${keyHash.slice(0, 16)}…`);
+      console.log(`    functions: ${fns}`);
+      console.log(`    rate:      ${rate}`);
+      console.log(`    created:   ${tenant.createdAt ?? "unknown"}\n`);
+    }
+    return 0;
+  }
 
   if (command === "create") {
     if (!positional) {
@@ -56,7 +83,7 @@ const main = async (): Promise<number> => {
     };
 
     const apiKey = generateApiKey();
-    await putTenant(apiKey, tenant);
+    await putTenant(apiKey, tenant, { actor: resolveActor(rest) });
 
     console.log(`\n✅ Provisioned tenant '${tenant.tenantId}'.`);
     console.log(`\n   API key (shown once — store it now):\n\n   ${apiKey}\n`);
@@ -69,7 +96,7 @@ const main = async (): Promise<number> => {
       usage();
       return 1;
     }
-    const removed = await revokeApiKey(positional);
+    const removed = await revokeApiKey(positional, { actor: resolveActor(rest) });
     console.log(removed > 0 ? "✅ Key revoked." : "⚠️  Key not found (already revoked?).");
     return 0;
   }

@@ -64,72 +64,106 @@ export const runPipeline = async <TArgs, TResult>(
   deps: PipelineDeps,
 ): Promise<OcrOutcome<TResult>> => {
   const start = Date.now();
-  const args = parseArgs(def, req.args);
-  const input = await ingest(req);
+  // Declared outside the try so the error path can label metrics with however far
+  // the request got (mime group/provider are unknown if it failed during ingest).
+  let input: DocumentInput | undefined;
+  let doc: RecognizedDocument | undefined;
+  let cached = false;
+  let ingestMs = 0;
+  let interpretMs = 0;
 
-  if (!def.accepts.includes(input.mimeGroup)) {
-    throw new OcrError("UNSUPPORTED_MEDIA_TYPE", `${def.key} does not accept ${input.mimeGroup} files`);
-  }
+  try {
+    const args = parseArgs(def, req.args);
 
-  const opts: RecognizeOptions = { requestId: req.requestId, userIdHash: req.tenantId };
-  const { doc, cached } = def.skipExtraction
-    ? { doc: emptyDocument(), cached: false }
-    : await extractDocument(def, input, opts, deps);
+    const ingestStart = Date.now();
+    input = await ingest(req);
+    ingestMs = Date.now() - ingestStart;
 
-  if (doc.pageCount > def.maxPages) {
-    throw new OcrError("PAGE_LIMIT_EXCEEDED", `${def.key} allows ${def.maxPages} pages; got ${doc.pageCount}`);
-  }
+    if (!def.accepts.includes(input.mimeGroup)) {
+      throw new OcrError("UNSUPPORTED_MEDIA_TYPE", `${def.key} does not accept ${input.mimeGroup} files`);
+    }
 
-  // `pii`/`restricted` functions get a redacting logger so raw document text and
-  // extracted identity fields can never reach the log sink (V2). Enforced here —
-  // the single point the context logger is built — so it can't be bypassed.
-  const isSensitive = def.sensitivity !== "standard";
-  const requestLogger = deps.logger.child({ requestId: req.requestId, function: def.key });
+    const opts: RecognizeOptions = { requestId: req.requestId, userIdHash: req.tenantId };
+    const extracted = def.skipExtraction
+      ? { doc: emptyDocument(), cached: false }
+      : await extractDocument(def, input, opts, deps);
+    doc = extracted.doc;
+    cached = extracted.cached;
 
-  const ctx: OcrContext = {
-    doc,
-    file: {
-      sha256: input.sha256,
+    if (doc.pageCount > def.maxPages) {
+      throw new OcrError("PAGE_LIMIT_EXCEEDED", `${def.key} allows ${def.maxPages} pages; got ${doc.pageCount}`);
+    }
+
+    // `pii`/`restricted` functions get a redacting logger so raw document text and
+    // extracted identity fields can never reach the log sink (V2). Enforced here —
+    // the single point the context logger is built — so it can't be bypassed.
+    const isSensitive = def.sensitivity !== "standard";
+    const requestLogger = deps.logger.child({ requestId: req.requestId, function: def.key });
+
+    const ctx: OcrContext = {
+      doc,
+      file: {
+        sha256: input.sha256,
+        mimeGroup: input.mimeGroup,
+        sizeBytes: input.buffer.length,
+        originalName: input.originalName,
+        buffer: input.buffer,
+      },
+      requestId: req.requestId,
+      tenantId: req.tenantId,
+      llm: deps.llm,
+      logger: isSensitive ? createRedactingLogger(requestLogger) : requestLogger,
+    };
+
+    // For sensitive functions, disable response-body capture in the trace (V2).
+    const interpretStart = Date.now();
+    const result = await withSpan(`interpret:${def.key}`, () => interpret(def, ctx, args), {
+      captureResult: !isSensitive,
+      attributes: { function: def.key, sensitivity: def.sensitivity },
+    });
+    interpretMs = Date.now() - interpretStart;
+
+    const meta: OcrResponseMeta = {
+      provider: doc.provider,
+      fellBackFrom: doc.fellBackFrom ?? null,
+      pageCount: doc.pageCount,
+      cached,
+      durationMs: Date.now() - start,
+      tokensUsed: doc.tokensUsed,
+    };
+    metrics.recordRequest({
+      function: def.key,
       mimeGroup: input.mimeGroup,
-      sizeBytes: input.buffer.length,
-      originalName: input.originalName,
-      buffer: input.buffer,
-    },
-    requestId: req.requestId,
-    tenantId: req.tenantId,
-    llm: deps.llm,
-    logger: isSensitive ? createRedactingLogger(requestLogger) : requestLogger,
-  };
+      pageCount: doc.pageCount,
+      provider: doc.provider,
+      fellBackFrom: doc.fellBackFrom,
+      cached,
+      ingestMs,
+      extractMs: doc.durationMs,
+      interpretMs,
+      tokensUsed: doc.tokensUsed,
+      outcome: "success",
+    });
 
-  // For sensitive functions, disable response-body capture in the trace (V2).
-  const result = await withSpan(`interpret:${def.key}`, () => interpret(def, ctx, args), {
-    captureResult: !isSensitive,
-    attributes: { function: def.key, sensitivity: def.sensitivity },
-  });
-
-  const meta: OcrResponseMeta = {
-    provider: doc.provider,
-    fellBackFrom: doc.fellBackFrom ?? null,
-    pageCount: doc.pageCount,
-    cached,
-    durationMs: Date.now() - start,
-    tokensUsed: doc.tokensUsed,
-  };
-  metrics.recordRequest({
-    function: def.key,
-    mimeGroup: input.mimeGroup,
-    pageCount: doc.pageCount,
-    provider: doc.provider,
-    fellBackFrom: doc.fellBackFrom,
-    cached,
-    ingestMs: 0,
-    extractMs: doc.durationMs,
-    interpretMs: 0,
-    tokensUsed: doc.tokensUsed,
-    outcome: "success",
-  });
-
-  return { result, meta };
+    return { result, meta };
+  } catch (err) {
+    // Count the failed request so `ocr_requests_total{outcome="error"}` reflects
+    // failures too; the histograms are left to successes (see metrics.recordRequest).
+    metrics.recordRequest({
+      function: def.key,
+      mimeGroup: input?.mimeGroup ?? "unknown",
+      pageCount: doc?.pageCount ?? 0,
+      provider: doc?.provider ?? "none",
+      fellBackFrom: doc?.fellBackFrom,
+      cached,
+      ingestMs,
+      extractMs: doc?.durationMs ?? 0,
+      interpretMs,
+      tokensUsed: doc?.tokensUsed,
+      outcome: "error",
+    });
+    throw err;
+  }
 };
 
 /** Placeholder document for `skipExtraction` functions that work on raw bytes. */

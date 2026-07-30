@@ -9,8 +9,19 @@ import { logger } from "../src/observability/logger";
 import { textExtraction } from "../src/functions/text-extraction";
 import { documentClassification } from "../src/functions/document-classification";
 import { signing } from "../src/functions/signing";
+import { registry } from "../src/observability/metrics";
 import { OcrError } from "../src/http/errors";
 import type { DocumentInput, OcrProvider, RecognizedDocument, RecognizeOptions } from "../src/providers/types";
+
+/** Sum of ocr_requests_total for a given outcome, across all label sets. */
+const requestCount = async (outcome: "success" | "error"): Promise<number> => {
+  const metric = registry.getSingleMetric("ocr_requests_total");
+  if (!metric) return 0;
+  const data = (await (metric as { get(): Promise<unknown> }).get()) as {
+    values: { labels: Record<string, string>; value: number }[];
+  };
+  return data.values.filter((v) => v.labels.outcome === outcome).reduce((sum, v) => sum + v.value, 0);
+};
 
 // 1x1 transparent PNG — a real, sniffable image payload.
 const PNG_1x1 = Buffer.from(
@@ -120,6 +131,28 @@ describe("runPipeline — extraction + interpretation", () => {
     );
     expect(outcome.result.label).toBe("invoice");
     expect(outcome.result.confidence).toBeCloseTo(0.92);
+  });
+
+  it("records a success outcome in ocr_requests_total", async () => {
+    const before = await requestCount("success");
+    await runPipeline(textExtraction, request(Buffer.from("metrics ok")), deps());
+    expect(await requestCount("success")).toBe(before + 1);
+  });
+
+  it("records an error outcome when the pipeline throws (error-rate SLI is populated)", async () => {
+    const before = await requestCount("error");
+    const providers = [
+      fakeProvider("tesseract", async () => {
+        throw new Error("boom-1");
+      }),
+      fakeProvider("glm-ocr", async () => {
+        throw new Error("boom-2");
+      }),
+    ];
+    await expect(
+      runPipeline(textExtraction, request(PNG_1x1, {}, "x.png"), deps({ providers })),
+    ).rejects.toBeInstanceOf(OcrError);
+    expect(await requestCount("error")).toBe(before + 1);
   });
 
   it("collapses a low-confidence label to 'unknown' when the caller allows it", async () => {

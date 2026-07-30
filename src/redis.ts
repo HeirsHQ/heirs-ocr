@@ -26,3 +26,15 @@ export const getRedis = (): Redis => {
   }
   return client;
 };
+
+/**
+ * Closes the shared connection on graceful shutdown. `quit()` lets in-flight
+ * commands drain before the socket closes; a no-op if the client was never
+ * created. Safe to call more than once.
+ */
+export const closeRedis = async (): Promise<void> => {
+  if (!client) return;
+  const closing = client;
+  client = undefined;
+  await closing.quit();
+};

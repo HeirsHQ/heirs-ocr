@@ -1,0 +1,61 @@
+# Local stack that mirrors production topology (12-factor X — dev/prod parity):
+# the same image runs the API and the worker, both against a real Redis, exactly
+# as they would when deployed.
+#
+#   docker compose up --build          # api + worker + redis
+#   docker compose run --rm api node build/scripts/... (admin tasks, see note)
+#
+# Secrets/flags are read from your shell or a root .env (compose substitutes
+# ${VAR} automatically). Everything else uses the image defaults from env.ts.
+
+services:
+  redis:
+    image: redis:7-alpine
+    ports:
+      - "6379:6379"
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 3s
+      retries: 5
+
+  api:
+    build: .
+    image: heirs-ocr
+    depends_on:
+      redis:
+        condition: service_healthy
+    ports:
+      - "8080:8080"
+    environment:
+      NODE_ENV: production
+      PORT: "8080"
+      REDIS_URL: redis://redis:6379
+      AUTH_ENABLED: ${AUTH_ENABLED:-true}
+      AZURE_OPENAI_ENABLED: ${AZURE_OPENAI_ENABLED:-false}
+      AZURE_OPENAI_API_KEY: ${AZURE_OPENAI_API_KEY:-}
+      AZURE_OPENAI_ENDPOINT: ${AZURE_OPENAI_ENDPOINT:-}
+      AZURE_OPENAI_API_VERSION: ${AZURE_OPENAI_API_VERSION:-}
+      AZURE_OPENAI_DEPLOYMENT_NAME: ${AZURE_OPENAI_DEPLOYMENT_NAME:-}
+      GLM_ENABLED: ${GLM_ENABLED:-false}
+      GLM_API_KEY: ${GLM_API_KEY:-}
+      OTEL_EXPORTER_OTLP_ENDPOINT: ${OTEL_EXPORTER_OTLP_ENDPOINT:-}
+
+  worker:
+    build: .
+    image: heirs-ocr
+    command: ["node", "build/worker.js"]
+    depends_on:
+      redis:
+        condition: service_healthy
+    environment:
+      NODE_ENV: production
+      REDIS_URL: redis://redis:6379
+      AZURE_OPENAI_ENABLED: ${AZURE_OPENAI_ENABLED:-false}
+      AZURE_OPENAI_API_KEY: ${AZURE_OPENAI_API_KEY:-}
+      AZURE_OPENAI_ENDPOINT: ${AZURE_OPENAI_ENDPOINT:-}
+      AZURE_OPENAI_API_VERSION: ${AZURE_OPENAI_API_VERSION:-}
+      AZURE_OPENAI_DEPLOYMENT_NAME: ${AZURE_OPENAI_DEPLOYMENT_NAME:-}
+      GLM_ENABLED: ${GLM_ENABLED:-false}
+      GLM_API_KEY: ${GLM_API_KEY:-}
+      OTEL_EXPORTER_OTLP_ENDPOINT: ${OTEL_EXPORTER_OTLP_ENDPOINT:-}

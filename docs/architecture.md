@@ -31,17 +31,17 @@ sync path and the async queue worker run the _identical_ code.
 
 ## Layers
 
-| Layer          | Directory                 | Responsibility                                                          |
-| -------------- | ------------------------- | ----------------------------------------------------------------------- |
-| Ingestion      | `src/ingest/`             | `multer` memory upload + size cap; `file-type` magic-byte sniff; sha256 |
-| Extraction     | `src/providers/`          | Each provider emits the same `RecognizedDocument` shape                 |
-| Routing        | `src/providers/router.ts` | Match a function's required capabilities to a provider + fallback chain  |
-| Interpretation | `src/functions/*/`        | Per-function args/result schemas, prompt, and `execute`                 |
-| Authenticity   | `src/authenticity/`       | Deterministic tamper analysis on raw bytes (PDF + image)                |
-| LLM            | `src/llm/`                | Azure OpenAI structured-output wrapper; Zod → JSON Schema               |
+| Layer          | Directory                 | Responsibility                                                            |
+| -------------- | ------------------------- | ------------------------------------------------------------------------- |
+| Ingestion      | `src/ingest/`             | `multer` memory upload + size cap; `file-type` magic-byte sniff; sha256   |
+| Extraction     | `src/providers/`          | Each provider emits the same `RecognizedDocument` shape                   |
+| Routing        | `src/providers/router.ts` | Match a function's required capabilities to a provider + fallback chain   |
+| Interpretation | `src/functions/*/`        | Per-function args/result schemas, prompt, and `execute`                   |
+| Authenticity   | `src/authenticity/`       | Deterministic tamper analysis on raw bytes (PDF + image)                  |
+| LLM            | `src/llm/`                | Azure OpenAI structured-output wrapper; Zod → JSON Schema                 |
 | HTTP           | `src/http/`               | Routes, error envelope, middleware (auth, authz, rate-limit, sensitivity) |
-| Jobs           | `src/jobs/`               | BullMQ queue + worker for async (large/multi-page) requests             |
-| Observability  | `src/observability/`      | Logger (with redaction), metrics, tracing                               |
+| Jobs           | `src/jobs/`               | BullMQ queue + worker for async (large/multi-page) requests               |
+| Observability  | `src/observability/`      | Logger (with redaction), metrics, tracing                                 |
 
 ### The load-bearing type
 
@@ -112,18 +112,37 @@ capture, `Cache-Control: no-store`, and no extraction caching.
 3. Register it in `src/functions/registry.ts`. The catalog, JSON Schemas, routing, and
    the pipeline pick it up with no further changes.
 
-## Not yet wired
+## Wiring status
 
-The catalog, schemas, router, pipeline, HTTP layer, and security middleware are wired
-end-to-end for the **synchronous** path. A few integration seams are staged and
-currently throw a clear error until connected — a maintainer wiring them will touch:
+The catalog, schemas, router, pipeline, HTTP layer, security middleware, **and both the
+sync and async paths** are wired end-to-end. No integration seam is stubbed.
 
-| Seam                     | Where                                   | State                                                      |
-| ------------------------ | --------------------------------------- | --------------------------------------------------------- |
-| GLM-OCR provider         | `src/providers/glm/`                    | Client / chunker / mapper stubbed — see [glm-ocr.md](./glm-ocr.md). Blocks `SIGNING`. |
-| Redis extraction cache   | `src/cache.ts`, `src/http/deps.ts`      | A `noopCache` is injected until `RedisExtractionCache` lands. |
-| Async queue + worker     | `src/jobs/`, `GET /v1/ocr/jobs/:id`     | Sync path is live; enqueue/worker/job-lookup not connected. |
-| Metrics / tracing export | `src/observability/`                    | In-memory counters and spans; no prom-client / OTel export. |
+**The GLM-OCR provider is wired**, not stubbed. Client (`fetch` with bounded retry/backoff
+on 429/5xx), PDF-page chunker (rasterize → parallel base64 calls), and response mapper
+(`layout_parsing` → canonical `RecognizedDocument`) are all implemented, and the provider
+is constructed in the composition root ([`src/providers/index.ts`](../src/providers/index.ts))
+behind `GLM_ENABLED` — when off, it's absent from the registry and the router falls the
+image/scanned-PDF chains to Tesseract. Our mapping/retry/orchestration logic is covered by
+`test/glm.test.ts`. **Caveat:** those tests exercise our code against the documented
+`layout_parsing` contract; the provider has not been validated against z.ai's live API —
+do a smoke test with a real key before it carries production traffic (see
+[glm-ocr.md](./glm-ocr.md)), and see [vendor-threat-model.md](./vendor-threat-model.md)
+before any `pii` document routes to it.
+
+**The async queue + worker are wired**, not stubbed. `POST /v1/ocr/:function` routes a
+`standard`-sensitivity request over the size/page thresholds (`ASYNC_SIZE_THRESHOLD_BYTES`,
+`ASYNC_PAGE_THRESHOLD`) to the BullMQ queue, returning `202` + a `statusUrl`; the worker
+(`node build/worker.js`) runs the _identical_ `runPipeline` off-request, and
+`GET /v1/ocr/jobs/:id` reports status/result scoped to the submitting tenant. Typed
+`OcrError` codes survive the queue boundary (`encodeJobError`), and `pii`/`restricted`
+files are never enqueued. Covered by `test/jobs.test.ts`.
+
+**Observability is wired**, not stubbed: metrics are real `prom-client` series served at
+`/metrics`, and tracing is real OpenTelemetry. Export is config-gated — traces ship over
+OTLP/HTTP when `OTEL_EXPORTER_OTLP_ENDPOINT` is set (console in dev, otherwise spans are
+created but not shipped). Per-request metrics cover both `success` and `error` outcomes.
+Not yet fed: `recordConfidence` (no function emits a confidence SLI yet) and the
+`ocr_estimated_cost_ngn` counter.
 
 The LLM functions run against `AzureLlmClient` only when `AZURE_OPENAI_ENABLED=true`
 and the deployment is configured; otherwise `complete` throws a clear config error

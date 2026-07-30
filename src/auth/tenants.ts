@@ -1,5 +1,6 @@
 import { createHash, randomBytes } from "crypto";
 
+import { logger } from "../observability/logger";
 import { env } from "../config/env";
 import { getRedis } from "../redis";
 
@@ -76,17 +77,46 @@ export const resolveTenant = async (apiKey: string): Promise<Tenant | undefined>
   return tenant.disabled ? undefined : tenant;
 };
 
-/** Writes (or overwrites) a tenant under an API key's hash. Used by provisioning. */
-export const putTenant = async (apiKey: string, tenant: Tenant): Promise<void> => {
-  await getRedis().hset(
-    TENANTS_KEY,
-    hashApiKey(apiKey),
-    JSON.stringify({ ...tenant, createdAt: tenant.createdAt ?? new Date().toISOString() }),
-  );
+/**
+ * Provenance for a registry mutation. `actor` identifies who made the change (a
+ * CLI operator, or a future admin API's authenticated principal). Carried into
+ * the audit log — there is no DB, so the stdout log stream is the audit trail.
+ */
+export type AuditContext = { actor?: string };
+
+/**
+ * Writes (or overwrites) a tenant under an API key's hash. Used by provisioning.
+ * Emits a `tenant.provisioned` audit line — the key-hash (never the raw key) is
+ * safe to log and lets a mutation be correlated with the stored record.
+ */
+export const putTenant = async (apiKey: string, tenant: Tenant, audit: AuditContext = {}): Promise<void> => {
+  const keyHash = hashApiKey(apiKey);
+  const record = { ...tenant, createdAt: tenant.createdAt ?? new Date().toISOString() };
+  await getRedis().hset(TENANTS_KEY, keyHash, JSON.stringify(record));
+  logger.info("tenant.provisioned", {
+    tenantId: record.tenantId,
+    keyHash,
+    actor: audit.actor ?? "unknown",
+    rateLimit: record.rateLimit,
+    allowedFunctions: record.allowedFunctions,
+  });
 };
 
-/** Removes a tenant by API key (hard revoke). */
-export const revokeApiKey = async (apiKey: string): Promise<number> => {
-  cache.delete(hashApiKey(apiKey));
-  return getRedis().hdel(TENANTS_KEY, hashApiKey(apiKey));
+/** Removes a tenant by API key (hard revoke). Emits a `tenant.revoked` audit line. */
+export const revokeApiKey = async (apiKey: string, audit: AuditContext = {}): Promise<number> => {
+  const keyHash = hashApiKey(apiKey);
+  cache.delete(keyHash);
+  const removed = await getRedis().hdel(TENANTS_KEY, keyHash);
+  logger.info("tenant.revoked", { keyHash, actor: audit.actor ?? "unknown", removed });
+  return removed;
+};
+
+/**
+ * All tenants in the registry, each paired with the sha256 key-hash that indexes
+ * it. Backs `provision:tenant list`; the raw API key is unrecoverable by design,
+ * so the hash is the only stable per-tenant identifier surfaced here.
+ */
+export const listTenants = async (): Promise<Array<{ keyHash: string; tenant: Tenant }>> => {
+  const all = await getRedis().hgetall(TENANTS_KEY);
+  return Object.entries(all).map(([keyHash, raw]) => ({ keyHash, tenant: JSON.parse(raw) as Tenant }));
 };
