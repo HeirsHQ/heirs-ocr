@@ -70,6 +70,10 @@ function enterApp() {
 $("#login-form").addEventListener("submit", async (e) => {
   e.preventDefault();
   $("#login-error").textContent = "";
+  const btn = $("#login-form button[type=submit]");
+  const label = btn.textContent;
+  btn.disabled = true;
+  btn.textContent = "Signing in…";
   try {
     me = await api("POST", "/login", {
       email: $("#login-email").value,
@@ -78,6 +82,11 @@ $("#login-form").addEventListener("submit", async (e) => {
     enterApp();
   } catch (err) {
     $("#login-error").textContent = err.message || "Sign in failed";
+  } finally {
+    // Re-enable so a failed attempt can be retried. (On success the login view is
+    // hidden by enterApp, so this just restores it for next time.)
+    btn.disabled = false;
+    btn.textContent = label;
   }
 });
 

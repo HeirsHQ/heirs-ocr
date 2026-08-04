@@ -1,5 +1,5 @@
-import { logger } from "./logger";
 import { getRedis } from "../redis";
+import { logger } from "./logger";
 
 /**
  * Per-tenant usage counters for the admin console's "usage" panel.

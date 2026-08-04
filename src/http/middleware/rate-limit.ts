@@ -1,9 +1,9 @@
 import type { NextFunction, Request, Response } from "express";
 
-import { env } from "../../config/env";
 import { logger } from "../../observability/logger";
-import { OcrError } from "../errors";
+import { env } from "../../config/env";
 import { getRedis } from "../../redis";
+import { OcrError } from "../errors";
 
 /**
  * Per-tenant rate limiting (fixes the DoS surface noted in

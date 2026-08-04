@@ -1,10 +1,10 @@
 import { Worker } from "bullmq";
 
 import { OCR_QUEUE_NAME, createQueueConnection, encodeJobError, type OcrJobData } from "./queue";
-import { getPipelineDeps } from "../http/deps";
+import { runPipeline, type OcrRequest } from "../pipeline";
 import { getFunction } from "../functions/registry";
 import { logger } from "../observability/logger";
-import { runPipeline, type OcrRequest } from "../pipeline";
+import { getPipelineDeps } from "../http/deps";
 import { OcrError } from "../http/errors";
 
 /** Off-request jobs are less latency-sensitive; a modest fixed concurrency. */

@@ -1,3 +1,6 @@
+import { ATTR_SERVICE_NAME, ATTR_SERVICE_VERSION } from "@opentelemetry/semantic-conventions";
+import { OTLPTraceExporter } from "@opentelemetry/exporter-trace-otlp-http";
+import { resourceFromAttributes } from "@opentelemetry/resources";
 import {
   BatchSpanProcessor,
   ConsoleSpanExporter,
@@ -5,12 +8,9 @@ import {
   SimpleSpanProcessor,
   type SpanProcessor,
 } from "@opentelemetry/sdk-trace-node";
-import { OTLPTraceExporter } from "@opentelemetry/exporter-trace-otlp-http";
-import { resourceFromAttributes } from "@opentelemetry/resources";
-import { ATTR_SERVICE_NAME, ATTR_SERVICE_VERSION } from "@opentelemetry/semantic-conventions";
 
-import { logger } from "./logger";
 import { env } from "../config/env";
+import { logger } from "./logger";
 
 /** Tracer/service name; also used by {@link import("./tracing").withSpan}. */
 export const SERVICE_NAME = "heirs-ocr";

@@ -1,10 +1,10 @@
-import { randomBytes } from "crypto";
 import type { NextFunction, Request, Response } from "express";
+import { randomBytes } from "crypto";
 
-import { env } from "../../config/env";
 import { logger } from "../../observability/logger";
-import { OcrError } from "../errors";
 import { resolveTenant } from "../../auth/tenants";
+import { env } from "../../config/env";
+import { OcrError } from "../errors";
 
 /**
  * API-key authentication (docs/regression-and-security.md V1). The caller sends

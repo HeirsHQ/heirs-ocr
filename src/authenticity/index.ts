@@ -1,8 +1,8 @@
 import type { MimeGroup } from "../providers/types";
-import { analyzeImage } from "./image";
-import { analyzePdf } from "./pdf";
-import { aggregate } from "./signals";
 import type { TamperSignals } from "./types";
+import { analyzeImage } from "./image";
+import { aggregate } from "./signals";
+import { analyzePdf } from "./pdf";
 
 export * from "./types";
 

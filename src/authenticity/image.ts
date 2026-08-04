@@ -1,5 +1,5 @@
-import { aggregate } from "./signals";
 import type { TamperSignal, TamperSignals } from "./types";
+import { aggregate } from "./signals";
 
 /**
  * Deterministic image authenticity analysis (docs/tamper-detection.md), cheap

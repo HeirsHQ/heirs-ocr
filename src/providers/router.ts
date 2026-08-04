@@ -1,6 +1,6 @@
 import { policyForFunction, type ProviderPolicy } from "../config/providers";
-import type { OcrFunctionKey } from "../functions/define";
 import type { Capability, MimeGroup, OcrProvider } from "./types";
+import type { OcrFunctionKey } from "../functions/define";
 
 /**
  * Provider routing. Functions declare what they need;

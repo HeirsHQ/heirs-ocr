@@ -1,7 +1,7 @@
 import { PDFDocument } from "pdf-lib";
 
-import { aggregate } from "./signals";
 import type { TamperSignal, TamperSignals } from "./types";
+import { aggregate } from "./signals";
 
 /**
  * Deterministic PDF authenticity analysis (docs/tamper-detection.md). No external
