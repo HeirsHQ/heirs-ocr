@@ -1,6 +1,6 @@
 import express, { type Request, type Response } from "express";
-import path from "path";
 import morgan from "morgan";
+import path from "path";
 
 import { errorHandler, notFound } from "./http/middleware/error";
 import { metricsContentType, renderMetrics } from "./observability/metrics";

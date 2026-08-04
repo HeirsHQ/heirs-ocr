@@ -2,12 +2,12 @@ import { Router, type Request, type Response, type NextFunction } from "express"
 
 import { buildCatalog, getFunction } from "../functions/registry";
 import { authorizeFunction } from "./middleware/authorize";
-import { sensitivity } from "./middleware/sensitivity";
-import { FILE_FIELD, upload } from "../ingest/upload";
-import { rateLimit } from "./middleware/rate-limit";
 import { runPipeline, type OcrRequest } from "../pipeline";
 import { ocrQueue, type JobRecord } from "../jobs/queue";
+import { sensitivity } from "./middleware/sensitivity";
+import { FILE_FIELD, upload } from "../ingest/upload";
 import { sendAccepted, sendSuccess } from "./respond";
+import { rateLimit } from "./middleware/rate-limit";
 import { getPipelineDeps } from "./deps";
 import { auth } from "./middleware/auth";
 import { OcrError } from "./errors";

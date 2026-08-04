@@ -1,5 +1,5 @@
-import { createHash } from "crypto";
 import { fromBuffer } from "file-type";
+import { createHash } from "crypto";
 
 import type { MimeGroup } from "../providers/types";
 

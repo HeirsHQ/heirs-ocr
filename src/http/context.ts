@@ -1,5 +1,5 @@
-import type { Sensitivity } from "../functions/define";
 import type { AdminSession } from "../auth/admin-session";
+import type { Sensitivity } from "../functions/define";
 import type { Tenant } from "../auth/tenants";
 
 /** Per-request fields attached by middleware and read by handlers. */

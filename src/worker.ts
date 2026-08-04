@@ -1,8 +1,8 @@
 import "dotenv/config";
 
-import { startWorker } from "./jobs/worker";
 import { initTracing, shutdownTracing } from "./observability/otel";
 import { logger } from "./observability/logger";
+import { startWorker } from "./jobs/worker";
 
 /**
  * Dedicated worker entrypoint. Runs the BullMQ loop in its own process so async

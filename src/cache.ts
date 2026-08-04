@@ -1,5 +1,5 @@
-import { logger } from "./observability/logger";
 import type { RecognizedDocument } from "./providers/types";
+import { logger } from "./observability/logger";
 import { getRedis } from "./redis";
 
 /**

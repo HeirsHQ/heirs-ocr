@@ -1,6 +1,16 @@
 import { Router, type Request, type RequestHandler, type Response } from "express";
 import { z } from "zod";
 
+import { SESSION_COOKIE, createSession, destroySession } from "../../auth/admin-session";
+import { adminAuth, parseCookies, requireMinRole } from "../middleware/admin-auth";
+import { getMetricsSummary } from "../../observability/metrics";
+import { getAllTenantUsage } from "../../observability/usage";
+import { listFunctions } from "../../functions/registry";
+import { logger } from "../../observability/logger";
+import { getQueueStats } from "../../jobs/queue";
+import type { User } from "../../types/user";
+import { env } from "../../config/env";
+import { getRedis } from "../../redis";
 import {
   countOwners,
   createAdmin,
@@ -19,16 +29,6 @@ import {
   updateTenantByHash,
   type Tenant,
 } from "../../auth/tenants";
-import { SESSION_COOKIE, createSession, destroySession } from "../../auth/admin-session";
-import { adminAuth, parseCookies, requireMinRole } from "../middleware/admin-auth";
-import { getMetricsSummary } from "../../observability/metrics";
-import { getAllTenantUsage } from "../../observability/usage";
-import type { User } from "../../types/user";
-import { getQueueStats } from "../../jobs/queue";
-import { listFunctions } from "../../functions/registry";
-import { logger } from "../../observability/logger";
-import { env } from "../../config/env";
-import { getRedis } from "../../redis";
 
 /**
  * Admin console JSON API, mounted under `/admin` (paths here start with `/api`).
@@ -69,12 +69,27 @@ const handler =
     });
   };
 
-/** httpOnly session cookie, scoped to the console. `secure` in production only. */
-const setSessionCookie = (res: Response, token: string, ttlSeconds: number): void => {
+/**
+ * True when the browser reached us over HTTPS — directly (`req.secure`) or via a
+ * TLS-terminating proxy that forwards the original scheme in `X-Forwarded-Proto`.
+ * We read the header ourselves rather than enabling global `trust proxy`, which
+ * would also change `req.ip` resolution (the rate limiter keys on it).
+ */
+const isHttpsRequest = (req: Request): boolean =>
+  req.secure || (req.get("x-forwarded-proto") ?? "").split(",")[0]!.trim().toLowerCase() === "https";
+
+/**
+ * httpOnly session cookie, scoped to the console. `secure` is set from the actual
+ * request scheme, not `NODE_ENV`: a `Secure` cookie is dropped by the browser over
+ * plain HTTP, so tying it to `NODE_ENV=production` silently breaks any non-local
+ * deployment served over HTTP (login succeeds, but the cookie is never stored, so
+ * every subsequent request 401s). Over HTTPS the flag is still set.
+ */
+const setSessionCookie = (req: Request, res: Response, token: string, ttlSeconds: number): void => {
   res.cookie(SESSION_COOKIE, token, {
     httpOnly: true,
     sameSite: "strict",
-    secure: env.NODE_ENV === "production",
+    secure: isHttpsRequest(req),
     path: "/admin",
     maxAge: ttlSeconds * 1000,
   });
@@ -112,7 +127,7 @@ adminApiRouter.post(
       return;
     }
 
-    setSessionCookie(res, session.token, session.ttl);
+    setSessionCookie(req, res, session.token, session.ttl);
     logger.info("admin.login", { adminId: admin.id, email: admin.email });
     res.json({ user: publicUser(admin), role: admin.role });
   }),

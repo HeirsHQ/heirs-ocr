@@ -2,10 +2,10 @@ import type { DocumentInput, OcrProvider, RecognizedDocument, RecognizeOptions }
 import { resolveResultSchema, type OcrContext, type OcrFunctionDefinition } from "./functions/define";
 import { createRedactingLogger, type Logger } from "./observability/logger";
 import { extractionCacheKey, type ExtractionCache } from "./cache";
+import { recordTenantUsage } from "./observability/usage";
 import type { ProviderPolicy } from "./config/providers";
 import { withSpan } from "./observability/tracing";
 import { routeProvider } from "./providers/router";
-import { recordTenantUsage } from "./observability/usage";
 import { metrics } from "./observability/metrics";
 import { sha256, sniff } from "./ingest/sniff";
 import type { LlmClient } from "./llm/azure";
