@@ -1,7 +1,7 @@
 import "dotenv/config";
 
 import { generateApiKey, listTenants, putTenant, revokeApiKey, type Tenant } from "../auth/tenants";
-import { getRedis } from "../redis";
+import { getRedis, whenRedisReady } from "../redis";
 
 /**
  * Database-free tenant provisioning CLI. Writes tenants into the Redis-backed
@@ -36,6 +36,7 @@ const getFlag = (args: string[], flag: string): string | undefined => {
 const resolveActor = (args: string[]): string => getFlag(args, "--actor") ?? process.env.USER ?? "unknown";
 
 const main = async (): Promise<number> => {
+  await whenRedisReady();
   const [command, positional, ...rest] = process.argv.slice(2);
 
   if (command === "list") {

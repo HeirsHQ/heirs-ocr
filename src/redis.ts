@@ -28,6 +28,30 @@ export const getRedis = (): Redis => {
 };
 
 /**
+ * Resolves once the shared client is connected and writeable. Because commands
+ * use `enableOfflineQueue: false`, a short-lived process (the provisioning CLIs)
+ * would otherwise fire its first command before the socket is ready and get
+ * "Stream isn't writeable" — noticeable against a remote/TLS Redis where connecting
+ * takes longer than the immediate command. The long-running server doesn't need
+ * this (it connects during boot). Rejects on timeout so a CLI fails fast.
+ */
+export const whenRedisReady = async (timeoutMs = 8000): Promise<void> => {
+  const client = getRedis();
+  if (client.status === "ready") return;
+  await new Promise<void>((resolve, reject) => {
+    const onReady = () => {
+      clearTimeout(timer);
+      resolve();
+    };
+    const timer = setTimeout(() => {
+      client.off("ready", onReady);
+      reject(new Error(`Redis not ready after ${timeoutMs}ms`));
+    }, timeoutMs);
+    client.once("ready", onReady);
+  });
+};
+
+/**
  * Closes the shared connection on graceful shutdown. `quit()` lets in-flight
  * commands drain before the socket closes; a no-op if the client was never
  * created. Safe to call more than once.

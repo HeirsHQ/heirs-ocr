@@ -77,6 +77,38 @@ Because it's server-to-server, **CORS is default-closed** — backend callers ig
 and no browser origin is allowed unless you explicitly list it in `CORS_ALLOWED_ORIGINS`
 (the wildcard `*` is never used). Set `AUTH_ENABLED=false` to bypass auth for local dev only.
 
+## Admin console
+
+A small operator UI is served by the same Express app at **`/admin`** — a static,
+dependency-free page backed by JSON routes under `/admin/api`. It does two things:
+
+- **Tenant management** — create (raw key shown once), enable/disable, revoke, and edit
+  rate limits / allowed functions, without touching the CLI.
+- **Observability** — request counts, error rate, tokens, provider fallbacks, a
+  health/provider matrix, BullMQ queue depth + recent jobs, and per-tenant usage.
+
+Access is by **named admin users** (stored in Redis, like tenants; passwords hashed with
+argon2) with three roles: `owner` (everything, incl. managing admins), `manager` (tenant
+CRUD + observability), and `viewer` (read-only observability). Login sets an httpOnly
+session cookie; the UI only renders what the role permits.
+
+The **first owner is seeded automatically at startup** when the admin registry is empty
+(idempotent — it never overwrites a changed password or a deleted account), using
+`ADMIN_BOOTSTRAP_EMAIL` / `ADMIN_BOOTSTRAP_PASSWORD`. So a fresh deploy just works: open
+`http://localhost:8080/admin`, sign in, and **change the password**. Owners then manage
+other admins from the UI.
+
+A `provision:admin` CLI is also available for scripted management:
+
+```bash
+pnpm provision:admin list
+pnpm provision:admin create --email a@x.com --role manager
+pnpm provision:admin delete <email>
+```
+
+Session lifetime is set by `ADMIN_SESSION_TTL_SECONDS` (default 8h). Since `/admin` is
+same-origin it needs no CORS entry; keep it on an internal network in production.
+
 ## API
 
 ```

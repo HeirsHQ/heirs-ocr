@@ -2,6 +2,7 @@ import "dotenv/config";
 import http from "http";
 
 import { initTracing, shutdownTracing } from "./observability/otel";
+import { ensureBootstrapAdmin } from "./auth/admins";
 import { logger } from "./observability/logger";
 import { closeRedis } from "./redis";
 import { env } from "./config/env";
@@ -11,6 +12,13 @@ initTracing();
 
 const app = main();
 const server = http.createServer(app);
+
+// Seed the first admin console owner when the registry is empty (idempotent). A
+// failure here (e.g. Redis briefly down) must not stop the service from starting —
+// it's retried on the next boot and the console is simply unusable until it lands.
+ensureBootstrapAdmin().catch((err) =>
+  logger.error("admin bootstrap failed", { err: err instanceof Error ? err.message : String(err) }),
+);
 
 server.listen(Number(env.PORT), () => logger.info(`service listening on http://localhost:${env.PORT}`));
 

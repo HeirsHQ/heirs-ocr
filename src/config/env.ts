@@ -6,6 +6,13 @@ import { z } from "zod";
  */
 const schema = z
   .object({
+    ADMIN_SESSION_TTL_SECONDS: z.coerce
+      .number()
+      .int()
+      .positive()
+      .default(8 * 60 * 60),
+    ADMIN_BOOTSTRAP_EMAIL: z.string(),
+    ADMIN_BOOTSTRAP_PASSWORD: z.string(),
     API_KEY_CACHE_TTL_SECONDS: z.coerce.number().int().positive().default(30),
     ASYNC_PAGE_THRESHOLD: z.coerce.number().int().positive().default(5),
     ASYNC_SIZE_THRESHOLD_BYTES: z.coerce

@@ -42,6 +42,8 @@ WORKDIR /app
 # Only production deps and the compiled output — no toolchain, no source.
 COPY --from=prod-deps --chown=node:node /app/node_modules ./node_modules
 COPY --from=build     --chown=node:node /app/build        ./build
+# Static admin console (served by the app at /admin).
+COPY --chown=node:node public ./public
 COPY --chown=node:node package.json ./
 
 # Run as the image's built-in unprivileged user.

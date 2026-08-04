@@ -5,7 +5,6 @@ const experienceSchema = z.object({
   title: z.string(),
   startDate: z.string().nullable(),
   endDate: z.string().nullable(),
-  /** True for current roles ("present"); when set, endDate is null. */
   current: z.boolean(),
   description: z.string().nullable(),
 });

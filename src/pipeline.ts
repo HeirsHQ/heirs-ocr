@@ -5,6 +5,7 @@ import { extractionCacheKey, type ExtractionCache } from "./cache";
 import type { ProviderPolicy } from "./config/providers";
 import { withSpan } from "./observability/tracing";
 import { routeProvider } from "./providers/router";
+import { recordTenantUsage } from "./observability/usage";
 import { metrics } from "./observability/metrics";
 import { sha256, sniff } from "./ingest/sniff";
 import type { LlmClient } from "./llm/azure";
@@ -144,6 +145,8 @@ export const runPipeline = async <TArgs, TResult>(
       tokensUsed: doc.tokensUsed,
       outcome: "success",
     });
+    // Per-tenant counters for the admin console (fire-and-forget; see usage.ts).
+    recordTenantUsage(req.tenantId, { outcome: "success", tokensUsed: doc.tokensUsed });
 
     return { result, meta };
   } catch (err) {
@@ -162,6 +165,7 @@ export const runPipeline = async <TArgs, TResult>(
       tokensUsed: doc?.tokensUsed,
       outcome: "error",
     });
+    recordTenantUsage(req.tenantId, { outcome: "error", tokensUsed: doc?.tokensUsed });
     throw err;
   }
 };

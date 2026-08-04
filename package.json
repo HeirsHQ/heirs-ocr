@@ -20,13 +20,15 @@
     "start": "node build/index.js",
     "worker": "node build/worker.js",
     "worker:dev": "ts-node src/worker.ts",
-    "provision:tenant": "ts-node src/scripts/provision-tenant.ts"
+    "provision:tenant": "ts-node src/scripts/provision-tenant.ts",
+    "provision:admin": "ts-node src/scripts/provision-admin.ts"
   },
   "keywords": [],
   "author": "",
   "license": "ISC",
   "type": "commonjs",
   "dependencies": {
+    "@node-rs/argon2": "^2.0.2",
     "@opentelemetry/api": "^1.9.1",
     "@opentelemetry/exporter-trace-otlp-http": "^0.221.0",
     "@opentelemetry/resources": "^2.10.0",

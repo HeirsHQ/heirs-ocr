@@ -120,3 +120,65 @@ export const listTenants = async (): Promise<Array<{ keyHash: string; tenant: Te
   const all = await getRedis().hgetall(TENANTS_KEY);
   return Object.entries(all).map(([keyHash, raw]) => ({ keyHash, tenant: JSON.parse(raw) as Tenant }));
 };
+
+/**
+ * The admin console identifies tenants by their key-hash (the raw key is
+ * unrecoverable), so the mutators below key off the hash — the counterpart to the
+ * raw-key {@link putTenant}/{@link revokeApiKey} used by CLI provisioning.
+ *
+ * Each clears the in-memory {@link cache} entry so this process sees the change at
+ * once. That cache is per-process: the worker process (a separate cache) converges
+ * within `API_KEY_CACHE_TTL_SECONDS` — acceptable for enable/disable/rate changes.
+ */
+
+/** Reads a single tenant by its key-hash, or `undefined` if unknown. */
+export const getTenantByHash = async (keyHash: string): Promise<Tenant | undefined> => {
+  const raw = await getRedis().hget(TENANTS_KEY, keyHash);
+  return raw ? (JSON.parse(raw) as Tenant) : undefined;
+};
+
+/** Fields an operator may change on an existing tenant. */
+export type TenantPatch = Pick<Tenant, "name" | "rateLimit" | "allowedFunctions" | "allowedOrigins" | "disabled">;
+
+/**
+ * Merges a patch onto the tenant at `keyHash`. Only the provided fields change.
+ * Returns the updated record, or `undefined` if no such tenant. Emits
+ * `tenant.updated`.
+ */
+export const updateTenantByHash = async (
+  keyHash: string,
+  patch: TenantPatch,
+  audit: AuditContext = {},
+): Promise<Tenant | undefined> => {
+  const current = await getTenantByHash(keyHash);
+  if (!current) return undefined;
+
+  const next: Tenant = {
+    ...current,
+    name: patch.name ?? current.name,
+    rateLimit: patch.rateLimit ?? current.rateLimit,
+    allowedFunctions: patch.allowedFunctions ?? current.allowedFunctions,
+    allowedOrigins: patch.allowedOrigins ?? current.allowedOrigins,
+    disabled: patch.disabled ?? current.disabled,
+  };
+
+  await getRedis().hset(TENANTS_KEY, keyHash, JSON.stringify(next));
+  cache.delete(keyHash);
+  logger.info("tenant.updated", {
+    tenantId: next.tenantId,
+    keyHash,
+    actor: audit.actor ?? "unknown",
+    disabled: next.disabled,
+    rateLimit: next.rateLimit,
+    allowedFunctions: next.allowedFunctions,
+  });
+  return next;
+};
+
+/** Removes a tenant by its key-hash (hard revoke). Emits `tenant.revoked`. */
+export const revokeByHash = async (keyHash: string, audit: AuditContext = {}): Promise<number> => {
+  cache.delete(keyHash);
+  const removed = await getRedis().hdel(TENANTS_KEY, keyHash);
+  logger.info("tenant.revoked", { keyHash, actor: audit.actor ?? "unknown", removed });
+  return removed;
+};

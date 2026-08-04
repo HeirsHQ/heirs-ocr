@@ -82,6 +82,41 @@ const toStatus = (state: JobState | "unknown"): JobStatus => {
   }
 };
 
+/** Aggregate queue state + a recent-jobs sample, for the admin console. */
+export type QueueStats = {
+  counts: { waiting: number; active: number; completed: number; failed: number; delayed: number };
+  recent: Array<{ jobId: string; status: JobStatus; function: string; tenantId?: string }>;
+};
+
+/**
+ * Snapshot of the async OCR queue: BullMQ's own counters plus the most recent
+ * active/failed jobs (the ones an operator actually wants to see). Read-only — it
+ * never mutates the queue.
+ */
+export const getQueueStats = async (): Promise<QueueStats> => {
+  const q = getQueue();
+  const counts = await q.getJobCounts("waiting", "active", "completed", "failed", "delayed");
+  const jobs = await q.getJobs(["active", "failed"], 0, 19);
+  const recent = jobs
+    .filter((j): j is NonNullable<typeof j> => !!j)
+    .map((j) => ({
+      jobId: j.id ?? "unknown",
+      status: j.finishedOn && j.failedReason ? ("failed" as JobStatus) : ("active" as JobStatus),
+      function: j.data.function,
+      tenantId: j.data.request.tenantId,
+    }));
+  return {
+    counts: {
+      waiting: counts.waiting ?? 0,
+      active: counts.active ?? 0,
+      completed: counts.completed ?? 0,
+      failed: counts.failed ?? 0,
+      delayed: counts.delayed ?? 0,
+    },
+    recent,
+  };
+};
+
 export const ocrQueue: OcrQueue = {
   async enqueue(data) {
     const job = await getQueue().add(OCR_QUEUE_NAME, data, {

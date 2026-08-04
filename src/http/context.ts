@@ -1,4 +1,5 @@
 import type { Sensitivity } from "../functions/define";
+import type { AdminSession } from "../auth/admin-session";
 import type { Tenant } from "../auth/tenants";
 
 /** Per-request fields attached by middleware and read by handlers. */
@@ -12,6 +13,8 @@ declare global {
       tenant?: Tenant;
       /** Sensitivity of the resolved function; set by the sensitivity middleware. */
       sensitivity?: Sensitivity;
+      /** Resolved admin-console caller; set by the adminAuth middleware. */
+      admin?: AdminSession;
     }
   }
 }

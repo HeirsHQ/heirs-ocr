@@ -140,3 +140,69 @@ export const metricsContentType = registry.contentType;
 
 /** Renders the current registry in Prometheus text format. */
 export const renderMetrics = (): Promise<string> => registry.metrics();
+
+/** A friendly, already-aggregated view of the registry for the admin console. */
+export type MetricsSummary = {
+  totalRequests: number;
+  errorRequests: number;
+  /** errors / total, 0 when there is no traffic yet. */
+  errorRate: number;
+  totalTokens: number;
+  providerFallbacks: number;
+  /** Per-function request/error/token rollup, plus the low-confidence ratio. */
+  byFunction: Array<{
+    function: string;
+    requests: number;
+    errors: number;
+    tokens: number;
+    lowConfidenceRatio: number;
+  }>;
+};
+
+type JsonMetric = { name: string; values: Array<{ value: number; labels: Record<string, string> }> };
+
+/** Sums a counter's samples, optionally filtered by a label predicate. */
+const sumValues = (metrics: JsonMetric[], name: string, pred?: (labels: Record<string, string>) => boolean): number => {
+  const m = metrics.find((x) => x.name === name);
+  if (!m) return 0;
+  return m.values.reduce((acc, s) => (pred && !pred(s.labels) ? acc : acc + s.value), 0);
+};
+
+/**
+ * Aggregates the raw prom-client registry into {@link MetricsSummary}. Reads the
+ * structured JSON (`getMetricsAsJSON`) rather than parsing the text exposition, so
+ * it stays in step with the series defined above without brittle string parsing.
+ */
+export const getMetricsSummary = async (): Promise<MetricsSummary> => {
+  const raw = (await registry.getMetricsAsJSON()) as unknown as JsonMetric[];
+
+  const totalRequests = sumValues(raw, "ocr_requests_total");
+  const errorRequests = sumValues(raw, "ocr_requests_total", (l) => l.outcome === "error");
+
+  const functions = new Set<string>();
+  for (const name of ["ocr_requests_total", "ocr_tokens_used_total", "ocr_confidence_observations_total"]) {
+    for (const s of raw.find((x) => x.name === name)?.values ?? []) {
+      if (s.labels.function) functions.add(s.labels.function);
+    }
+  }
+
+  const byFunction = [...functions]
+    .map((fn) => {
+      const requests = sumValues(raw, "ocr_requests_total", (l) => l.function === fn);
+      const errors = sumValues(raw, "ocr_requests_total", (l) => l.function === fn && l.outcome === "error");
+      const tokens = sumValues(raw, "ocr_tokens_used_total", (l) => l.function === fn);
+      const obs = sumValues(raw, "ocr_confidence_observations_total", (l) => l.function === fn);
+      const low = sumValues(raw, "ocr_low_confidence_total", (l) => l.function === fn);
+      return { function: fn, requests, errors, tokens, lowConfidenceRatio: obs ? low / obs : 0 };
+    })
+    .sort((a, b) => b.requests - a.requests);
+
+  return {
+    totalRequests,
+    errorRequests,
+    errorRate: totalRequests ? errorRequests / totalRequests : 0,
+    totalTokens: sumValues(raw, "ocr_tokens_used_total"),
+    providerFallbacks: sumValues(raw, "ocr_provider_fallback_total"),
+    byFunction,
+  };
+};

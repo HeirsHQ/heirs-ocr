@@ -1,8 +1,10 @@
 import express, { type Request, type Response } from "express";
+import path from "path";
 import morgan from "morgan";
 
 import { errorHandler, notFound } from "./http/middleware/error";
 import { metricsContentType, renderMetrics } from "./observability/metrics";
+import { adminApiRouter } from "./http/admin/routes";
 import { corsMiddleware } from "./config/cors";
 import { ocrRouter } from "./http/routes";
 
@@ -32,6 +34,12 @@ export function main() {
   });
 
   app.use("/v1/ocr", ocrRouter);
+
+  // Admin console: static assets + JSON API, both under /admin. Same-origin (no
+  // CORS). Login is open; other /admin/api routes gate on session + role. The
+  // console is inert until an admin exists in Redis (`pnpm provision:admin`).
+  app.use("/admin", express.static(path.join(__dirname, "..", "public", "admin")));
+  app.use("/admin", adminApiRouter);
 
   app.use(notFound);
   app.use(errorHandler);
