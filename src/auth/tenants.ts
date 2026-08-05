@@ -2,20 +2,19 @@ import { createHash, randomBytes } from "crypto";
 
 import { logger } from "../observability/logger";
 import { env } from "../config/env";
-import { getRedis } from "../redis";
+import { query } from "../db";
 
 /**
- * Database-free multi-tenant registry (docs/regression-and-security.md V1).
+ * Multi-tenant registry, backed by the `tenants` table (src/db.ts).
  *
- * Tenants live in a single Redis hash `tenants`, keyed by the **sha256 of the
- * API key** — the raw key is never stored, so a Redis dump can't be replayed as
- * credentials. Provisioning writes a field; revoking deletes one (`HDEL`). No
- * relational database, and tenants can be added/removed at runtime without a
- * redeploy.
+ * Tenants are keyed by the **sha256 of the API key** — the raw key is never
+ * stored, so a database dump can't be replayed as credentials. Provisioning
+ * upserts a row; revoking deletes one. Tenants can be added/removed at runtime
+ * without a redeploy.
  *
  * API keys are high-entropy random tokens, so sha256 (not bcrypt/argon2, which
  * exist for low-entropy passwords) is the correct, fast choice — and using the
- * hash as the lookup index means we never string-compare a secret.
+ * hash as the primary key means we never string-compare a secret.
  */
 export type Tenant = {
   tenantId: string;
@@ -40,13 +39,36 @@ export type Tenant = {
   createdAt?: string;
 };
 
-export const TENANTS_KEY = "tenants";
-
-/** sha256 hex of an API key — the Redis hash field and the cache key. */
+/** sha256 hex of an API key — the row's primary key and the cache key. */
 export const hashApiKey = (apiKey: string): string => createHash("sha256").update(apiKey).digest("hex");
 
 /** Generates a new random API key (43-char base64url, 256 bits of entropy). */
 export const generateApiKey = (): string => randomBytes(32).toString("base64url");
+
+/** The stored row shape (snake_case columns), mapped to/from the {@link Tenant} API. */
+type TenantRow = {
+  key_hash: string;
+  tenant_id: string;
+  name: string | null;
+  disabled: boolean;
+  rate_limit: number | null;
+  allowed_origins: string[] | null;
+  allowed_functions: string[] | null;
+  created_at: Date;
+};
+
+const rowToTenant = (row: TenantRow): Tenant => ({
+  tenantId: row.tenant_id,
+  name: row.name ?? undefined,
+  disabled: row.disabled,
+  rateLimit: row.rate_limit ?? undefined,
+  allowedOrigins: row.allowed_origins ?? undefined,
+  allowedFunctions: row.allowed_functions ?? undefined,
+  createdAt: row.created_at.toISOString(),
+});
+
+/** jsonb columns take a JSON string (or NULL); a bare JS array would bind as a Postgres array. */
+const toJsonb = (v: unknown): string | null => (v == null ? null : JSON.stringify(v));
 
 type CacheEntry = { tenant: Tenant; expiresAt: number };
 const cache = new Map<string, CacheEntry>();
@@ -56,9 +78,9 @@ const cacheTtlMs = () => env.API_KEY_CACHE_TTL_SECONDS * 1000;
 /**
  * Resolves an API key to its tenant, or `undefined` if unknown/disabled.
  *
- * Short-TTL positive caching keeps this off the Redis hot path and rides out
- * brief Redis blips. **Throws** if the store is unreachable and nothing is
- * cached — the auth middleware turns that into a fail-closed rejection.
+ * Short-TTL positive caching keeps this off the database hot path and rides out
+ * brief blips. **Throws** if the store is unreachable and nothing is cached — the
+ * auth middleware turns that into a fail-closed rejection.
  */
 export const resolveTenant = async (apiKey: string): Promise<Tenant | undefined> => {
   const keyHash = hashApiKey(apiKey);
@@ -66,13 +88,12 @@ export const resolveTenant = async (apiKey: string): Promise<Tenant | undefined>
   const hit = cache.get(keyHash);
   if (hit && hit.expiresAt > Date.now()) return hit.tenant.disabled ? undefined : hit.tenant;
 
-  const raw = await getRedis().hget(TENANTS_KEY, keyHash);
-  if (!raw) {
+  const tenant = await getTenantByHash(keyHash);
+  if (!tenant) {
     cache.delete(keyHash);
     return undefined;
   }
 
-  const tenant = JSON.parse(raw) as Tenant;
   cache.set(keyHash, { tenant, expiresAt: Date.now() + cacheTtlMs() });
   return tenant.disabled ? undefined : tenant;
 };
@@ -80,25 +101,47 @@ export const resolveTenant = async (apiKey: string): Promise<Tenant | undefined>
 /**
  * Provenance for a registry mutation. `actor` identifies who made the change (a
  * CLI operator, or a future admin API's authenticated principal). Carried into
- * the audit log — there is no DB, so the stdout log stream is the audit trail.
+ * the audit log — the stdout log stream is the audit trail.
  */
 export type AuditContext = { actor?: string };
 
 /**
- * Writes (or overwrites) a tenant under an API key's hash. Used by provisioning.
- * Emits a `tenant.provisioned` audit line — the key-hash (never the raw key) is
- * safe to log and lets a mutation be correlated with the stored record.
+ * Upserts a tenant under an API key's hash. Used by provisioning. Emits a
+ * `tenant.provisioned` audit line — the key-hash (never the raw key) is safe to
+ * log and lets a mutation be correlated with the stored row.
  */
 export const putTenant = async (apiKey: string, tenant: Tenant, audit: AuditContext = {}): Promise<void> => {
   const keyHash = hashApiKey(apiKey);
-  const record = { ...tenant, createdAt: tenant.createdAt ?? new Date().toISOString() };
-  await getRedis().hset(TENANTS_KEY, keyHash, JSON.stringify(record));
+  await query(
+    `INSERT INTO tenants
+       (key_hash, tenant_id, name, disabled, rate_limit, allowed_origins, allowed_functions, created_at)
+     VALUES ($1, $2, $3, $4, $5, $6::jsonb, $7::jsonb, COALESCE($8::timestamptz, now()))
+     ON CONFLICT (key_hash) DO UPDATE SET
+       tenant_id = excluded.tenant_id,
+       name = excluded.name,
+       disabled = excluded.disabled,
+       rate_limit = excluded.rate_limit,
+       allowed_origins = excluded.allowed_origins,
+       allowed_functions = excluded.allowed_functions,
+       created_at = excluded.created_at`,
+    [
+      keyHash,
+      tenant.tenantId,
+      tenant.name ?? null,
+      tenant.disabled ?? false,
+      tenant.rateLimit ?? null,
+      toJsonb(tenant.allowedOrigins),
+      toJsonb(tenant.allowedFunctions),
+      tenant.createdAt ?? null,
+    ],
+  );
+  cache.delete(keyHash);
   logger.info("tenant.provisioned", {
-    tenantId: record.tenantId,
+    tenantId: tenant.tenantId,
     keyHash,
     actor: audit.actor ?? "unknown",
-    rateLimit: record.rateLimit,
-    allowedFunctions: record.allowedFunctions,
+    rateLimit: tenant.rateLimit,
+    allowedFunctions: tenant.allowedFunctions,
   });
 };
 
@@ -106,7 +149,8 @@ export const putTenant = async (apiKey: string, tenant: Tenant, audit: AuditCont
 export const revokeApiKey = async (apiKey: string, audit: AuditContext = {}): Promise<number> => {
   const keyHash = hashApiKey(apiKey);
   cache.delete(keyHash);
-  const removed = await getRedis().hdel(TENANTS_KEY, keyHash);
+  const { rowCount } = await query(`DELETE FROM tenants WHERE key_hash = $1`, [keyHash]);
+  const removed = rowCount ?? 0;
   logger.info("tenant.revoked", { keyHash, actor: audit.actor ?? "unknown", removed });
   return removed;
 };
@@ -117,8 +161,8 @@ export const revokeApiKey = async (apiKey: string, audit: AuditContext = {}): Pr
  * so the hash is the only stable per-tenant identifier surfaced here.
  */
 export const listTenants = async (): Promise<Array<{ keyHash: string; tenant: Tenant }>> => {
-  const all = await getRedis().hgetall(TENANTS_KEY);
-  return Object.entries(all).map(([keyHash, raw]) => ({ keyHash, tenant: JSON.parse(raw) as Tenant }));
+  const { rows } = await query<TenantRow>(`SELECT * FROM tenants ORDER BY created_at ASC`);
+  return rows.map((row) => ({ keyHash: row.key_hash, tenant: rowToTenant(row) }));
 };
 
 /**
@@ -133,8 +177,8 @@ export const listTenants = async (): Promise<Array<{ keyHash: string; tenant: Te
 
 /** Reads a single tenant by its key-hash, or `undefined` if unknown. */
 export const getTenantByHash = async (keyHash: string): Promise<Tenant | undefined> => {
-  const raw = await getRedis().hget(TENANTS_KEY, keyHash);
-  return raw ? (JSON.parse(raw) as Tenant) : undefined;
+  const { rows } = await query<TenantRow>(`SELECT * FROM tenants WHERE key_hash = $1`, [keyHash]);
+  return rows[0] ? rowToTenant(rows[0]) : undefined;
 };
 
 /** Fields an operator may change on an existing tenant. */
@@ -150,20 +194,28 @@ export const updateTenantByHash = async (
   patch: TenantPatch,
   audit: AuditContext = {},
 ): Promise<Tenant | undefined> => {
-  const current = await getTenantByHash(keyHash);
-  if (!current) return undefined;
+  const { rows } = await query<TenantRow>(
+    `UPDATE tenants SET
+       name = COALESCE($2, name),
+       rate_limit = COALESCE($3, rate_limit),
+       allowed_functions = COALESCE($4::jsonb, allowed_functions),
+       allowed_origins = COALESCE($5::jsonb, allowed_origins),
+       disabled = COALESCE($6, disabled)
+     WHERE key_hash = $1
+     RETURNING *`,
+    [
+      keyHash,
+      patch.name ?? null,
+      patch.rateLimit ?? null,
+      toJsonb(patch.allowedFunctions),
+      toJsonb(patch.allowedOrigins),
+      patch.disabled ?? null,
+    ],
+  );
+  if (!rows[0]) return undefined;
 
-  const next: Tenant = {
-    ...current,
-    name: patch.name ?? current.name,
-    rateLimit: patch.rateLimit ?? current.rateLimit,
-    allowedFunctions: patch.allowedFunctions ?? current.allowedFunctions,
-    allowedOrigins: patch.allowedOrigins ?? current.allowedOrigins,
-    disabled: patch.disabled ?? current.disabled,
-  };
-
-  await getRedis().hset(TENANTS_KEY, keyHash, JSON.stringify(next));
   cache.delete(keyHash);
+  const next = rowToTenant(rows[0]);
   logger.info("tenant.updated", {
     tenantId: next.tenantId,
     keyHash,
@@ -178,7 +230,8 @@ export const updateTenantByHash = async (
 /** Removes a tenant by its key-hash (hard revoke). Emits `tenant.revoked`. */
 export const revokeByHash = async (keyHash: string, audit: AuditContext = {}): Promise<number> => {
   cache.delete(keyHash);
-  const removed = await getRedis().hdel(TENANTS_KEY, keyHash);
+  const { rowCount } = await query(`DELETE FROM tenants WHERE key_hash = $1`, [keyHash]);
+  const removed = rowCount ?? 0;
   logger.info("tenant.revoked", { keyHash, actor: audit.actor ?? "unknown", removed });
   return removed;
 };

@@ -1,16 +1,63 @@
-# Local stack that mirrors production topology (12-factor X — dev/prod parity):
-# the same image runs the API and the worker, both against a real Redis, exactly
-# as they would when deployed.
+# Local stack: the same image runs the API and the worker (12-factor X — dev/prod
+# parity). By default both point at whatever REDIS_URL / DATABASE_URL your .env
+# holds — which in this project are managed, external services (Aiven Valkey over
+# TLS, Prisma Postgres). No secrets or connection strings are hardcoded here; they
+# come from .env via `env_file`, and env.ts fails fast if a required one is missing.
 #
-#   docker compose up --build          # api + worker + redis
-#   docker compose run --rm api node build/scripts/... (admin tasks, see note)
+#   docker compose up --build                      # api + worker → your .env services
+#   docker compose --profile local-infra up --build  # ...plus a throwaway local redis + postgres
+#   docker compose run --rm api node build/scripts/provision-tenant.js list
 #
-# Secrets/flags are read from your shell or a root .env (compose substitutes
-# ${VAR} automatically). Everything else uses the image defaults from env.ts.
+# To run fully local instead of managed: enable the `local-infra` profile AND point
+# REDIS_URL=redis://redis:6379 and DATABASE_URL=postgres://<POSTGRES_USER>:<POSTGRES_PASSWORD>@postgres:5432/<POSTGRES_DB>
+# in your .env (the in-network service names).
 
 services:
+  # --- Application (always on) ---------------------------------------------------
+  # env_file injects the whole .env into the container; `environment` then overrides
+  # only what must differ from a dev .env (NODE_ENV) or is fixed by the topology (PORT).
+  api:
+    build: .
+    image: heirs-ocr
+    env_file: .env
+    environment:
+      NODE_ENV: production
+      PORT: "8080"
+    ports:
+      - "8080:8080"
+    depends_on:
+      redis:
+        condition: service_healthy
+        required: false
+      postgres:
+        condition: service_healthy
+        required: false
+
+  worker:
+    build: .
+    image: heirs-ocr
+    command: ["node", "build/worker.js"]
+    env_file: .env
+    environment:
+      NODE_ENV: production
+    depends_on:
+      redis:
+        condition: service_healthy
+        required: false
+      postgres:
+        condition: service_healthy
+        required: false
+
+  # --- Optional local infra (profile: local-infra) -------------------------------
+  # Throwaway Redis + Postgres for a fully-local stack with no managed services.
+  # Not started by a plain `docker compose up`. These are DISPOSABLE local container
+  # credentials, not the app's real secret — the real database is the managed
+  # DATABASE_URL in your .env. So POSTGRES_* keep conventional dev defaults (compose
+  # interpolates the whole file before applying profiles, so `:?` here would break the
+  # default managed flow too). Override them in .env if you like.
   redis:
     image: redis:7-alpine
+    profiles: ["local-infra"]
     ports:
       - "6379:6379"
     healthcheck:
@@ -19,49 +66,22 @@ services:
       timeout: 3s
       retries: 5
 
-  api:
-    build: .
-    image: heirs-ocr
-    depends_on:
-      redis:
-        condition: service_healthy
+  postgres:
+    image: postgres:16-alpine
+    profiles: ["local-infra"]
     ports:
-      - "8080:8080"
+      - "5432:5432"
     environment:
-      NODE_ENV: production
-      PORT: "8080"
-      REDIS_URL: redis://redis:6379
-      AUTH_ENABLED: ${AUTH_ENABLED:-true}
-      ADMIN_BOOTSTRAP_EMAIL: ${ADMIN_BOOTSTRAP_EMAIL:?set ADMIN_BOOTSTRAP_EMAIL in your .env}
-      ADMIN_BOOTSTRAP_PASSWORD: ${ADMIN_BOOTSTRAP_PASSWORD:?set ADMIN_BOOTSTRAP_PASSWORD in your .env}
-      ADMIN_SESSION_TTL_SECONDS: ${ADMIN_SESSION_TTL_SECONDS:-28800}
-      AZURE_OPENAI_ENABLED: ${AZURE_OPENAI_ENABLED:-false}
-      AZURE_OPENAI_API_KEY: ${AZURE_OPENAI_API_KEY:-}
-      AZURE_OPENAI_ENDPOINT: ${AZURE_OPENAI_ENDPOINT:-}
-      AZURE_OPENAI_API_VERSION: ${AZURE_OPENAI_API_VERSION:-}
-      AZURE_OPENAI_DEPLOYMENT_NAME: ${AZURE_OPENAI_DEPLOYMENT_NAME:-}
-      GLM_ENABLED: ${GLM_ENABLED:-false}
-      GLM_API_KEY: ${GLM_API_KEY:-}
-      OTEL_EXPORTER_OTLP_ENDPOINT: ${OTEL_EXPORTER_OTLP_ENDPOINT:-}
+      POSTGRES_USER: ${POSTGRES_USER:-postgres}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-postgres}
+      POSTGRES_DB: ${POSTGRES_DB:-heirs_ocr}
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-postgres} -d ${POSTGRES_DB:-heirs_ocr}"]
+      interval: 10s
+      timeout: 3s
+      retries: 5
 
-  worker:
-    build: .
-    image: heirs-ocr
-    command: ["node", "build/worker.js"]
-    depends_on:
-      redis:
-        condition: service_healthy
-    environment:
-      NODE_ENV: production
-      REDIS_URL: redis://redis:6379
-      ADMIN_BOOTSTRAP_EMAIL: ${ADMIN_BOOTSTRAP_EMAIL:?set ADMIN_BOOTSTRAP_EMAIL in your .env}
-      ADMIN_BOOTSTRAP_PASSWORD: ${ADMIN_BOOTSTRAP_PASSWORD:?set ADMIN_BOOTSTRAP_PASSWORD in your .env}
-      ADMIN_SESSION_TTL_SECONDS: ${ADMIN_SESSION_TTL_SECONDS:-28800}
-      AZURE_OPENAI_ENABLED: ${AZURE_OPENAI_ENABLED:-false}
-      AZURE_OPENAI_API_KEY: ${AZURE_OPENAI_API_KEY:-}
-      AZURE_OPENAI_ENDPOINT: ${AZURE_OPENAI_ENDPOINT:-}
-      AZURE_OPENAI_API_VERSION: ${AZURE_OPENAI_API_VERSION:-}
-      AZURE_OPENAI_DEPLOYMENT_NAME: ${AZURE_OPENAI_DEPLOYMENT_NAME:-}
-      GLM_ENABLED: ${GLM_ENABLED:-false}
-      GLM_API_KEY: ${GLM_API_KEY:-}
-      OTEL_EXPORTER_OTLP_ENDPOINT: ${OTEL_EXPORTER_OTLP_ENDPOINT:-}
+volumes:
+  pgdata:

@@ -2,46 +2,78 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { NextFunction, Request, Response } from "express";
 
 /**
- * A fake shared Redis client with just enough hash/string/counter semantics for
- * the admin registry, sessions, tenant-by-hash mutators, and usage counters.
- * Created via vi.hoisted so it exists before the hoisted vi.mock factory runs.
+ * Backing stores for the units under test, built in vi.hoisted so they exist
+ * before the hoisted vi.mock factories run:
+ *
+ *  - `query` runs real SQL against an in-memory Postgres (pg-mem) — the durable
+ *    stores (admins, tenants, usage) exercise their actual statements with no
+ *    external database, so `pnpm test` stays self-contained.
+ *  - `fakeRedis` keeps just enough string semantics for admin sessions, which
+ *    still live in Redis.
  */
-const { fakeRedis, hashes, strings } = vi.hoisted(() => {
-  const hashes = new Map<string, Map<string, string>>();
+const { query, ensureSchema, resetDb, fakeRedis, strings } = vi.hoisted(() => {
+  // require (not import) so this runs inside the hoisted factory.
+  const { newDb } = require("pg-mem") as typeof import("pg-mem");
+
+  const DDL = `
+    CREATE TABLE IF NOT EXISTS tenants (
+      key_hash text PRIMARY KEY,
+      tenant_id text NOT NULL,
+      name text,
+      disabled boolean NOT NULL DEFAULT false,
+      rate_limit integer,
+      allowed_origins jsonb,
+      allowed_functions jsonb,
+      created_at timestamptz NOT NULL DEFAULT now()
+    );
+    CREATE TABLE IF NOT EXISTS admins (
+      id uuid PRIMARY KEY,
+      email text NOT NULL UNIQUE,
+      name text NOT NULL,
+      role text NOT NULL,
+      password_hash text NOT NULL,
+      disabled boolean NOT NULL DEFAULT false,
+      created_at timestamptz NOT NULL,
+      updated_at timestamptz NOT NULL
+    );
+    CREATE TABLE IF NOT EXISTS tenant_usage (
+      tenant_id text PRIMARY KEY,
+      requests bigint NOT NULL DEFAULT 0,
+      errors bigint NOT NULL DEFAULT 0,
+      tokens bigint NOT NULL DEFAULT 0
+    );
+  `;
+
+  let mem = newDb();
+  let pool = new (mem.adapters.createPg().Pool)();
+
+  const query = vi.fn((text: string, params?: unknown[]) => pool.query(text, params));
+  const ensureSchema = async () => {
+    mem.public.none(DDL);
+  };
+  const resetDb = async () => {
+    mem = newDb();
+    pool = new (mem.adapters.createPg().Pool)();
+    mem.public.none(DDL);
+    query.mockReset();
+    query.mockImplementation((text: string, params?: unknown[]) => pool.query(text, params));
+  };
+
   const strings = new Map<string, string>();
-  const h = (key: string) => {
-    let m = hashes.get(key);
-    if (!m) hashes.set(key, (m = new Map()));
-    return m;
+  const fakeRedis = {
+    get: vi.fn(async (key: string) => strings.get(key) ?? null),
+    set: vi.fn(async (key: string, value: string) => {
+      strings.set(key, value);
+      return "OK";
+    }),
+    del: vi.fn(async (key: string) => (strings.delete(key) ? 1 : 0)),
+    ping: vi.fn(async () => "PONG"),
   };
-  return {
-    hashes,
-    strings,
-    fakeRedis: {
-      hget: vi.fn(async (key: string, field: string) => h(key).get(field) ?? null),
-      hset: vi.fn(async (key: string, field: string, value: string) => {
-        h(key).set(field, value);
-        return 1;
-      }),
-      hdel: vi.fn(async (key: string, field: string) => (h(key).delete(field) ? 1 : 0)),
-      hlen: vi.fn(async (key: string) => h(key).size),
-      hgetall: vi.fn(async (key: string) => Object.fromEntries(h(key))),
-      hincrby: vi.fn(async (key: string, field: string, n: number) => {
-        const next = Number(h(key).get(field) ?? 0) + n;
-        h(key).set(field, String(next));
-        return next;
-      }),
-      get: vi.fn(async (key: string) => strings.get(key) ?? null),
-      set: vi.fn(async (key: string, value: string) => {
-        strings.set(key, value);
-        return "OK";
-      }),
-      del: vi.fn(async (key: string) => (strings.delete(key) ? 1 : 0)),
-      ping: vi.fn(async () => "PONG"),
-    },
-  };
+
+  return { query, ensureSchema, resetDb, fakeRedis, strings };
 });
 
+vi.mock("../src/db", () => ({ query, ensureSchema, whenDbReady: async () => {}, closeDb: async () => {} }));
 vi.mock("../src/redis", () => ({ getRedis: () => fakeRedis, whenRedisReady: async () => {} }));
 
 import {
@@ -59,10 +91,9 @@ import { adminAuth, parseCookies, requireMinRole } from "../src/http/middleware/
 import { createSession, destroySession, resolveSession } from "../src/auth/admin-session";
 import { getAllTenantUsage, recordTenantUsage } from "../src/observability/usage";
 
-const reset = () => {
-  hashes.clear();
+const reset = async () => {
+  await resetDb();
   strings.clear();
-  vi.clearAllMocks();
 };
 
 describe("admin registry", () => {
@@ -261,8 +292,8 @@ describe("per-tenant usage", () => {
     expect(t2).toMatchObject({ requests: 1, errors: 0, tokens: 0 });
   });
 
-  it("never throws when Redis rejects", async () => {
-    fakeRedis.hincrby.mockRejectedValueOnce(new Error("redis down"));
+  it("never throws when the database rejects", async () => {
+    query.mockRejectedValueOnce(new Error("postgres down"));
     expect(() => recordTenantUsage("t3", { outcome: "success" })).not.toThrow();
     await new Promise((r) => setTimeout(r, 0));
   });

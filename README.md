@@ -12,12 +12,12 @@ line — nothing else changes.
 
 ## Documentation
 
-| Doc                                              | What's in it                                                                            |
-| ------------------------------------------------ | --------------------------------------------------------------------------------------- |
-| [docs/architecture.md](./docs/architecture.md)   | Layered design, providers, the function registry, and the request pipeline              |
-| [docs/glm-ocr.md](./docs/glm-ocr.md)             | GLM-OCR integration reference — API contract, base64/chunking, data residency, updates  |
+| Doc                                                    | What's in it                                                                                 |
+| ------------------------------------------------------ | -------------------------------------------------------------------------------------------- |
+| [docs/architecture.md](./docs/architecture.md)         | Layered design, providers, the function registry, and the request pipeline                   |
+| [docs/glm-ocr.md](./docs/glm-ocr.md)                   | GLM-OCR integration reference — API contract, base64/chunking, data residency, updates       |
 | [docs/tamper-detection.md](./docs/tamper-detection.md) | How `DOCUMENT_AUTHENTICITY` tells a **doctored** document from a legitimately **filled** one |
-| [CHANGELOG.md](./CHANGELOG.md)                    | Notable changes per release                                                             |
+| [CHANGELOG.md](./CHANGELOG.md)                         | Notable changes per release                                                                  |
 
 ## How it works
 
@@ -60,9 +60,9 @@ a secret API key — never from browser JavaScript (which would expose the key).
 Authorization: Bearer <api-key>        # or:  X-API-Key: <api-key>
 ```
 
-Keys map to **tenants** held in a Redis hash — no database. Only the sha256 of each key
-is stored, so a Redis dump can't be replayed as credentials. Provision and revoke at
-runtime with no redeploy:
+Keys map to **tenants** held in Postgres. Only the sha256 of each key is stored, so a
+database dump can't be replayed as credentials. Provision and revoke at runtime with no
+redeploy:
 
 ```bash
 pnpm provision:tenant create acme --rate 120 --functions RECEIPT_PARSING,TEXT_EXTRACTION
@@ -87,7 +87,7 @@ dependency-free page backed by JSON routes under `/admin/api`. It does two thing
 - **Observability** — request counts, error rate, tokens, provider fallbacks, a
   health/provider matrix, BullMQ queue depth + recent jobs, and per-tenant usage.
 
-Access is by **named admin users** (stored in Redis, like tenants; passwords hashed with
+Access is by **named admin users** (stored in Postgres, like tenants; passwords hashed with
 argon2) with three roles: `owner` (everything, incl. managing admins), `manager` (tenant
 CRUD + observability), and `viewer` (read-only observability). Login sets an httpOnly
 session cookie; the UI only renders what the role permits.
@@ -162,8 +162,9 @@ pnpm dev                 # nodemon
 pnpm build && pnpm start
 ```
 
-Requires Node 22+, a Redis instance (cache + queue + rate limiter + tenant registry),
-and — to enable the LLM/GLM paths — Azure OpenAI and GLM-OCR credentials.
+Requires Node 22+, a Redis instance (extraction cache + queue + rate limiter + sessions),
+a Postgres database (tenants, admin users, usage), and — to enable the LLM/GLM paths —
+Azure OpenAI and GLM-OCR credentials. The Postgres schema is created idempotently at startup.
 
 > If `GLM_ENABLED=true`, a `GLM_API_KEY` is required or the service throws at startup.
 > Likewise `AZURE_OPENAI_ENABLED=true` requires `AZURE_OPENAI_API_KEY`. Set either flag
@@ -178,7 +179,8 @@ an invalid config throws immediately. Copy [`.env.example`](./.env.example) and 
 | -------------------------------------------------------------------------- | ------------------------------ | ------------------------------------------------------ |
 | `PORT`                                                                     | `8080`                         | HTTP port                                              |
 | `NODE_ENV`                                                                 | `development`                  | `development` \| `production` \| `test`                |
-| `REDIS_URL`                                                                | `redis://localhost:6379`       | Cache + BullMQ + rate limiter + tenant registry        |
+| `REDIS_URL`                                                                | **required** (no default)      | Extraction cache + BullMQ + rate limiter + sessions    |
+| `DATABASE_URL`                                                             | **required** (no default)      | Postgres: tenants, admin users, usage counters         |
 | `AUTH_ENABLED`                                                             | `true`                         | API-key auth; `false` bypasses (local dev only)        |
 | `API_KEY_CACHE_TTL_SECONDS`                                                | `30`                           | In-memory TTL for validated keys                       |
 | `CORS_ALLOWED_ORIGINS`                                                     | `` (closed)                    | Comma-separated browser origins; empty = no CORS       |
@@ -202,7 +204,7 @@ an invalid config throws immediately. Copy [`.env.example`](./.env.example) and 
 ```
 src/
   config/         env (Zod) + provider policy + CORS
-  auth/           Redis-backed tenant / API-key registry
+  auth/           Postgres-backed tenant / API-key + admin registry
   ingest/         multer upload + magic-byte sniff + sha256
   providers/      OcrProvider implementations (glm/ tesseract pdf-text mammoth plain-text) + router
   functions/      one folder per function: args, result, prompt, execute + registry

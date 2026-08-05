@@ -76,12 +76,12 @@ type LayoutDetail = {
 The provider is split so each seam is independently testable
 ([`src/providers/glm/`](../src/providers/glm/)):
 
-| File         | Responsibility                                                                                                   |
-| ------------ | --------------------------------------------------------------------------------------------------------------- |
-| `client.ts`  | `layoutParsing()` — `fetch` with the `Authorization` header, JSON body, bounded retry/backoff on 429 + 5xx, `AbortSignal` timeout |
+| File         | Responsibility                                                                                                                                                                 |
+| ------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `client.ts`  | `layoutParsing()` — `fetch` with the `Authorization` header, JSON body, bounded retry/backoff on 429 + 5xx, `AbortSignal` timeout                                              |
 | `chunker.ts` | `splitPdfToPageImages()` renders each PDF page to a base64 PNG (via `pdf-to-img`); `mapWithConcurrency()` runs `p-limit`-bounded parallel calls (`GLM_CONCURRENCY`, default 8) |
-| `mapper.ts`  | `mapLayoutParsing()` flattens `layout_details[page][block]` → `LayoutBlock[]`, offsetting page indices when merging chunks, and builds `pages` + `markdown` |
-| `index.ts`   | `GlmOcrProvider.recognize()` — chunk → `mapWithConcurrency(client.layoutParsing)` → `mapLayoutParsing`           |
+| `mapper.ts`  | `mapLayoutParsing()` flattens `layout_details[page][block]` → `LayoutBlock[]`, offsetting page indices when merging chunks, and builds `pages` + `markdown`                    |
+| `index.ts`   | `GlmOcrProvider.recognize()` — chunk → `mapWithConcurrency(client.layoutParsing)` → `mapLayoutParsing`                                                                         |
 
 ### Throughput guidance (drives the chunker design)
 

@@ -1,11 +1,11 @@
 import "dotenv/config";
 
 import { generateApiKey, listTenants, putTenant, revokeApiKey, type Tenant } from "../auth/tenants";
-import { getRedis, whenRedisReady } from "../redis";
+import { closeDb, ensureSchema, whenDbReady } from "../db";
 
 /**
- * Database-free tenant provisioning CLI. Writes tenants into the Redis-backed
- * registry (see src/auth/tenants.ts) — no schema, no admin service.
+ * Tenant provisioning CLI. Writes tenants into the Postgres-backed registry (see
+ * src/auth/tenants.ts) — no admin service needed.
  *
  *   ts-node src/scripts/provision-tenant.ts create <tenantId> [--rate N] [--origins a,b]
  *   ts-node src/scripts/provision-tenant.ts list
@@ -36,7 +36,8 @@ const getFlag = (args: string[], flag: string): string | undefined => {
 const resolveActor = (args: string[]): string => getFlag(args, "--actor") ?? process.env.USER ?? "unknown";
 
 const main = async (): Promise<number> => {
-  await whenRedisReady();
+  await whenDbReady();
+  await ensureSchema();
   const [command, positional, ...rest] = process.argv.slice(2);
 
   if (command === "list") {
@@ -107,12 +108,12 @@ const main = async (): Promise<number> => {
 };
 
 main()
-  .then((code) => {
-    getRedis().disconnect();
+  .then(async (code) => {
+    await closeDb();
     process.exit(code);
   })
-  .catch((err) => {
+  .catch(async (err) => {
     console.error("provision-tenant failed:", err instanceof Error ? err.message : err);
-    getRedis().disconnect();
+    await closeDb();
     process.exit(1);
   });

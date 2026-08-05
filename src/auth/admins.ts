@@ -2,25 +2,23 @@ import { randomUUID } from "crypto";
 import { hash as argonHash, verify as argonVerify } from "@node-rs/argon2";
 
 import type { AdminRole, User } from "../types/user";
-import { getRedis, whenRedisReady } from "../redis";
+import { query, whenDbReady } from "../db";
 import { logger } from "../observability/logger";
 import { env } from "../config/env";
 
 /**
- * Database-free admin-user registry — the operator-side twin of the tenant
- * registry (src/auth/tenants.ts). Admins log into the console at `/admin`; each
- * has a role (see {@link AdminRole}) that scopes what the API lets them do.
+ * Admin-user registry — the operator-side twin of the tenant registry
+ * (src/auth/tenants.ts). Admins log into the console at `/admin`; each has a role
+ * (see {@link AdminRole}) that scopes what the API lets them do.
  *
- * Records live in a Redis hash `admins`, keyed by the user id, with a second hash
- * `admin_emails` mapping the (lowercased) login email → id. The password is stored
- * only as an **argon2id hash** — the plaintext is never persisted and there is no
- * way to recover it. Provisioning writes both hashes; deleting removes both.
+ * Rows live in the `admins` table (src/db.ts), keyed by user id, with a UNIQUE
+ * constraint on the (lowercased) login email — the database enforces one account
+ * per email. The password is stored only as an **argon2id hash**; the plaintext is
+ * never persisted and there is no way to recover it.
  *
- * There is no relational database, so, as with tenants, the stdout log stream is
- * the audit trail (`admin.created` / `admin.updated` / `admin.deleted`).
+ * As with tenants, the stdout log stream is the audit trail (`admin.created` /
+ * `admin.updated` / `admin.deleted`).
  */
-export const ADMINS_KEY = "admins";
-export const ADMIN_EMAILS_KEY = "admin_emails";
 
 /** The stored shape: the public {@link User}, plus the role and the secret hash. */
 type AdminRecord = User & {
@@ -33,6 +31,29 @@ type AdminRecord = User & {
 /** What the API is allowed to expose: the public user + role, never the hash. */
 export type AdminView = User & { role: AdminRole; disabled?: boolean };
 
+/** The `admins` row shape (snake_case columns); timestamptz columns come back as Date. */
+type AdminRow = {
+  id: string;
+  email: string;
+  name: string;
+  role: AdminRole;
+  password_hash: string;
+  disabled: boolean;
+  created_at: Date;
+  updated_at: Date;
+};
+
+const rowToRecord = (r: AdminRow): AdminRecord => ({
+  id: r.id,
+  email: r.email,
+  name: r.name,
+  role: r.role,
+  passwordHash: r.password_hash,
+  disabled: r.disabled,
+  createdAt: r.created_at,
+  updatedAt: r.updated_at,
+});
+
 /** Login email is case-insensitive; normalize before every read/write. */
 const normalizeEmail = (email: string): string => email.trim().toLowerCase();
 
@@ -40,15 +61,6 @@ const normalizeEmail = (email: string): string => email.trim().toLowerCase();
 const toView = (record: AdminRecord): AdminView => {
   const { passwordHash: _passwordHash, ...view } = record;
   return view;
-};
-
-/**
- * Dates round-trip through Redis as ISO strings; JSON.parse leaves them as strings,
- * so revive them back into Date to honor the {@link User} contract.
- */
-const parseRecord = (raw: string): AdminRecord => {
-  const obj = JSON.parse(raw) as AdminRecord & { createdAt: string; updatedAt: string };
-  return { ...obj, createdAt: new Date(obj.createdAt), updatedAt: new Date(obj.updatedAt) };
 };
 
 /**
@@ -70,10 +82,8 @@ export type CreateAdminInput = {
  */
 export const createAdmin = async (input: CreateAdminInput, actor = "unknown"): Promise<AdminView> => {
   const email = normalizeEmail(input.email);
-  const redis = getRedis();
 
-  const existingId = await redis.hget(ADMIN_EMAILS_KEY, email);
-  if (existingId) throw new Error(`An admin with email '${email}' already exists`);
+  if (await getAdminByEmail(email)) throw new Error(`An admin with email '${email}' already exists`);
 
   const now = new Date();
   const record: AdminRecord = {
@@ -86,39 +96,39 @@ export const createAdmin = async (input: CreateAdminInput, actor = "unknown"): P
     updatedAt: now,
   };
 
-  await redis.hset(ADMINS_KEY, record.id, JSON.stringify(record));
-  await redis.hset(ADMIN_EMAILS_KEY, email, record.id);
+  await query(
+    `INSERT INTO admins (id, email, name, role, password_hash, disabled, created_at, updated_at)
+     VALUES ($1, $2, $3, $4, $5, $6, $7, $8)`,
+    [record.id, email, record.name, record.role, record.passwordHash, false, now, now],
+  );
   logger.info("admin.created", { adminId: record.id, email, role: record.role, actor });
   return toView(record);
 };
 
 /** Resolves a login email to its full record (secret included) or `undefined`. */
 export const getAdminByEmail = async (email: string): Promise<AdminRecord | undefined> => {
-  const redis = getRedis();
-  const id = await redis.hget(ADMIN_EMAILS_KEY, normalizeEmail(email));
-  if (!id) return undefined;
-  const raw = await redis.hget(ADMINS_KEY, id);
-  return raw ? parseRecord(raw) : undefined;
+  const { rows } = await query<AdminRow>(`SELECT * FROM admins WHERE email = $1`, [normalizeEmail(email)]);
+  return rows[0] ? rowToRecord(rows[0]) : undefined;
 };
 
 /** Resolves an id to its full record (secret included) or `undefined`. */
 export const getAdminById = async (id: string): Promise<AdminRecord | undefined> => {
-  const raw = await getRedis().hget(ADMINS_KEY, id);
-  return raw ? parseRecord(raw) : undefined;
+  const { rows } = await query<AdminRow>(`SELECT * FROM admins WHERE id = $1`, [id]);
+  return rows[0] ? rowToRecord(rows[0]) : undefined;
 };
 
 /** All admins as safe views, sorted oldest-first. */
 export const listAdmins = async (): Promise<AdminView[]> => {
-  const all = await getRedis().hgetall(ADMINS_KEY);
-  return Object.values(all)
-    .map((raw) => toView(parseRecord(raw)))
-    .sort((a, b) => a.createdAt.getTime() - b.createdAt.getTime());
+  const { rows } = await query<AdminRow>(`SELECT * FROM admins ORDER BY created_at ASC`);
+  return rows.map((r) => toView(rowToRecord(r)));
 };
 
 /** Count of owner accounts — used to block removing the last one (self-lockout guard). */
 export const countOwners = async (): Promise<number> => {
-  const admins = await listAdmins();
-  return admins.filter((a) => a.role === "owner" && !a.disabled).length;
+  const { rows } = await query<{ n: number }>(
+    `SELECT COUNT(*)::int AS n FROM admins WHERE role = 'owner' AND disabled = false`,
+  );
+  return rows[0]?.n ?? 0;
 };
 
 /**
@@ -129,12 +139,12 @@ export const countOwners = async (): Promise<number> => {
  * deleted account. Called from the web entrypoint (src/index.ts).
  */
 export const ensureBootstrapAdmin = async (): Promise<void> => {
-  // Wait for the connection to be writeable first — on a fresh boot against a
-  // remote/TLS Redis the seed would otherwise fire before the socket is ready and
-  // never land (it only retries on the next boot).
-  await whenRedisReady();
-  const existing = await getRedis().hlen(ADMINS_KEY);
-  if (existing > 0) return;
+  // Wait for the pool to be serving first — on a fresh boot against a remote/TLS
+  // Postgres the seed would otherwise race a cold pool and never land (it only
+  // retries on the next boot).
+  await whenDbReady();
+  const { rows } = await query<{ n: number }>(`SELECT COUNT(*)::int AS n FROM admins`);
+  if ((rows[0]?.n ?? 0) > 0) return;
 
   await createAdmin(
     {
@@ -167,19 +177,21 @@ export const updateAdmin = async (
   patch: UpdateAdminInput,
   actor = "unknown",
 ): Promise<AdminView | undefined> => {
-  const current = await getAdminById(id);
-  if (!current) return undefined;
+  const passwordHash = patch.password ? await hashPassword(patch.password) : null;
+  const { rows } = await query<AdminRow>(
+    `UPDATE admins SET
+       name = COALESCE($2, name),
+       role = COALESCE($3, role),
+       disabled = COALESCE($4, disabled),
+       password_hash = COALESCE($5, password_hash),
+       updated_at = $6
+     WHERE id = $1
+     RETURNING *`,
+    [id, patch.name ?? null, patch.role ?? null, patch.disabled ?? null, passwordHash, new Date()],
+  );
+  if (!rows[0]) return undefined;
 
-  const next: AdminRecord = {
-    ...current,
-    name: patch.name ?? current.name,
-    role: patch.role ?? current.role,
-    disabled: patch.disabled ?? current.disabled,
-    passwordHash: patch.password ? await hashPassword(patch.password) : current.passwordHash,
-    updatedAt: new Date(),
-  };
-
-  await getRedis().hset(ADMINS_KEY, id, JSON.stringify(next));
+  const next = rowToRecord(rows[0]);
   logger.info("admin.updated", {
     adminId: id,
     actor,
@@ -190,14 +202,11 @@ export const updateAdmin = async (
   return toView(next);
 };
 
-/** Deletes an admin (record + email index). Emits `admin.deleted`. Idempotent. */
+/** Deletes an admin. Emits `admin.deleted`. Idempotent. */
 export const deleteAdmin = async (id: string, actor = "unknown"): Promise<boolean> => {
-  const current = await getAdminById(id);
-  if (!current) return false;
-  const redis = getRedis();
-  await redis.hdel(ADMINS_KEY, id);
-  await redis.hdel(ADMIN_EMAILS_KEY, current.email);
-  logger.info("admin.deleted", { adminId: id, email: current.email, actor });
+  const { rows } = await query<{ email: string }>(`DELETE FROM admins WHERE id = $1 RETURNING email`, [id]);
+  if (!rows[0]) return false;
+  logger.info("admin.deleted", { adminId: id, email: rows[0].email, actor });
   return true;
 };
 

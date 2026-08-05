@@ -61,7 +61,7 @@ checksums, receipt total reconciliation, tamper signals) avoid an LLM where math
 
 ### 4. Will it still make sense in two years? ✅
 
-- **Boring, well-supported stack:** Express 5, Node 22+, Redis, Zod, BullMQ, OpenTelemetry.
+- **Boring, well-supported stack:** Express 5, Node 22+, Postgres, Redis, Zod, BullMQ, OpenTelemetry.
 - **Additive extension model** means growth doesn't require re-architecture.
 - **Vendor swap is designed in:** `GLM_BASE_URL` can point at a self-hosted endpoint for
   data residency; the `OcrProvider` interface means a provider can be replaced without
@@ -87,13 +87,14 @@ checksums, receipt total reconciliation, tamper signals) avoid an LLM where math
 ### 6. Is it secure? ✅ strong
 
 - **Server-to-server only**, API-key auth; **only the sha256 of each key** is stored in
-  Redis, so a dump can't be replayed.
+  Postgres, so a dump can't be replayed.
 - **Least privilege:** `--functions` scopes a key; `ID_VERIFICATION` (PII) can be kept off
   keys that shouldn't touch it → `403 FORBIDDEN`.
 - **CORS default-closed**, wildcard never used.
 - **`sensitivity: "pii"` is declarative and centrally enforced:** no raw text in logs, no
   trace-body capture, `Cache-Control: no-store`, no extraction caching, and PII files are
-  never persisted to the Redis queue (`http/routes.ts` gates async on `standard` only).
+  never persisted to the Redis queue (`http/routes.ts` gates async on `standard` only), and
+  the extraction cache is skipped for `pii`.
 - **Config fails closed:** enabling a vendor without its key throws at startup.
 - **Follow-up:** the vendor threat model / vetting note is now written
   ([vendor-threat-model.md](./vendor-threat-model.md)) — no raw PII reaches GLM today; the
@@ -110,17 +111,18 @@ versioned change from day one.
 
 ### 8. Can it be rolled back safely? ✅ (was a gap — now closed)
 
-- **Good:** stateless processes, config-driven, no destructive migrations (Redis is a
-  cache/registry, not a system of record). Deploys are reversible by redeploying the prior
-  build.
+- **Good:** stateless processes, config-driven. Postgres is the system of record, but the
+  schema is applied **additively** at boot (`CREATE TABLE IF NOT EXISTS`) with no destructive
+  migrations, so deploys are reversible by redeploying the prior build without data loss.
 - **Resolved:** the **HTTP server now shuts down gracefully.** `src/index.ts` handles
   `SIGTERM`/`SIGINT` — stop accepting connections, drain in-flight requests, flush traces,
-  close Redis, with a 10s forced-exit fallback — mirroring the worker (`src/worker.ts`). A
-  rolling deploy or rollback no longer cuts in-flight requests. 12-factor IX (disposability).
+  close the Postgres pool and Redis, with a 10s forced-exit fallback — mirroring the worker
+  (`src/worker.ts`). A rolling deploy or rollback no longer cuts in-flight requests. 12-factor
+  IX (disposability).
 
 ### 9. What is the operational cost? ⚠️ owner unnamed
 
-- **Running cost:** one Redis instance, plus per-call spend on Azure OpenAI and GLM-OCR
+- **Running cost:** one Redis instance and one Postgres instance, plus per-call spend on Azure OpenAI and GLM-OCR
   (usage-based, scales with volume). Concurrency is bounded (`GLM_CONCURRENCY`, `p-limit`)
   and extraction is cached on sha256 so the same document pays for OCR once.
 - **Toil is low by design:** tenants provisioned/revoked at runtime with no redeploy.
@@ -149,20 +151,20 @@ ticket becomes invisible debt.
 
 ## 12-factor assessment
 
-| #    | Factor              | Status    | Evidence / gap                                                                                             |
-| ---- | ------------------- | --------- | ---------------------------------------------------------------------------------------------------------- |
-| I    | Codebase            | ✅        | Single repo, one `main` branch                                                                             |
-| II   | Dependencies        | ✅        | `package.json` + `pnpm-lock.yaml`; pnpm pinned and enforced via `preinstall` guard                         |
-| III  | Config              | ✅ strong | All config in env, Zod-validated at boot; invalid config throws (`config/env.ts`)                          |
-| IV   | Backing services    | ✅        | Redis / Azure / GLM attached via URLs; `GLM_BASE_URL` swappable for data residency                         |
-| V    | Build, release, run | ✅        | `build` (tsc) separate from `start` / `worker`                                                             |
-| VI   | Processes           | ✅        | Stateless; all state in Redis (cache, queue, rate-limit, tenants)                                          |
-| VII  | Port binding        | ✅        | `server.listen(PORT)`                                                                                      |
-| VIII | Concurrency         | ✅        | Distinct `web` and `worker` process types                                                                  |
-| IX   | Disposability       | ✅        | Both entrypoints drain on SIGTERM/SIGINT (`src/index.ts`, `src/worker.ts`) with a forced-exit fallback     |
-| X    | Dev/prod parity     | ✅        | Multi-stage `Dockerfile` + `docker-compose.yml` (api + worker + redis); same image runs both process types |
-| XI   | Logs                | ✅        | JSON event stream to stdout; no file/rotation logic in-app                                                 |
-| XII  | Admin processes     | ✅        | `provision:tenant` CLI runs the same code + config                                                         |
+| #    | Factor              | Status    | Evidence / gap                                                                                                               |
+| ---- | ------------------- | --------- | ---------------------------------------------------------------------------------------------------------------------------- |
+| I    | Codebase            | ✅        | Single repo, one `main` branch                                                                                               |
+| II   | Dependencies        | ✅        | `package.json` + `pnpm-lock.yaml`; pnpm pinned and enforced via `preinstall` guard                                           |
+| III  | Config              | ✅ strong | All config in env, Zod-validated at boot; invalid config throws (`config/env.ts`)                                            |
+| IV   | Backing services    | ✅        | Postgres / Redis / Azure / GLM attached via URLs; `GLM_BASE_URL` swappable for data residency                                |
+| V    | Build, release, run | ✅        | `build` (tsc) separate from `start` / `worker`                                                                               |
+| VI   | Processes           | ✅        | Stateless; durable state in Postgres (tenants, admins, usage), ephemeral state in Redis (cache, queue, rate-limit, sessions) |
+| VII  | Port binding        | ✅        | `server.listen(PORT)`                                                                                                        |
+| VIII | Concurrency         | ✅        | Distinct `web` and `worker` process types                                                                                    |
+| IX   | Disposability       | ✅        | Both entrypoints drain on SIGTERM/SIGINT (`src/index.ts`, `src/worker.ts`) with a forced-exit fallback                       |
+| X    | Dev/prod parity     | ✅        | Multi-stage `Dockerfile` + `docker-compose.yml` (api + worker + redis + postgres); same image runs both process types        |
+| XI   | Logs                | ✅        | JSON event stream to stdout; no file/rotation logic in-app                                                                   |
+| XII  | Admin processes     | ✅        | `provision:tenant` CLI runs the same code + config                                                                           |
 
 **Verdict: 12-factor compliant (12/12).** The two prior gaps are closed — HTTP graceful
 shutdown (IX, also Q8) and a container manifest for dev/prod parity + a reproducible
@@ -220,7 +222,7 @@ gaps. Close them in this order:
    failures. Closes Q5. _(Deferred: feed `recordConfidence` + cost counter once a function
    emits those signals.)_
 7. ✅ **Dockerfile / container manifest** — multi-stage `Dockerfile` + `docker-compose.yml`
-   (api + worker + redis). Closes 12-factor X / V. _(Image build not yet run on a Docker host.)_
+   (api + worker + redis + postgres). Closes 12-factor X / V. _(Image build not yet run on a Docker host.)_
 8. ✅ **The "Not yet wired" seams are wired and test-covered** (GLM + async), so the debt is
    repaid rather than merely ticketed — see the Q10 table.
 9. ✅ **Ops runbook + threat/vendor-vetting note** written ([runbook.md](./runbook.md),

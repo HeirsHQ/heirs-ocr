@@ -10,33 +10,41 @@ what the alerts mean, and how to respond when something breaks. Pairs with
 
 ## Topology
 
-Two process types off **one image**, plus Redis. Both processes are stateless; all state
-lives in Redis (extraction cache, job queue, rate-limit counters, tenant registry).
+Two process types off **one image**, plus Redis and Postgres. Both processes are
+stateless; **durable** state (tenants, admin users, usage) lives in Postgres, while
+**ephemeral** state (extraction cache, job queue, rate-limit counters, sessions) lives in
+Redis.
 
-| Process  | Command                | Scales on         | Purpose                                 |
-| -------- | ---------------------- | ----------------- | --------------------------------------- |
-| `web`    | `node build/index.js`  | request rate      | HTTP API; runs the sync pipeline inline |
-| `worker` | `node build/worker.js` | async job backlog | Drains the BullMQ queue off-request     |
-| `redis`  | managed / `redis:7`    | —                 | Cache + queue + rate-limit + tenants    |
+| Process    | Command                 | Scales on         | Purpose                                        |
+| ---------- | ----------------------- | ----------------- | ---------------------------------------------- |
+| `web`      | `node build/index.js`   | request rate      | HTTP API; runs the sync pipeline inline        |
+| `worker`   | `node build/worker.js`  | async job backlog | Drains the BullMQ queue off-request            |
+| `redis`    | managed / `redis:7`     | —                 | Cache + queue + rate-limit + sessions          |
+| `postgres` | managed / `postgres:16` | —                 | Tenants, admin users, usage (system of record) |
 
-`docker-compose.yml` stands the whole topology up locally (`docker compose up --build`).
+`docker-compose.yml` runs the app (`docker compose up --build`) against the `REDIS_URL` /
+`DATABASE_URL` in your `.env` — managed services by default. For a fully-local stack, add
+`--profile local-infra` to also start a throwaway Redis + Postgres (and point those URLs at
+the in-network `redis` / `postgres` hosts). Redis and Postgres are otherwise managed,
+external services attached by URL (12-factor IV).
 
 ## Configuration
 
 All config is env, Zod-validated at boot ([`src/config/env.ts`](../src/config/env.ts)) —
 **invalid config throws on startup, so a bad deploy fails fast rather than half-running.**
 
-| Var                                                                                    | Default                  | Notes                                                                     |
-| -------------------------------------------------------------------------------------- | ------------------------ | ------------------------------------------------------------------------- |
-| `REDIS_URL`                                                                            | `redis://localhost:6379` | Required in prod. Single point of shared state.                           |
-| `PORT`                                                                                 | `8080`                   | Web only.                                                                 |
-| `AUTH_ENABLED`                                                                         | `true`                   | **Never `false` in prod** — disables API-key auth.                        |
-| `RATE_LIMIT_ENABLED` / `RATE_LIMIT_MAX` / `RATE_LIMIT_WINDOW_SECONDS`                  | `true` / `60` / `60`     | Per-tenant fixed window.                                                  |
-| `ASYNC_SIZE_THRESHOLD_BYTES` / `ASYNC_PAGE_THRESHOLD`                                  | `5 MiB` / `5`            | Above either → job is queued (202) instead of run inline.                 |
-| `MAX_FILE_SIZE_BYTES`                                                                  | `50 MiB`                 | Hard upload cap (multer).                                                 |
-| `AZURE_OPENAI_ENABLED` (+ `_API_KEY`, `_ENDPOINT`, `_API_VERSION`, `_DEPLOYMENT_NAME`) | `false`                  | Enabling without the key **throws at boot**. Needed by all LLM functions. |
-| `GLM_ENABLED` (+ `_API_KEY`, `_BASE_URL`, `_MAX_PAGES`, `_CONCURRENCY`)                | `false`                  | `GLM_BASE_URL` can point at a self-hosted endpoint for data residency.    |
-| `OTEL_EXPORTER_OTLP_ENDPOINT`                                                          | unset                    | Set → traces ship over OTLP/HTTP. Unset → spans created, not exported.    |
+| Var                                                                                    | Default              | Notes                                                                     |
+| -------------------------------------------------------------------------------------- | -------------------- | ------------------------------------------------------------------------- |
+| `REDIS_URL`                                                                            | **required**         | No default in code. Ephemeral shared state (cache, queue, rate-limit).    |
+| `DATABASE_URL`                                                                         | **required**         | No default in code. System of record (tenants, admins, usage).            |
+| `PORT`                                                                                 | `8080`               | Web only.                                                                 |
+| `AUTH_ENABLED`                                                                         | `true`               | **Never `false` in prod** — disables API-key auth.                        |
+| `RATE_LIMIT_ENABLED` / `RATE_LIMIT_MAX` / `RATE_LIMIT_WINDOW_SECONDS`                  | `true` / `60` / `60` | Per-tenant fixed window.                                                  |
+| `ASYNC_SIZE_THRESHOLD_BYTES` / `ASYNC_PAGE_THRESHOLD`                                  | `5 MiB` / `5`        | Above either → job is queued (202) instead of run inline.                 |
+| `MAX_FILE_SIZE_BYTES`                                                                  | `50 MiB`             | Hard upload cap (multer).                                                 |
+| `AZURE_OPENAI_ENABLED` (+ `_API_KEY`, `_ENDPOINT`, `_API_VERSION`, `_DEPLOYMENT_NAME`) | `false`              | Enabling without the key **throws at boot**. Needed by all LLM functions. |
+| `GLM_ENABLED` (+ `_API_KEY`, `_BASE_URL`, `_MAX_PAGES`, `_CONCURRENCY`)                | `false`              | `GLM_BASE_URL` can point at a self-hosted endpoint for data residency.    |
+| `OTEL_EXPORTER_OTLP_ENDPOINT`                                                          | unset                | Set → traces ship over OTLP/HTTP. Unset → spans created, not exported.    |
 
 ## Health, probes, and scrape endpoints
 
@@ -79,11 +87,19 @@ The API never leaks a raw provider error; every failure is a typed code
 
 ### Redis is down
 
-Redis is load-bearing: no cache, no queue, no rate-limit, no tenant lookups. Symptoms:
-`PROVIDER_UNAVAILABLE` on enqueue, `UNAUTHORIZED` if the tenant cache is cold, rate-limit
-failing (fails **closed** — the limiter client is configured to fail fast). The extraction
-cache **fails open** (a cache outage degrades to recompute, not an error). Restore Redis;
-processes reconnect without a redeploy.
+Redis backs the ephemeral concerns: cache, queue, rate-limit, sessions. Symptoms:
+`PROVIDER_UNAVAILABLE` on enqueue, admin console logins failing (sessions unreadable),
+rate-limit failing (fails **open** — the limiter allows the request and logs a warning).
+The extraction cache **fails open** (a cache outage degrades to recompute, not an error).
+Restore Redis; processes reconnect without a redeploy.
+
+### Postgres is down
+
+Postgres is the system of record for tenants, admin users, and usage. Symptoms:
+`UNAUTHORIZED` once the per-process tenant cache goes cold (tenant resolution **fails
+closed** — a lookup that can't reach Postgres is rejected), admin console reads failing,
+and usage counters not advancing (usage writes are **fire-and-forget** and swallow errors,
+so they never fail a request). Restore Postgres; processes reconnect without a redeploy.
 
 ### Worker stalled / job backlog growing
 
@@ -95,12 +111,13 @@ via `GET /v1/ocr/jobs/:id` (`encodeJobError`).
 ## Deploy, shutdown, rollback
 
 - **Graceful shutdown (both entrypoints):** on `SIGTERM`/`SIGINT` the web server stops
-  accepting connections, drains in-flight requests, flushes traces, and closes Redis, with
-  a **10s forced-exit fallback**. The worker drains its active jobs. Rolling deploys don't
-  cut in-flight work. _(12-factor IX.)_
-- **Rollback:** processes are stateless and config-driven with no destructive migrations —
-  redeploy the prior image. Redis is a cache/registry, not a system of record, so a rollback
-  loses no durable data. Re-check that any changed env var is reverted too.
+  accepting connections, drains in-flight requests, flushes traces, and closes the Postgres
+  pool and Redis, with a **10s forced-exit fallback**. The worker drains its active jobs.
+  Rolling deploys don't cut in-flight work. _(12-factor IX.)_
+- **Rollback:** processes are stateless and config-driven. The schema is applied additively
+  at boot (`CREATE TABLE IF NOT EXISTS`, no destructive migrations), so redeploying the prior
+  image is safe and loses no durable data in Postgres. Re-check that any changed env var is
+  reverted too.
 
 ## Tenant management (admin)
 
@@ -114,7 +131,8 @@ pnpm provision:tenant revoke <apiKey> [--actor who]
 
 - `create` prints the raw key **once** — only its sha256 is stored; it cannot be recovered.
 - `create`/`revoke` emit a `tenant.provisioned` / `tenant.revoked` **audit line** to stdout
-  (there is no DB — the log stream is the audit trail). Tag the operator with `--actor`.
+  (the log stream is the audit trail — there is no separate audit table). Tag the operator
+  with `--actor`.
 - To lock a compromised key: `revoke` it; the auth cache TTL (`API_KEY_CACHE_TTL_SECONDS`,
   default 30s) bounds how long it stays valid after revocation.
 
