@@ -54,7 +54,4 @@ jobs:
           username: ${{ secrets.EC2_USER }}
           key: ${{ secrets.EC2_SSH_KEY }}
           script: |
-            bash ${{ '/home/ec2-user/heirs-ocr' }}/scripts/deploy.sh ${{ github.sha }}
-            docker compose pull
-            docker compose up -d
-            docker image prune -f
+            bash /home/ubuntu/heirs-ocr/scripts/deploy.sh ${{ github.sha }}
