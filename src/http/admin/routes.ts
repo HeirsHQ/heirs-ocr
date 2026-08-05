@@ -11,6 +11,7 @@ import { getQueueStats } from "../../jobs/queue";
 import type { User } from "../../types/user";
 import { env } from "../../config/env";
 import { getRedis } from "../../redis";
+import { query } from "../../db";
 import {
   countOwners,
   createAdmin,
@@ -378,9 +379,17 @@ adminApiRouter.get(
     } catch {
       redisOk = false;
     }
+    let postgresOk = false;
+    try {
+      await query("SELECT 1");
+      postgresOk = true;
+    } catch {
+      postgresOk = false;
+    }
     res.json({
       status: "ok",
       redis: redisOk,
+      postgres: postgresOk,
       providers: {
         tesseract: true, // always available (bundled)
         glm: env.GLM_ENABLED === "true",

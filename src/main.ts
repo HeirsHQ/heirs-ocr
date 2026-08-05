@@ -37,7 +37,7 @@ export function main() {
 
   // Admin console: static assets + JSON API, both under /admin. Same-origin (no
   // CORS). Login is open; other /admin/api routes gate on session + role. The
-  // console is inert until an admin exists in Redis (`pnpm provision:admin`).
+  // console is inert until an admin exists in Postgres (`pnpm provision:admin`).
   app.use("/admin", express.static(path.join(__dirname, "..", "public", "admin")));
   app.use("/admin", adminApiRouter);
 

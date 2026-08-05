@@ -9,12 +9,12 @@ import { OcrError } from "../errors";
 /**
  * API-key authentication (docs/regression-and-security.md V1). The caller sends
  * `Authorization: Bearer <key>` (or `X-API-Key: <key>`); the key is hashed and
- * looked up in the Redis-backed tenant registry. Success sets `req.tenantId`
+ * looked up in the Postgres-backed tenant registry. Success sets `req.tenantId`
  * (and `req.tenant`), which scopes rate limiting and caching.
  *
  * **Fail-closed:** unlike the rate limiter, if the key store is unreachable we
  * reject (503) rather than admit. A short-TTL cache in the registry rides out
- * brief Redis blips so this isn't fragile.
+ * brief database blips so this isn't fragile.
  *
  * `AUTH_ENABLED=false` bypasses auth entirely (local dev only) — never in prod.
  */

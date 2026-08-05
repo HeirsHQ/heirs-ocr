@@ -1,12 +1,12 @@
 import "dotenv/config";
 
 import { createAdmin, deleteAdmin, getAdminByEmail, listAdmins } from "../auth/admins";
-import { getRedis, whenRedisReady } from "../redis";
+import { closeDb, ensureSchema, whenDbReady } from "../db";
 import type { AdminRole } from "../types/user";
 
 /**
- * Database-free admin-user provisioning CLI — the operator twin of
- * provision-tenant.ts. Seeds the first console owner (there's a chicken-and-egg:
+ * Admin-user provisioning CLI — the operator twin of provision-tenant.ts. Seeds
+ * the first console owner (there's a chicken-and-egg:
  * login needs an admin, so owner #0 is created out-of-band here), after which
  * owners manage the rest from the UI.
  *
@@ -39,7 +39,8 @@ const getFlag = (args: string[], flag: string): string | undefined => {
 const isRole = (v: string): v is AdminRole => v === "owner" || v === "manager" || v === "viewer";
 
 const main = async (): Promise<number> => {
-  await whenRedisReady();
+  await whenDbReady();
+  await ensureSchema();
   const [command, ...rest] = process.argv.slice(2);
 
   if (command === "list") {
@@ -104,12 +105,12 @@ const main = async (): Promise<number> => {
 };
 
 main()
-  .then((code) => {
-    getRedis().disconnect();
+  .then(async (code) => {
+    await closeDb();
     process.exit(code);
   })
-  .catch((err) => {
+  .catch(async (err) => {
     console.error("provision-admin failed:", err instanceof Error ? err.message : err);
-    getRedis().disconnect();
+    await closeDb();
     process.exit(1);
   });

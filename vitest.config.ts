@@ -11,6 +11,9 @@ export default defineConfig({
     env: {
       ADMIN_BOOTSTRAP_EMAIL: "test-owner@example.com",
       ADMIN_BOOTSTRAP_PASSWORD: "test-password-123",
+      // Redis and Postgres are mocked in tests; these just satisfy env validation.
+      REDIS_URL: "redis://localhost:6379",
+      DATABASE_URL: "postgres://postgres:postgres@localhost:5432/heirs_ocr_test",
     },
   },
 });

@@ -27,6 +27,9 @@ const schema = z
     AZURE_OPENAI_DEPLOYMENT_NAME: z.string().optional(),
     AZURE_OPENAI_ENABLED: z.enum(["true", "false"]).default("false"),
     CORS_ALLOWED_ORIGINS: z.string().default(""),
+    // Connection string carrying DB credentials — no default; must be supplied via
+    // the environment (12-factor III) so secrets are never baked into source.
+    DATABASE_URL: z.string().min(1, "DATABASE_URL is required"),
     EXTRACTION_CACHE_TTL_SECONDS: z.coerce
       .number()
       .int()
@@ -49,7 +52,8 @@ const schema = z
     RATE_LIMIT_ENABLED: z.enum(["true", "false"]).default("true"),
     RATE_LIMIT_MAX: z.coerce.number().int().positive().default(60),
     RATE_LIMIT_WINDOW_SECONDS: z.coerce.number().int().positive().default(60),
-    REDIS_URL: z.string().default("redis://localhost:6379"),
+    // May carry credentials (redis://:password@host) — no default; supplied via env.
+    REDIS_URL: z.string().min(1, "REDIS_URL is required"),
     VERSION: z.string().default("1.0.0"),
   })
   .refine((data) => data.AZURE_OPENAI_ENABLED !== "true" || !!data.AZURE_OPENAI_API_KEY, {
