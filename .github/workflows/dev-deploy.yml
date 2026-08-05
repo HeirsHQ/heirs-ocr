@@ -42,10 +42,10 @@ jobs:
           context: .
           push: true
           tags: |
-           ${{ steps.ecr-login.outputs.registry }}/${{ env.ECR_REPOSITORY }}:${{ github.sha }}
+            ${{ steps.ecr-login.outputs.registry }}/${{ env.ECR_REPOSITORY }}:${{ github.sha }}
           cache-from: type=gha
           cache-to: type=gha,mode=max
-          
+
       - name: Deploy to EC2
         uses: appleboy/ssh-action@v1.0.3
         with:
