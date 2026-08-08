@@ -12,8 +12,10 @@ export const buildIdVerificationPrompt = (markdown: string, args: IdVerification
   const system = buildSystem([
     "You are an identity-document extraction assistant.",
     typeHint,
-    "Extract full name, date of birth, document number, expiry date, nationality, and sex.",
-    "Use null for fields not present. Do NOT infer check-digit validity — that is computed separately.",
+    "Extract full name, date of birth, document number, issue date, expiry date, nationality, sex,",
+    "place of birth, and address. For driver's licences also extract the licence category and issuing authority.",
+    "Use null for fields not present (e.g. licence category on a passport).",
+    "Do NOT infer check-digit validity — that is computed separately.",
   ]);
 
   const user = `Extract identity fields from this document:\n\n${wrapUntrusted("DOCUMENT", markdown)}`;

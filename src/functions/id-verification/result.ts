@@ -8,9 +8,16 @@ export const idVerificationResultSchema = z.object({
     fullName: z.string().nullable(),
     dateOfBirth: z.string().nullable(),
     documentNumber: z.string().nullable(),
+    issueDate: z.string().nullable(),
     expiryDate: z.string().nullable(),
     nationality: z.string().nullable(),
     sex: z.string().nullable(),
+    placeOfBirth: z.string().nullable(),
+    address: z.string().nullable(),
+    /** Driver's-licence vehicle categories (e.g. "B, C1"); null on other document types. */
+    licenceCategory: z.string().nullable(),
+    /** Authority that issued the document (e.g. FRSC, immigration service). */
+    issuingAuthority: z.string().nullable(),
   }),
   checks: z.object({
     expired: z.boolean().nullable(),
