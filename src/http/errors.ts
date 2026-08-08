@@ -13,6 +13,7 @@ export const OcrErrorCode = {
   INTERPRETATION_FAILED: "INTERPRETATION_FAILED",
   SCHEMA_VALIDATION_FAILED: "SCHEMA_VALIDATION_FAILED",
   RATE_LIMITED: "RATE_LIMITED",
+  INTERNAL: "INTERNAL",
 } as const;
 
 export type OcrErrorCode = (typeof OcrErrorCode)[keyof typeof OcrErrorCode];
@@ -32,6 +33,9 @@ const STATUS_BY_CODE: Record<OcrErrorCode, number> = {
   INTERPRETATION_FAILED: 502,
   SCHEMA_VALIDATION_FAILED: 422,
   RATE_LIMITED: 429,
+  // An unexpected server-side fault (a bug, not a provider/input problem). 500,
+  // and never retryable — retrying a deterministic fault just replays the failure.
+  INTERNAL: 500,
 };
 
 export type OcrErrorBody = {

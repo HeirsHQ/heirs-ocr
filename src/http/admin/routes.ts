@@ -2,6 +2,7 @@ import { Router, type Request, type RequestHandler, type Response } from "expres
 import { z } from "zod";
 
 import { SESSION_COOKIE, createSession, destroySession } from "../../auth/admin-session";
+import { clearLoginFailures, loginAllowed, recordLoginFailure } from "../../auth/login-throttle";
 import { adminAuth, parseCookies, requireMinRole } from "../middleware/admin-auth";
 import { getMetricsSummary } from "../../observability/metrics";
 import { getAllTenantUsage } from "../../observability/usage";
@@ -109,15 +110,29 @@ adminApiRouter.post(
       return;
     }
 
+    const ip = req.ip ?? "unknown";
+    const email = parsed.data.email;
+
+    // Brute-force throttle: refuse once too many recent failures accrue against
+    // this IP or email. Argon2 slows each guess; this bounds how many can be made.
+    if (!(await loginAllowed(ip, email))) {
+      logger.warn("admin.login.throttled", { email, ip });
+      sendError(res, 429, "RATE_LIMITED", "Too many failed attempts. Try again later.");
+      return;
+    }
+
     // The admin store (Redis) is a hard dependency for this security control. If it
     // is unreachable, fail closed with 503 rather than a generic 500 — mirrors the
     // OCR auth middleware (src/http/middleware/auth.ts). A wrong password is a 401
     // below; only a store outage lands here.
     let admin, session;
     try {
-      admin = await getAdminByEmail(parsed.data.email);
+      admin = await getAdminByEmail(email);
       // Same response whether the email is unknown or the password is wrong.
       if (!admin || !(await verifyPassword(admin, parsed.data.password))) {
+        await recordLoginFailure(ip, email);
+        // Log every failure so a brute-force attempt is visible to alerting.
+        logger.warn("admin.login.failed", { email, ip });
         sendError(res, 401, "UNAUTHORIZED", "Invalid email or password");
         return;
       }
@@ -128,8 +143,9 @@ adminApiRouter.post(
       return;
     }
 
+    await clearLoginFailures(ip, email);
     setSessionCookie(req, res, session.token, session.ttl);
-    logger.info("admin.login", { adminId: admin.id, email: admin.email });
+    logger.info("admin.login", { adminId: admin.id, email: admin.email, ip });
     res.json({ user: publicUser(admin), role: admin.role });
   }),
 );

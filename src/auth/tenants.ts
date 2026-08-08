@@ -70,10 +70,16 @@ const rowToTenant = (row: TenantRow): Tenant => ({
 /** jsonb columns take a JSON string (or NULL); a bare JS array would bind as a Postgres array. */
 const toJsonb = (v: unknown): string | null => (v == null ? null : JSON.stringify(v));
 
-type CacheEntry = { tenant: Tenant; expiresAt: number };
+// `tenant: null` is a cached negative — a key-hash known to be absent. Caching
+// misses (not just hits) keeps an invalid-key flood off the Postgres hot path;
+// without it, every bogus key is one DB round-trip. Negatives use a short, capped
+// TTL so a key provisioned right after a probe still becomes usable quickly.
+type CacheEntry = { tenant: Tenant | null; expiresAt: number };
 const cache = new Map<string, CacheEntry>();
 
 const cacheTtlMs = () => env.API_KEY_CACHE_TTL_SECONDS * 1000;
+/** Negative entries live for the positive TTL or 5s, whichever is shorter. */
+const negativeTtlMs = () => Math.min(cacheTtlMs(), 5_000);
 
 /**
  * Resolves an API key to its tenant, or `undefined` if unknown/disabled.
@@ -86,11 +92,15 @@ export const resolveTenant = async (apiKey: string): Promise<Tenant | undefined>
   const keyHash = hashApiKey(apiKey);
 
   const hit = cache.get(keyHash);
-  if (hit && hit.expiresAt > Date.now()) return hit.tenant.disabled ? undefined : hit.tenant;
+  if (hit && hit.expiresAt > Date.now()) {
+    if (!hit.tenant) return undefined; // cached negative
+    return hit.tenant.disabled ? undefined : hit.tenant;
+  }
 
   const tenant = await getTenantByHash(keyHash);
   if (!tenant) {
-    cache.delete(keyHash);
+    // Cache the miss (short TTL) so a spray of unknown keys can't hammer Postgres.
+    cache.set(keyHash, { tenant: null, expiresAt: Date.now() + negativeTtlMs() });
     return undefined;
   }
 
