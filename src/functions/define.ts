@@ -14,6 +14,7 @@ export const OcrFunction = {
   TEXT_EXTRACTION: "TEXT_EXTRACTION",
   RESUME_PARSING: "RESUME_PARSING",
   DOCUMENT_AUTHENTICITY: "DOCUMENT_AUTHENTICITY",
+  AUTO_EXTRACTION: "AUTO_EXTRACTION",
 } as const;
 
 export type OcrFunctionKey = (typeof OcrFunction)[keyof typeof OcrFunction];

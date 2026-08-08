@@ -66,8 +66,13 @@ export const executeIdVerification = async (
 
 type Fields = IdVerificationResult["fields"];
 
-/** MRZ wins for the fields it covers, but only overwrites when it actually read a value. */
+/**
+ * MRZ wins for the fields it covers, but only overwrites when it actually read a
+ * value. Fields the MRZ doesn't carry (issue date, place of birth, address,
+ * licence category, issuing authority) pass through from the LLM via the spread.
+ */
 const mergeMrzFields = (llm: Fields, mrz: MrzFields): Fields => ({
+  ...llm,
   fullName: mrz.fullName ?? llm.fullName,
   dateOfBirth: mrz.dateOfBirth ?? llm.dateOfBirth,
   documentNumber: mrz.documentNumber ?? llm.documentNumber,

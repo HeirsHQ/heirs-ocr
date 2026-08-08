@@ -17,20 +17,43 @@ const educationSchema = z.object({
   endDate: z.string().nullable(),
 });
 
+const certificationSchema = z.object({
+  name: z.string(),
+  issuer: z.string().nullable(),
+  date: z.string().nullable(),
+});
+
+const languageSchema = z.object({
+  name: z.string(),
+  level: z.string().nullable(),
+});
+
+const skillSchema = z.object({
+  name: z.string(),
+  level: z.string().nullable(),
+});
+
 export const resumeParsingResultSchema = z.object({
   contact: z.object({
     name: z.string().nullable(),
     email: z.string().nullable(),
     phone: z.string().nullable(),
     location: z.string().nullable(),
+    address: z.string().nullable(),
+    state: z.string().nullable(),
+    country: z.string().nullable(),
+    zip: z.string().nullable(),
+    nationality: z.string().nullable(),
     links: z.array(z.string()),
   }),
   summary: z.string().nullable(),
   experience: z.array(experienceSchema),
   education: z.array(educationSchema),
-  skills: z.array(z.string()),
-  certifications: z.array(z.string()),
-  languages: z.array(z.string()),
+  certifications: z.array(certificationSchema),
+  /** Membership of professional bodies/associations — distinct from certifications. */
+  professionalBodies: z.array(z.string()),
+  languages: z.array(languageSchema),
+  skills: z.array(skillSchema),
 });
 
 export type ResumeParsingResult = z.infer<typeof resumeParsingResultSchema>;

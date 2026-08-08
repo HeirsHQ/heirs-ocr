@@ -1,4 +1,5 @@
 import { OcrFunction, type OcrFunctionDefinition, type OcrFunctionKey } from "./define";
+import { autoExtraction } from "./auto-extraction";
 import { documentAuthenticity } from "./document-authenticity";
 import { documentClassification } from "./document-classification";
 import { formDataExtraction } from "./form-data-extraction";
@@ -22,6 +23,7 @@ const definitions: AnyOcrFunctionDefinition[] = [
   idVerification,
   signing,
   documentAuthenticity,
+  autoExtraction,
 ];
 
 const registry = new Map<OcrFunctionKey, AnyOcrFunctionDefinition>(definitions.map((d) => [d.key, d]));
