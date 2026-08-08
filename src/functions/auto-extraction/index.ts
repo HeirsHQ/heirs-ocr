@@ -19,6 +19,8 @@ export const autoExtraction = defineOcrFunction({
   argsSchema: autoExtractionArgsSchema,
   resultSchema: autoExtractionResultSchema,
   execute: executeAutoExtraction,
+  // The routing classifier's confidence is the quality signal for auto-routing.
+  confidenceOf: (r) => r.classification.confidence,
 });
 
 export * from "./args";

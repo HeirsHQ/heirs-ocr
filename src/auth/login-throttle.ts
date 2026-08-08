@@ -41,7 +41,6 @@ export const loginAllowed = async (ip: string, email: string): Promise<boolean> 
 /** Records one failed attempt against both the IP and the email buckets. */
 export const recordLoginFailure = async (ip: string, email: string): Promise<void> => {
   try {
-    const redis = getRedis();
     await Promise.all([bump(ipKey(ip)), bump(emailKey(email))]);
   } catch (err) {
     logger.warn("login throttle: could not record failure", {

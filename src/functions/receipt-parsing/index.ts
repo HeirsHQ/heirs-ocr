@@ -13,6 +13,8 @@ export const receiptParsing = defineOcrFunction({
   argsSchema: receiptParsingArgsSchema,
   resultSchema: receiptParsingResultSchema,
   execute: executeReceiptParsing,
+  // Deterministic totals-reconciliation verdict → a 0/1 confidence for the SLI.
+  confidenceOf: (r) => (r.confidence === "high" ? 1 : 0),
 });
 
 export * from "./args";

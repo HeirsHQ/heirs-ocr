@@ -23,6 +23,17 @@ const requestCount = async (outcome: "success" | "error"): Promise<number> => {
   return data.values.filter((v) => v.labels.outcome === outcome).reduce((sum, v) => sum + v.value, 0);
 };
 
+/** Sum of a per-function confidence counter (observations or low-confidence hits). */
+const confidenceCount = async (kind: "obs" | "low", fn: string): Promise<number> => {
+  const name = kind === "obs" ? "ocr_confidence_observations_total" : "ocr_low_confidence_total";
+  const metric = registry.getSingleMetric(name);
+  if (!metric) return 0;
+  const data = (await (metric as { get(): Promise<unknown> }).get()) as {
+    values: { labels: Record<string, string>; value: number }[];
+  };
+  return data.values.filter((v) => v.labels.function === fn).reduce((sum, v) => sum + v.value, 0);
+};
+
 // 1x1 transparent PNG — a real, sniffable image payload.
 const PNG_1x1 = Buffer.from(
   "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAAC0lEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg==",
@@ -131,6 +142,26 @@ describe("runPipeline — extraction + interpretation", () => {
     );
     expect(outcome.result.label).toBe("invoice");
     expect(outcome.result.confidence).toBeCloseTo(0.92);
+    // The pipeline surfaces the function's confidence into the response meta.
+    expect(outcome.meta.confidence).toBeCloseTo(0.92);
+  });
+
+  it("feeds the low-confidence SLI when a result is below threshold", async () => {
+    const before = await confidenceCount("low", "DOCUMENT_CLASSIFICATION");
+    const beforeObs = await confidenceCount("obs", "DOCUMENT_CLASSIFICATION");
+    const llm = new MockLlmClient(
+      new Map([
+        ["DOCUMENT_CLASSIFICATION_result", { label: "invoice", confidence: 0.2, alternatives: [], rationale: "faint" }],
+      ]),
+    );
+    await runPipeline(
+      documentClassification,
+      request(PNG_1x1, {}, "x.png"),
+      deps({ llm, providers: classifierProviders("INVOICE") }),
+    );
+    // 0.2 ≤ 0.7 default threshold → one low observation and one total observation.
+    expect(await confidenceCount("low", "DOCUMENT_CLASSIFICATION")).toBe(before + 1);
+    expect(await confidenceCount("obs", "DOCUMENT_CLASSIFICATION")).toBe(beforeObs + 1);
   });
 
   it("records a success outcome in ocr_requests_total", async () => {
