@@ -13,6 +13,7 @@ export const documentClassification = defineOcrFunction({
   argsSchema: documentClassificationArgsSchema,
   resultSchema: documentClassificationResultSchema,
   execute: executeDocumentClassification,
+  confidenceOf: (r) => r.confidence,
 });
 
 export * from "./args";

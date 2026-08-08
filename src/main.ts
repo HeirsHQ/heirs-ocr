@@ -3,18 +3,23 @@ import morgan from "morgan";
 import path from "path";
 
 import { errorHandler, notFound } from "./http/middleware/error";
+import { metricsAuth, securityHeaders } from "./http/middleware/security-headers";
 import { metricsContentType, renderMetrics } from "./observability/metrics";
 import { adminApiRouter } from "./http/admin/routes";
 import { corsMiddleware } from "./config/cors";
 import { ocrRouter } from "./http/routes";
+import { env } from "./config/env";
 
 /** Builds the Express app. Kept free of `listen` so it can be imported by tests. */
 export function main() {
   const app = express();
 
+  // Baseline browser-security headers (CSP, X-Frame-Options, HSTS…) on every response.
+  app.use(securityHeaders);
   // Default-closed CORS (server-to-server). See config/cors.ts.
   app.use(corsMiddleware);
-  app.use(morgan("dev"));
+  // Structured "combined" access logs in production; the colourful "dev" format is dev-only.
+  app.use(morgan(env.NODE_ENV === "production" ? "combined" : "dev"));
   app.use(express.json());
   app.use(express.urlencoded({ extended: true }));
 
@@ -26,9 +31,9 @@ export function main() {
   app.get("/healthz", (_req: Request, res: Response) => res.json({ status: "ok" }));
   app.get("/readyz", (_req: Request, res: Response) => res.json({ status: "ok" }));
 
-  // Prometheus scrape endpoint (unauthenticated, like the health probes — labels
-  // carry no tenant data; keep it on an internal network).
-  app.get("/metrics", async (_req: Request, res: Response) => {
+  // Prometheus scrape endpoint. Guarded by a bearer token when METRICS_AUTH_TOKEN
+  // is set (see metricsAuth); otherwise open, which is only safe on a private net.
+  app.get("/metrics", metricsAuth, async (_req: Request, res: Response) => {
     res.set("Content-Type", metricsContentType);
     res.send(await renderMetrics());
   });

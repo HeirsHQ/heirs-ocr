@@ -14,6 +14,12 @@ initTracing();
 const app = main();
 const server = http.createServer(app);
 
+// Loud warning if the metrics endpoint is left open in production — it exposes
+// operational telemetry to anyone who can reach the port.
+if (env.NODE_ENV === "production" && !env.METRICS_AUTH_TOKEN) {
+  logger.warn("/metrics is unauthenticated (METRICS_AUTH_TOKEN unset) — restrict this port to a private network");
+}
+
 // Create the durable schema (idempotent) then seed the first admin console owner
 // when the registry is empty. A failure here (e.g. Postgres briefly down) must not
 // stop the service from starting — it's retried on the next boot and the console is

@@ -30,8 +30,10 @@ export const errorHandler = (err: unknown, req: Request, res: Response, _next: N
   }
 
   logger.error("unhandled error", { requestId, err: err instanceof Error ? err.message : String(err) });
+  // Unknown errors are server-side faults: 500 and NOT retryable. Labelling them
+  // retryable (as EXTRACTION_FAILED did) invites clients to hammer a deterministic bug.
   res.status(500).json({
-    error: { code: "EXTRACTION_FAILED", message: "Internal server error", requestId, retryable: true },
+    error: { code: "INTERNAL", message: "Internal server error", requestId, retryable: false },
   });
 };
 

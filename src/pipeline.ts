@@ -124,11 +124,25 @@ export const runPipeline = async <TArgs, TResult>(
     });
     interpretMs = Date.now() - interpretStart;
 
+    // Quality SLI: functions that carry a confidence signal expose `confidenceOf`;
+    // the pipeline is the single place it's read and turned into a metric.
+    const confidence = def.confidenceOf?.(result);
+    if (confidence !== undefined) {
+      metrics.recordConfidence(def.key, confidence <= env.LOW_CONFIDENCE_THRESHOLD);
+    }
+
+    // Cost SLI: priced off the tokens we can see (extraction); 0-rate disables it.
+    const estimatedCostNgn =
+      doc.tokensUsed && env.LLM_COST_NGN_PER_1K_TOKENS
+        ? (doc.tokensUsed / 1000) * env.LLM_COST_NGN_PER_1K_TOKENS
+        : undefined;
+
     const meta: OcrResponseMeta = {
       provider: doc.provider,
       fellBackFrom: doc.fellBackFrom ?? null,
       pageCount: doc.pageCount,
       cached,
+      confidence,
       durationMs: Date.now() - start,
       tokensUsed: doc.tokensUsed,
     };
@@ -143,6 +157,7 @@ export const runPipeline = async <TArgs, TResult>(
       extractMs: doc.durationMs,
       interpretMs,
       tokensUsed: doc.tokensUsed,
+      estimatedCostNgn,
       outcome: "success",
     });
     // Per-tenant counters for the admin console (fire-and-forget; see usage.ts).

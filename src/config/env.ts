@@ -12,7 +12,9 @@ const schema = z
       .positive()
       .default(8 * 60 * 60),
     ADMIN_BOOTSTRAP_EMAIL: z.string(),
-    ADMIN_BOOTSTRAP_PASSWORD: z.string(),
+    // Seeds the first owner account; brute-forceable online (see admin login), so
+    // enforce a real minimum length rather than trusting the operator.
+    ADMIN_BOOTSTRAP_PASSWORD: z.string().min(12, "ADMIN_BOOTSTRAP_PASSWORD must be at least 12 characters"),
     API_KEY_CACHE_TTL_SECONDS: z.coerce.number().int().positive().default(30),
     ASYNC_PAGE_THRESHOLD: z.coerce.number().int().positive().default(5),
     ASYNC_SIZE_THRESHOLD_BYTES: z.coerce
@@ -40,11 +42,20 @@ const schema = z
     GLM_ENABLED: z.enum(["true", "false"]).default("false"),
     GLM_MAX_PAGES: z.coerce.number().int().positive().default(30),
     GLM_CONCURRENCY: z.coerce.number().int().positive().default(8),
+    // Estimated LLM price in NGN per 1,000 tokens, feeding the cost SLI
+    // (`ocr_estimated_cost_ngn_total`). 0 disables cost accounting.
+    LLM_COST_NGN_PER_1K_TOKENS: z.coerce.number().nonnegative().default(0),
+    // A result confidence at or below this (0–1) counts as "low" for the
+    // low-confidence quality ratio SLI.
+    LOW_CONFIDENCE_THRESHOLD: z.coerce.number().min(0).max(1).default(0.7),
     MAX_FILE_SIZE_BYTES: z.coerce
       .number()
       .int()
       .positive()
       .default(50 * 1024 * 1024),
+    // When set, the /metrics scrape endpoint requires `Authorization: Bearer <token>`.
+    // Leave unset only where the port is truly private (e.g. a scrape-only sidecar net).
+    METRICS_AUTH_TOKEN: z.string().optional(),
     NODE_ENV: z.enum(["development", "production", "test"]).default("development"),
     /** OTLP/HTTP traces endpoint (e.g. http://collector:4318/v1/traces). Unset → traces not exported. */
     OTEL_EXPORTER_OTLP_ENDPOINT: z.string().optional(),
@@ -63,6 +74,17 @@ const schema = z
   .refine((data) => data.GLM_ENABLED !== "true" || !!data.GLM_API_KEY, {
     message: "GLM_API_KEY is required when GLM_ENABLED is true",
     path: ["GLM_API_KEY"],
+  })
+  // Fail closed at boot: production must never run with auth or rate limiting
+  // switched off. These bypasses exist for local dev only — a fat-fingered env var
+  // must not be able to open the API in prod.
+  .refine((data) => data.NODE_ENV !== "production" || data.AUTH_ENABLED === "true", {
+    message: "AUTH_ENABLED must be 'true' when NODE_ENV is 'production'",
+    path: ["AUTH_ENABLED"],
+  })
+  .refine((data) => data.NODE_ENV !== "production" || data.RATE_LIMIT_ENABLED === "true", {
+    message: "RATE_LIMIT_ENABLED must be 'true' when NODE_ENV is 'production'",
+    path: ["RATE_LIMIT_ENABLED"],
   });
 
 const parsed = schema.safeParse(process.env);

@@ -53,6 +53,13 @@ export type OcrFunctionDefinition<TArgs, TResult> = {
   /** Static, or a function of args for dynamic-schema functions like FORM_DATA_EXTRACTION. */
   resultSchema: ZodType<TResult> | ((args: TArgs) => ZodType<TResult>);
   execute: (ctx: OcrContext, args: TArgs) => Promise<TResult>;
+  /**
+   * Optional: map a validated result to a 0–1 confidence, feeding the
+   * low-confidence quality SLI (`ocr_low_confidence_ratio`). Functions that carry
+   * no meaningful confidence signal omit it. The pipeline reads it — a function
+   * never touches metrics directly. Return `undefined` to record no observation.
+   */
+  confidenceOf?: (result: TResult) => number | undefined;
 };
 
 /**
