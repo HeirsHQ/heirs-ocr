@@ -15,6 +15,13 @@ const schema = z
     // Seeds the first owner account; brute-forceable online (see admin login), so
     // enforce a real minimum length rather than trusting the operator.
     ADMIN_BOOTSTRAP_PASSWORD: z.string().min(12, "ADMIN_BOOTSTRAP_PASSWORD must be at least 12 characters"),
+    // Tenant-portal session lifetime. Independent of the admin console; defaults to
+    // the same 8h interactive-login window.
+    TENANT_SESSION_TTL_SECONDS: z.coerce
+      .number()
+      .int()
+      .positive()
+      .default(8 * 60 * 60),
     API_KEY_CACHE_TTL_SECONDS: z.coerce.number().int().positive().default(30),
     ASYNC_PAGE_THRESHOLD: z.coerce.number().int().positive().default(5),
     ASYNC_SIZE_THRESHOLD_BYTES: z.coerce

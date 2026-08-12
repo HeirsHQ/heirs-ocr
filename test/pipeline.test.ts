@@ -186,6 +186,30 @@ describe("runPipeline — extraction + interpretation", () => {
     expect(await requestCount("error")).toBe(before + 1);
   });
 
+  it("enforces the per-subscription page cap (planMaxPages) below the function's own cap", async () => {
+    // TEXT_EXTRACTION.maxPages is 100, so a 3-page doc clears the function cap; only
+    // the plan cap of 1 should reject it. (tesseract is the image primary here.)
+    const providers = [fakeProvider("tesseract", async () => ({ ...doc("tesseract", "three pages"), pageCount: 3 }))];
+    const req: OcrRequest = { ...request(PNG_1x1, {}, "x.png"), planMaxPages: 1 };
+    await expect(runPipeline(textExtraction, req, deps({ providers }))).rejects.toMatchObject({
+      code: "PAGE_LIMIT_EXCEEDED",
+      message: expect.stringContaining("plan"),
+    });
+  });
+
+  it("allows a document within the per-subscription page cap", async () => {
+    const providers = [fakeProvider("tesseract", async () => ({ ...doc("tesseract", "two pages"), pageCount: 2 }))];
+    const req: OcrRequest = { ...request(PNG_1x1, {}, "x.png"), planMaxPages: 5 };
+    const outcome = await runPipeline(textExtraction, req, deps({ providers }));
+    expect(outcome.meta.pageCount).toBe(2);
+  });
+
+  it("ignores planMaxPages when absent (no subscription = no plan page cap)", async () => {
+    const providers = [fakeProvider("tesseract", async () => ({ ...doc("tesseract", "ten pages"), pageCount: 10 }))];
+    const outcome = await runPipeline(textExtraction, request(PNG_1x1, {}, "x.png"), deps({ providers }));
+    expect(outcome.meta.pageCount).toBe(10);
+  });
+
   it("collapses a low-confidence label to 'unknown' when the caller allows it", async () => {
     const llm = new MockLlmClient(
       new Map([

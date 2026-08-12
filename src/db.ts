@@ -38,8 +38,8 @@ export const query = <T extends QueryResultRow = QueryResultRow>(
 ): Promise<QueryResult<T>> => getPool().query<T>(text, params as never);
 
 /**
- * Idempotent schema bootstrap. Runs `CREATE TABLE IF NOT EXISTS` for the three
- * durable tables so a fresh deploy is usable without an out-of-band migration
+ * Idempotent schema bootstrap. Runs `CREATE TABLE IF NOT EXISTS` for the durable
+ * tables so a fresh deploy is usable without an out-of-band migration
  * step — the same "seed on boot" ethos as {@link ensureBootstrapAdmin}. Called
  * from both entrypoints (web + worker) and the provisioning CLIs. When the schema
  * outgrows this, swap it for a real migration runner; the call sites stay.
@@ -68,11 +68,68 @@ export const ensureSchema = async (): Promise<void> => {
       updated_at     timestamptz NOT NULL
     );
 
+    CREATE TABLE IF NOT EXISTS tenant_users (
+      id             uuid PRIMARY KEY,
+      tenant_id      text NOT NULL,
+      email          text NOT NULL UNIQUE,
+      name           text NOT NULL,
+      role           text NOT NULL,
+      password_hash  text NOT NULL,
+      disabled       boolean NOT NULL DEFAULT false,
+      created_at     timestamptz NOT NULL,
+      updated_at     timestamptz NOT NULL
+    );
+
+    CREATE INDEX IF NOT EXISTS tenant_users_tenant_id_idx ON tenant_users (tenant_id);
+
     CREATE TABLE IF NOT EXISTS tenant_usage (
       tenant_id  text PRIMARY KEY,
       requests   bigint NOT NULL DEFAULT 0,
       errors     bigint NOT NULL DEFAULT 0,
       tokens     bigint NOT NULL DEFAULT 0
+    );
+
+    CREATE TABLE IF NOT EXISTS subscriptions (
+      tenant_id   text PRIMARY KEY,
+      plan_id     text NOT NULL,
+      status      text NOT NULL,
+      data        jsonb NOT NULL,
+      updated_at  timestamptz NOT NULL DEFAULT now()
+    );
+
+    CREATE TABLE IF NOT EXISTS plans (
+      id          text PRIMARY KEY,
+      tier        text NOT NULL,
+      hidden      boolean NOT NULL DEFAULT false,
+      data        jsonb NOT NULL,
+      updated_at  timestamptz NOT NULL DEFAULT now()
+    );
+
+    CREATE TABLE IF NOT EXISTS platform_settings (
+      namespace   text PRIMARY KEY,
+      data        jsonb NOT NULL,
+      updated_at  timestamptz NOT NULL DEFAULT now()
+    );
+
+    CREATE TABLE IF NOT EXISTS audit_events (
+      id          uuid PRIMARY KEY,
+      action      text NOT NULL,
+      actor       text NOT NULL,
+      target      text,
+      metadata    jsonb NOT NULL DEFAULT '{}'::jsonb,
+      created_at  timestamptz NOT NULL DEFAULT now()
+    );
+
+    CREATE INDEX IF NOT EXISTS audit_events_created_at_idx ON audit_events (created_at DESC);
+
+    CREATE TABLE IF NOT EXISTS backups (
+      id          uuid PRIMARY KEY,
+      created_by  text NOT NULL,
+      note        text,
+      counts      jsonb NOT NULL DEFAULT '{}'::jsonb,
+      size_bytes  integer NOT NULL DEFAULT 0,
+      data        jsonb NOT NULL,
+      created_at  timestamptz NOT NULL DEFAULT now()
     );
   `);
 };

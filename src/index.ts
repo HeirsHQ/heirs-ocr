@@ -3,6 +3,7 @@ import http from "http";
 
 import { initTracing, shutdownTracing } from "./observability/otel";
 import { ensureBootstrapAdmin } from "./auth/admins";
+import { seedPlans } from "./billing/plan-store";
 import { closeDb, ensureSchema } from "./db";
 import { logger } from "./observability/logger";
 import { closeRedis } from "./redis";
@@ -20,13 +21,14 @@ if (env.NODE_ENV === "production" && !env.METRICS_AUTH_TOKEN) {
   logger.warn("/metrics is unauthenticated (METRICS_AUTH_TOKEN unset) — restrict this port to a private network");
 }
 
-// Create the durable schema (idempotent) then seed the first admin console owner
-// when the registry is empty. A failure here (e.g. Postgres briefly down) must not
-// stop the service from starting — it's retried on the next boot and the console is
-// simply unusable until it lands.
+// Create the durable schema (idempotent), then seed the first admin console owner
+// and the default plan catalog when each is empty. A failure here (e.g. Postgres
+// briefly down) must not stop the service from starting — it's retried on the next
+// boot and the console is simply unusable until it lands.
 ensureSchema()
   .then(ensureBootstrapAdmin)
-  .catch((err) => logger.error("admin bootstrap failed", { err: err instanceof Error ? err.message : String(err) }));
+  .then(seedPlans)
+  .catch((err) => logger.error("boot bootstrap failed", { err: err instanceof Error ? err.message : String(err) }));
 
 server.listen(Number(env.PORT), () => logger.info(`service listening on http://localhost:${env.PORT}`));
 

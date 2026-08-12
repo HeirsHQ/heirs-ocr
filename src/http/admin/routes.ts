@@ -31,6 +31,19 @@ import {
   updateTenantByHash,
   type Tenant,
 } from "../../auth/tenants";
+import { createTenantUser, listTenantUsers } from "../../auth/tenant-users";
+import { parsePlanInput } from "../../billing/plan-schema";
+import { deletePlan, getStoredPlan, listPlans, putPlan } from "../../billing/plan-store";
+import {
+  assignablePlan,
+  createSubscriptionFromPlan,
+  putSubscription,
+  resolveSubscription,
+} from "../../billing/subscriptions";
+import { listAuditEvents, recordAuditEvent } from "../../observability/audit";
+import { recentLogs, type LogLevel } from "../../observability/log-buffer";
+import { getSettings, putSettings, type SettingsNamespace } from "../../config/settings-store";
+import { createBackup, getBackup, listBackups, restoreBackup } from "../../ops/backups";
 
 /**
  * Admin console JSON API, mounted under `/admin` (paths here start with `/api`).
@@ -115,7 +128,7 @@ adminApiRouter.post(
 
     // Brute-force throttle: refuse once too many recent failures accrue against
     // this IP or email. Argon2 slows each guess; this bounds how many can be made.
-    if (!(await loginAllowed(ip, email))) {
+    if (!(await loginAllowed("admin", ip, email))) {
       logger.warn("admin.login.throttled", { email, ip });
       sendError(res, 429, "RATE_LIMITED", "Too many failed attempts. Try again later.");
       return;
@@ -130,7 +143,7 @@ adminApiRouter.post(
       admin = await getAdminByEmail(email);
       // Same response whether the email is unknown or the password is wrong.
       if (!admin || !(await verifyPassword(admin, parsed.data.password))) {
-        await recordLoginFailure(ip, email);
+        await recordLoginFailure("admin", ip, email);
         // Log every failure so a brute-force attempt is visible to alerting.
         logger.warn("admin.login.failed", { email, ip });
         sendError(res, 401, "UNAUTHORIZED", "Invalid email or password");
@@ -143,7 +156,7 @@ adminApiRouter.post(
       return;
     }
 
-    await clearLoginFailures(ip, email);
+    await clearLoginFailures("admin", ip, email);
     setSessionCookie(req, res, session.token, session.ttl);
     logger.info("admin.login", { adminId: admin.id, email: admin.email, ip });
     res.json({ user: publicUser(admin), role: admin.role });
@@ -211,6 +224,12 @@ adminApiRouter.post(
     }
     try {
       const admin = await createAdmin(parsed.data, req.admin!.userId);
+      await recordAuditEvent({
+        action: "admin.created",
+        actor: req.admin!.userId,
+        target: admin.id,
+        metadata: { email: admin.email, role: admin.role },
+      });
       res.status(201).json({ admin });
     } catch (err) {
       sendError(res, 409, "CONFLICT", err instanceof Error ? err.message : "Could not create admin");
@@ -244,6 +263,12 @@ adminApiRouter.patch(
     }
 
     const admin = await updateAdmin(id, parsed.data, req.admin!.userId);
+    await recordAuditEvent({
+      action: "admin.updated",
+      actor: req.admin!.userId,
+      target: id,
+      metadata: { role: parsed.data.role, disabled: parsed.data.disabled },
+    });
     res.json({ admin });
   }),
 );
@@ -264,6 +289,7 @@ adminApiRouter.delete(
       return;
     }
     await deleteAdmin(id, req.admin!.userId);
+    await recordAuditEvent({ action: "admin.deleted", actor: req.admin!.userId, target: id });
     res.json({ ok: true });
   }),
 );
@@ -308,6 +334,7 @@ adminApiRouter.post(
     const tenant: Tenant = { ...parsed.data, createdAt: new Date().toISOString() };
     const apiKey = generateApiKey();
     await putTenant(apiKey, tenant, { actor: req.admin!.userId });
+    await recordAuditEvent({ action: "tenant.created", actor: req.admin!.userId, target: tenant.tenantId });
     // The raw key is shown exactly once — it is never stored, only its hash.
     res.status(201).json({ tenant, apiKey });
   }),
@@ -328,6 +355,12 @@ adminApiRouter.patch(
       sendError(res, 404, "NOT_FOUND", "No such tenant");
       return;
     }
+    await recordAuditEvent({
+      action: "tenant.updated",
+      actor: req.admin!.userId,
+      target: updated.tenantId,
+      metadata: parsed.data,
+    });
     res.json({ tenant: updated });
   }),
 );
@@ -337,12 +370,161 @@ adminApiRouter.delete(
   adminAuth,
   requireMinRole("manager"),
   handler(async (req, res) => {
-    const removed = await revokeByHash(String(req.params.keyHash), { actor: req.admin!.userId });
+    const keyHash = String(req.params.keyHash);
+    const removed = await revokeByHash(keyHash, { actor: req.admin!.userId });
     if (removed === 0) {
       sendError(res, 404, "NOT_FOUND", "No such tenant");
       return;
     }
+    await recordAuditEvent({ action: "tenant.revoked", actor: req.admin!.userId, target: keyHash });
     res.json({ ok: true });
+  }),
+);
+
+// ── Tenant users (bootstrap the tenant portal) ────────────────────────────────
+// Admins seed a tenant's first login so the org can reach the portal; thereafter a
+// tenant owner manages their own team at /tenant/api/users.
+
+const createTenantUserSchema = z.object({
+  email: z.string().email(),
+  name: z.string().min(1),
+  role: z.enum(["owner", "member"]).default("owner"),
+  password: z.string().min(8),
+});
+
+adminApiRouter.get(
+  "/api/tenants/:tenantId/users",
+  adminAuth,
+  requireMinRole("viewer"),
+  handler(async (req, res) => {
+    res.json({ users: await listTenantUsers(String(req.params.tenantId)) });
+  }),
+);
+
+adminApiRouter.post(
+  "/api/tenants/:tenantId/users",
+  adminAuth,
+  requireMinRole("manager"),
+  handler(async (req, res) => {
+    const parsed = createTenantUserSchema.safeParse(req.body);
+    if (!parsed.success) {
+      sendError(res, 400, "INVALID_ARGS", parsed.error.issues[0]?.message ?? "Invalid user");
+      return;
+    }
+    try {
+      const user = await createTenantUser({ tenantId: String(req.params.tenantId), ...parsed.data }, req.admin!.userId);
+      res.status(201).json({ user });
+    } catch (err) {
+      sendError(res, 409, "CONFLICT", err instanceof Error ? err.message : "Could not create user");
+    }
+  }),
+);
+
+// ── Plans & subscriptions ─────────────────────────────────────────────────────
+
+const assignSubscriptionSchema = z.object({ planId: z.string().min(1) });
+
+/** Flatten a Zod failure into a one-line `path: message; …` string for the 400 body. */
+const formatIssues = (error: z.ZodError): string =>
+  error.issues.map((i) => `${i.path.join(".") || "(root)"}: ${i.message}`).join("; ");
+
+adminApiRouter.get(
+  "/api/plans",
+  adminAuth,
+  requireMinRole("viewer"),
+  handler(async (_req, res) => {
+    res.json({ plans: await listPlans() });
+  }),
+);
+
+adminApiRouter.post(
+  "/api/plans",
+  adminAuth,
+  requireMinRole("manager"),
+  handler(async (req, res) => {
+    const parsed = parsePlanInput(req.body);
+    if (!parsed.success) {
+      sendError(res, 400, "INVALID_ARGS", formatIssues(parsed.error));
+      return;
+    }
+    if (await getStoredPlan(parsed.data.id)) {
+      sendError(res, 409, "CONFLICT", `A plan with id '${parsed.data.id}' already exists`);
+      return;
+    }
+    await putPlan(parsed.data);
+    res.status(201).json({ plan: parsed.data });
+  }),
+);
+
+adminApiRouter.put(
+  "/api/plans/:id",
+  adminAuth,
+  requireMinRole("manager"),
+  handler(async (req, res) => {
+    const parsed = parsePlanInput(req.body);
+    if (!parsed.success) {
+      sendError(res, 400, "INVALID_ARGS", formatIssues(parsed.error));
+      return;
+    }
+    if (parsed.data.id !== String(req.params.id)) {
+      sendError(res, 400, "INVALID_ARGS", "Plan id in the body must match the URL");
+      return;
+    }
+    await putPlan(parsed.data);
+    res.json({ plan: parsed.data });
+  }),
+);
+
+adminApiRouter.delete(
+  "/api/plans/:id",
+  adminAuth,
+  requireMinRole("manager"),
+  handler(async (req, res) => {
+    const removed = await deletePlan(String(req.params.id));
+    if (removed === 0) {
+      sendError(res, 404, "NOT_FOUND", `No such plan '${String(req.params.id)}'`);
+      return;
+    }
+    res.json({ ok: true });
+  }),
+);
+
+adminApiRouter.get(
+  "/api/tenants/:tenantId/subscription",
+  adminAuth,
+  requireMinRole("viewer"),
+  handler(async (req, res) => {
+    const subscription = await resolveSubscription(String(req.params.tenantId));
+    res.json({ subscription: subscription ?? null });
+  }),
+);
+
+adminApiRouter.put(
+  "/api/tenants/:tenantId/subscription",
+  adminAuth,
+  requireMinRole("manager"),
+  handler(async (req, res) => {
+    const parsed = assignSubscriptionSchema.safeParse(req.body);
+    if (!parsed.success) {
+      sendError(res, 400, "INVALID_ARGS", "planId is required");
+      return;
+    }
+    // A subscription may only be set from a plan that exists in the catalog.
+    const decision = assignablePlan(parsed.data.planId, await getStoredPlan(parsed.data.planId));
+    if (!decision.ok) {
+      sendError(res, 404, "NOT_FOUND", decision.reason);
+      return;
+    }
+    const tenantId = String(req.params.tenantId);
+    const subscription = createSubscriptionFromPlan(tenantId, decision.plan);
+    await putSubscription(subscription);
+    await recordAuditEvent({
+      action: "subscription.assigned",
+      actor: req.admin!.userId,
+      target: tenantId,
+      metadata: { planId: decision.plan.id },
+    });
+    res.json({ subscription });
   }),
 );
 
@@ -413,5 +595,173 @@ adminApiRouter.get(
       },
       version: env.VERSION,
     });
+  }),
+);
+
+// ── Audit trail (viewer+) ─────────────────────────────────────────────────────
+
+adminApiRouter.get(
+  "/api/audit",
+  adminAuth,
+  requireMinRole("viewer"),
+  handler(async (req, res) => {
+    const limit = Number(req.query.limit);
+    const events = await listAuditEvents({
+      action: typeof req.query.action === "string" ? req.query.action : undefined,
+      actor: typeof req.query.actor === "string" ? req.query.actor : undefined,
+      limit: Number.isFinite(limit) ? limit : undefined,
+    });
+    res.json({ events });
+  }),
+);
+
+// ── Logs (viewer+) — bounded Redis tail of recent structured log entries ───────
+
+const LOG_LEVELS = new Set<LogLevel>(["debug", "info", "warn", "error"]);
+
+adminApiRouter.get(
+  "/api/logs",
+  adminAuth,
+  requireMinRole("viewer"),
+  handler(async (req, res) => {
+    const level =
+      typeof req.query.level === "string" && LOG_LEVELS.has(req.query.level as LogLevel)
+        ? (req.query.level as LogLevel)
+        : undefined;
+    const limit = Number(req.query.limit);
+    const entries = await recentLogs({ level, limit: Number.isFinite(limit) ? limit : undefined });
+    res.json({ entries });
+  }),
+);
+
+// ── Platform settings (viewer read, manager write) ────────────────────────────
+// notifications, API integrations, and general platform configuration all share
+// the namespaced settings store; `security` is handled separately below so its GET
+// can also surface live (env-derived) posture.
+
+const settingsRoute = (path: string, namespace: Exclude<SettingsNamespace, "security">): void => {
+  adminApiRouter.get(
+    path,
+    adminAuth,
+    requireMinRole("viewer"),
+    handler(async (_req, res) => {
+      res.json({ settings: await getSettings(namespace) });
+    }),
+  );
+  adminApiRouter.put(
+    path,
+    adminAuth,
+    requireMinRole("manager"),
+    handler(async (req, res) => {
+      try {
+        const settings = await putSettings(namespace, req.body);
+        await recordAuditEvent({ action: `settings.${namespace}.updated`, actor: req.admin!.userId });
+        res.json({ settings });
+      } catch (err) {
+        sendError(res, 400, "INVALID_ARGS", err instanceof Error ? err.message : "Invalid settings");
+      }
+    }),
+  );
+};
+
+settingsRoute("/api/settings/notifications", "notifications");
+settingsRoute("/api/settings/api-integrations", "api_integrations");
+settingsRoute("/api/settings/platform", "platform");
+
+// ── Security (viewer read, manager write) ─────────────────────────────────────
+// GET returns editable settings plus a read-only posture snapshot derived from the
+// running configuration, so the console can show the effective security stance.
+
+adminApiRouter.get(
+  "/api/security",
+  adminAuth,
+  requireMinRole("viewer"),
+  handler(async (_req, res) => {
+    res.json({
+      settings: await getSettings("security"),
+      posture: {
+        authEnabled: env.AUTH_ENABLED === "true",
+        rateLimitEnabled: env.RATE_LIMIT_ENABLED === "true",
+        rateLimitMax: env.RATE_LIMIT_MAX,
+        rateLimitWindowSeconds: env.RATE_LIMIT_WINDOW_SECONDS,
+        adminSessionTtlSeconds: env.ADMIN_SESSION_TTL_SECONDS,
+        tenantSessionTtlSeconds: env.TENANT_SESSION_TTL_SECONDS,
+        corsClosed: env.CORS_ALLOWED_ORIGINS.trim() === "",
+      },
+    });
+  }),
+);
+
+adminApiRouter.put(
+  "/api/security",
+  adminAuth,
+  requireMinRole("manager"),
+  handler(async (req, res) => {
+    try {
+      const settings = await putSettings("security", req.body);
+      await recordAuditEvent({ action: "settings.security.updated", actor: req.admin!.userId });
+      res.json({ settings });
+    } catch (err) {
+      sendError(res, 400, "INVALID_ARGS", err instanceof Error ? err.message : "Invalid settings");
+    }
+  }),
+);
+
+// ── Configuration backup & restore (viewer read, manager write) ───────────────
+
+const backupNoteSchema = z.object({ note: z.string().max(500).optional() });
+
+adminApiRouter.get(
+  "/api/backups",
+  adminAuth,
+  requireMinRole("viewer"),
+  handler(async (_req, res) => {
+    res.json({ backups: await listBackups() });
+  }),
+);
+
+adminApiRouter.post(
+  "/api/backups",
+  adminAuth,
+  requireMinRole("manager"),
+  handler(async (req, res) => {
+    const parsed = backupNoteSchema.safeParse(req.body ?? {});
+    if (!parsed.success) {
+      sendError(res, 400, "INVALID_ARGS", "Invalid note");
+      return;
+    }
+    const manifest = await createBackup({ actor: req.admin!.userId, note: parsed.data.note });
+    await recordAuditEvent({ action: "backup.created", actor: req.admin!.userId, target: manifest.id });
+    res.status(201).json({ backup: manifest });
+  }),
+);
+
+adminApiRouter.get(
+  "/api/backups/:id",
+  adminAuth,
+  requireMinRole("viewer"),
+  handler(async (req, res) => {
+    const backup = await getBackup(String(req.params.id));
+    if (!backup) {
+      sendError(res, 404, "NOT_FOUND", "No such backup");
+      return;
+    }
+    res.json(backup);
+  }),
+);
+
+adminApiRouter.post(
+  "/api/backups/:id/restore",
+  adminAuth,
+  requireMinRole("manager"),
+  handler(async (req, res) => {
+    const id = String(req.params.id);
+    const applied = await restoreBackup(id);
+    if (!applied) {
+      sendError(res, 404, "NOT_FOUND", "No such backup");
+      return;
+    }
+    await recordAuditEvent({ action: "backup.restored", actor: req.admin!.userId, target: id });
+    res.json({ applied });
   }),
 );

@@ -232,9 +232,7 @@ function renderTenants(rows) {
     rows
       .map(({ keyHash, tenant: t }) => {
         const fns = t.allowedFunctions && t.allowedFunctions.length ? t.allowedFunctions.join(", ") : "ALL";
-        const status = t.disabled
-          ? `<span class="badge off">disabled</span>`
-          : `<span class="badge ok">active</span>`;
+        const status = t.disabled ? `<span class="badge off">disabled</span>` : `<span class="badge ok">active</span>`;
         const created = t.createdAt ? new Date(t.createdAt).toLocaleDateString() : "—";
         const actions = editable
           ? `<td class="actions">

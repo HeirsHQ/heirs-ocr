@@ -13,6 +13,9 @@ export const OcrErrorCode = {
   INTERPRETATION_FAILED: "INTERPRETATION_FAILED",
   SCHEMA_VALIDATION_FAILED: "SCHEMA_VALIDATION_FAILED",
   RATE_LIMITED: "RATE_LIMITED",
+  // Billing: no active/paid subscription, or the plan's document allowance is spent.
+  PAYMENT_REQUIRED: "PAYMENT_REQUIRED",
+  QUOTA_EXCEEDED: "QUOTA_EXCEEDED",
   INTERNAL: "INTERNAL",
 } as const;
 
@@ -33,6 +36,10 @@ const STATUS_BY_CODE: Record<OcrErrorCode, number> = {
   INTERPRETATION_FAILED: 502,
   SCHEMA_VALIDATION_FAILED: 422,
   RATE_LIMITED: 429,
+  // No active subscription / payment required to proceed.
+  PAYMENT_REQUIRED: 402,
+  // Plan document allowance exhausted — retryable next period (or after upgrade).
+  QUOTA_EXCEEDED: 429,
   // An unexpected server-side fault (a bug, not a provider/input problem). 500,
   // and never retryable — retrying a deterministic fault just replays the failure.
   INTERNAL: 500,

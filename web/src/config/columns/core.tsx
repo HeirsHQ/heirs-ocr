@@ -1,0 +1,314 @@
+import { MoreVertical, type LucideIcon } from "lucide-react";
+import type { ColumnDef, Row, RowData } from "@tanstack/react-table";
+import { format, formatDistanceToNow } from "date-fns";
+import { Fragment } from "react";
+import Link from "next/link";
+
+import type { DataTableFeatures } from "@/components/shared/data-table";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import { Checkbox } from "@/components/ui/checkbox";
+import { cn, formatCurrency } from "@/lib/utils";
+import { Button } from "@/components/ui/button";
+
+/** Column type accepted by {@link DataTable}: bound to its registered v9 feature set. */
+export type Column<T extends RowData> = ColumnDef<DataTableFeatures, T, unknown>;
+
+type TabelActionVariant = "amber" | "default" | "destructive" | "info" | "success" | "warning";
+
+const variants: Record<TabelActionVariant, string> = {
+  amber: "text-orange-700 hover:bg-orange-50",
+  default: "text-gray-600 hover:bg-gray-200",
+  destructive: "text-red-600 hover:bg-red-50",
+  info: "text-blue-600 hover:bg-blue-50",
+  success: "text-success-600 hover:bg-success-50",
+  warning: "text-yellow-600 hover:bg-yellow-50",
+};
+
+interface TableActionItem<T> {
+  label: string;
+  icon?: LucideIcon;
+  hidden?: boolean | ((args: T) => boolean);
+  href?: string | ((args: T) => string);
+  onClick?: (args: T) => void;
+  variant?: TabelActionVariant | (string & {});
+}
+
+interface CreateColumnsProps<T extends object> {
+  columns: Column<T>[];
+  /** Per-row action menu rendered in a trailing column. */
+  actions?: (rowItem: T) => TableActionItem<T>[];
+  actionColumnId?: string;
+  actionColumnHeader?: string;
+  /** Prefixed to relative `href`s returned by actions. */
+  baseHref?: string;
+  /** Prepends a checkbox column for row selection. */
+  selectable?: boolean;
+}
+
+/** Resolves a value that may be given directly or as a function of the row. */
+const resolve = <T, V>(value: V | ((args: T) => V) | undefined, args: T): V | undefined =>
+  typeof value === "function" ? (value as (args: T) => V)(args) : value;
+
+const RowActions = <T extends object>({
+  row,
+  items,
+  baseHref,
+}: {
+  row: T;
+  items: TableActionItem<T>[];
+  baseHref?: string;
+}) => {
+  const visible = items.filter((item) => !resolve(item.hidden, row));
+  if (visible.length === 0) return null;
+
+  return (
+    <div className="flex justify-end">
+      <Popover>
+        <PopoverTrigger render={<Button variant="ghost" size="icon-sm" aria-label="Row actions" />}>
+          <MoreVertical className="size-4" />
+        </PopoverTrigger>
+        <PopoverContent align="end" className="w-44 gap-0.5 p-1">
+          {visible.map((item, index) => {
+            const Icon = item.icon;
+            const href = resolve(item.href, row);
+            const className = cn(
+              "flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left text-sm transition-colors",
+              variants[item.variant as TabelActionVariant] ?? variants.default,
+            );
+            const content = (
+              <Fragment>
+                {Icon && <Icon className="size-4" />}
+                {item.label}
+              </Fragment>
+            );
+
+            return href ? (
+              <Link key={index} href={baseHref ? `${baseHref}${href}` : href} className={className}>
+                {content}
+              </Link>
+            ) : (
+              <button key={index} type="button" className={className} onClick={() => item.onClick?.(row)}>
+                {content}
+              </button>
+            );
+          })}
+        </PopoverContent>
+      </Popover>
+    </div>
+  );
+};
+
+/**
+ * Assembles a {@link DataTable}-ready column set: an optional leading selection
+ * checkbox, the provided data columns, then an optional trailing action menu.
+ */
+export function createColumns<T extends object>({
+  columns,
+  actions,
+  actionColumnId = "actions",
+  actionColumnHeader = "",
+  baseHref,
+  selectable,
+}: CreateColumnsProps<T>): Column<T>[] {
+  const result: Column<T>[] = [];
+
+  if (selectable) {
+    result.push({
+      id: "select",
+      enableSorting: false,
+      header: ({ table }) => (
+        <Checkbox
+          checked={table.getIsAllPageRowsSelected()}
+          indeterminate={table.getIsSomePageRowsSelected()}
+          onCheckedChange={(checked) => table.toggleAllPageRowsSelected(checked)}
+          aria-label="Select all rows"
+        />
+      ),
+      cell: ({ row }) => (
+        <Checkbox
+          checked={row.getIsSelected()}
+          onCheckedChange={(checked) => row.toggleSelected(checked)}
+          aria-label="Select row"
+        />
+      ),
+    });
+  }
+
+  result.push(...columns);
+
+  if (actions) {
+    result.push({
+      id: actionColumnId,
+      header: actionColumnHeader,
+      enableSorting: false,
+      cell: ({ row }) => <RowActions row={row.original} items={actions(row.original)} baseHref={baseHref} />,
+    });
+  }
+
+  return result;
+}
+
+export const TextCell = ({ value, className }: { value?: string | null; className?: string }) =>
+  value?.trim() ? (
+    <div className={className}>{value}</div>
+  ) : (
+    <div className={cn("text-muted-foreground", className)}>—</div>
+  );
+
+export const DateCell = ({ date, className }: { date: Date | string | null; className?: string }) => {
+  if (!date) return <div className={cn("text-muted-foreground", className)}>—</div>;
+  return <div className={className}>{format(new Date(date), "dd/MM/yyyy")}</div>;
+};
+
+export const TimeCell = ({ date, className }: { date: Date | string | null; className?: string }) => {
+  if (!date) return <div className={cn("text-muted-foreground", className)}>—</div>;
+  return <div className={className}>{format(new Date(date), "HH:mm")}</div>;
+};
+
+export const DateTimeCell = ({ date, className }: { date: Date | string | null; className?: string }) => {
+  if (!date) return <div className={cn("text-muted-foreground", className)}>—</div>;
+  return <div className={className}>{format(new Date(date), "dd/MM/yyyy, HH:mm")}</div>;
+};
+
+export const RelativeTimeCell = ({ date, className }: { date: Date | string | null; className?: string }) => {
+  if (!date) return <div className={cn("text-muted-foreground", className)}>—</div>;
+  return (
+    <div title={format(new Date(date), "dd/MM/yyyy HH:mm")} className={className}>
+      {formatDistanceToNow(new Date(date), { addSuffix: true })}
+    </div>
+  );
+};
+
+export const CurrencyCell = ({
+  amount,
+  currency = "USD",
+  display = "compact",
+}: {
+  amount: number;
+  currency?: string;
+  display?: "compact" | "full";
+}) => {
+  return <span>{formatCurrency(amount, currency, display)}</span>;
+};
+
+export const NumberCell = ({ value }: { value: number }) => {
+  return <span>{new Intl.NumberFormat().format(value)}</span>;
+};
+
+export const PercentageCell = ({ value, decimals = 1 }: { value: number; decimals?: number }) => {
+  return <span>{value.toFixed(decimals)}%</span>;
+};
+
+export const BooleanCell = ({ value, labels = ["Yes", "No"] }: { value: boolean; labels?: [string, string] }) => {
+  return (
+    <span className={cn("text-xs font-medium", value ? "text-green-600" : "text-red-500")}>
+      {value ? labels[0] : labels[1]}
+    </span>
+  );
+};
+
+// ── Status cell ──────────────────────────────────────────────────────────────
+
+export type StatusVariant = "amber" | "danger" | "draft" | "info" | "neutral" | "outline" | "success" | "warning";
+
+const STATUS_DEFAULTS: Record<string, StatusVariant> = {
+  active: "success",
+  approved: "success",
+  completed: "success",
+  paid: "success",
+  published: "success",
+  cancelled: "danger",
+  failed: "danger",
+  rejected: "danger",
+  terminated: "danger",
+  draft: "draft",
+  "in-progress": "warning",
+  inactive: "neutral",
+  pending: "warning",
+  review: "info",
+  suspended: "neutral",
+};
+
+export const STATUS_STYLES: Record<StatusVariant, string> = {
+  amber: "bg-orange-100 text-orange-700 border-orange-200",
+  danger: "bg-red-100 text-red-700 border-red-200",
+  draft: "bg-gray-100 text-gray-700 border-gray-200",
+  info: "bg-blue-100 text-blue-700 border-blue-200",
+  neutral: "bg-gray-100 text-gray-500 border-gray-200",
+  outline: "bg-transparent text-black border-black",
+  success: "bg-green-100 text-green-700 border-green-200",
+  warning: "bg-yellow-100 text-yellow-700 border-yellow-200",
+};
+
+interface StatusCellProps<TStatus extends string> {
+  status: TStatus;
+  /** Override or extend the default variant mapping. Keys autocomplete to the TStatus union. */
+  className?: string;
+  config?: Partial<Record<TStatus, StatusVariant>>;
+  /** Variant used when the status matches no entry in the mapping. */
+  default?: StatusVariant;
+}
+
+/** Splits kebab-case ("in-progress") and PascalCase ("PendingFinalApproval") status strings into readable words. */
+const toReadableStatus = (status: string): string =>
+  status
+    .replace(/-/g, " ")
+    .replace(/([a-z0-9])([A-Z])/g, "$1 $2")
+    .trim();
+
+export const StatusCell = <TStatus extends string>({
+  status,
+  className,
+  config,
+  default: fallback = "neutral",
+}: StatusCellProps<TStatus>) => {
+  const map: Record<string, StatusVariant> = config ? { ...STATUS_DEFAULTS, ...config } : STATUS_DEFAULTS;
+  const variant = map[status?.toLowerCase()] ?? fallback;
+  return (
+    <span
+      className={cn(
+        "inline-flex items-center rounded-full border px-2.5 py-0.5 text-xs font-medium capitalize",
+        STATUS_STYLES[variant],
+        className,
+      )}
+    >
+      {status ? toReadableStatus(status) : status}
+    </span>
+  );
+};
+
+export const SerialNumberCell = <T extends RowData>({ row }: { row: Row<DataTableFeatures, T> }) => (
+  <span>{row.index + 1}</span>
+);
+
+/** Inline `<select>` cell for editing an enum-valued field (e.g. a role) directly in the row. */
+export const SelectCell = <V extends string>({
+  value,
+  options,
+  onChange,
+  disabled,
+  ariaLabel,
+}: {
+  value: V;
+  options: readonly V[];
+  onChange: (value: V) => void;
+  disabled?: boolean;
+  ariaLabel?: string;
+}) => (
+  <select
+    aria-label={ariaLabel}
+    value={value}
+    disabled={disabled}
+    onChange={(event) => onChange(event.target.value as V)}
+    className={cn(
+      "h-8 rounded-md border border-input bg-transparent px-2.5 text-sm capitalize outline-none",
+      "focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50 disabled:opacity-50",
+    )}
+  >
+    {options.map((option) => (
+      <option key={option} value={option} className="capitalize">
+        {option}
+      </option>
+    ))}
+  </select>
+);

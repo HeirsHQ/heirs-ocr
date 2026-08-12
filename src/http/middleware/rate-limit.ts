@@ -23,7 +23,8 @@ export const rateLimit = async (req: Request, _res: Response, next: NextFunction
   }
 
   const id = req.tenantId || req.ip || "anon";
-  const max = req.tenant?.rateLimit ?? env.RATE_LIMIT_MAX;
+  // Precedence: plan-derived ceiling (requireSubscription) → per-tenant override → env default.
+  const max = req.rateLimitMax ?? req.tenant?.rateLimit ?? env.RATE_LIMIT_MAX;
   let allowed: boolean;
   try {
     allowed = await underLimit(id, max);

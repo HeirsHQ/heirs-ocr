@@ -1,0 +1,64 @@
+import { KeyRound, Settings2, Trash2, UsersRound } from "lucide-react";
+
+import type { AdminTenant } from "@/types/tenant";
+import { createColumns, DateCell, TextCell } from "./core";
+
+interface TenantColumnHandlers {
+  onEdit: (row: AdminTenant) => void;
+  onOwners: (row: AdminTenant) => void;
+  onPlan: (row: AdminTenant) => void;
+  onDelete: (row: AdminTenant) => void;
+}
+
+export function createTenantColumns({ onEdit, onOwners, onPlan, onDelete }: TenantColumnHandlers) {
+  return createColumns<AdminTenant>({
+    columns: [
+      {
+        id: "name",
+        header: "Name",
+        cell: ({ row }) => {
+          const { tenant } = row.original;
+          return (
+            <div className="flex items-center gap-2">
+              <span className="font-medium">{tenant.name || tenant.tenantId}</span>
+              {tenant.disabled && <span className="text-xs text-muted-foreground">· disabled</span>}
+            </div>
+          );
+        },
+      },
+      {
+        id: "tenantId",
+        header: "Tenant ID",
+        cell: ({ row }) => (
+          <span className="font-mono text-xs text-muted-foreground">{row.original.tenant.tenantId}</span>
+        ),
+      },
+      {
+        id: "rateLimit",
+        header: "Rate limit",
+        cell: ({ row }) => (
+          <TextCell value={row.original.tenant.rateLimit ? `${row.original.tenant.rateLimit}/min` : null} />
+        ),
+      },
+      {
+        id: "functions",
+        header: "Functions",
+        cell: ({ row }) => {
+          const count = row.original.tenant.allowedFunctions?.length ?? 0;
+          return <span className="text-sm">{count === 0 ? "All" : `${count}`}</span>;
+        },
+      },
+      {
+        id: "createdAt",
+        header: "Created",
+        cell: ({ row }) => <DateCell date={row.original.tenant.createdAt ?? null} />,
+      },
+    ],
+    actions: (row) => [
+      { label: "Edit", icon: Settings2, variant: "info", onClick: () => onEdit(row) },
+      { label: "Owners", icon: UsersRound, onClick: () => onOwners(row) },
+      { label: "Plan", icon: KeyRound, onClick: () => onPlan(row) },
+      { label: "Revoke", icon: Trash2, variant: "destructive", onClick: () => onDelete(row) },
+    ],
+  });
+}

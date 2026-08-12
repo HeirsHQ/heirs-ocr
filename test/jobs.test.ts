@@ -78,6 +78,11 @@ const testDeps: PipelineDeps = {
 
 vi.mock("../src/http/deps", () => ({ getPipelineDeps: () => testDeps }));
 
+// The worker meters processed documents against the subscription. Stub the store so
+// the assertion is on the call the worker makes, not on Postgres.
+const { recordDocumentUsage } = vi.hoisted(() => ({ recordDocumentUsage: vi.fn() }));
+vi.mock("../src/billing/subscriptions", () => ({ recordDocumentUsage }));
+
 import { ocrQueue, encodeJobError, type OcrJobData } from "../src/jobs/queue";
 import { processJob } from "../src/jobs/worker";
 import type { OcrRequest } from "../src/pipeline";
@@ -95,6 +100,7 @@ const jobData = (over: Partial<OcrRequest> = {}, fn = "TEXT_EXTRACTION"): OcrJob
 
 beforeEach(() => {
   jobs.clear();
+  recordDocumentUsage.mockClear();
 });
 
 describe("ocrQueue — enqueue + status", () => {
@@ -170,5 +176,19 @@ describe("worker.processJob — runs the same pipeline off-request", () => {
 
   it("throws a typed INVALID_ARGS for an unknown function", async () => {
     await expect(processJob(jobData({}, "NOPE_FUNCTION"))).rejects.toMatchObject({ code: "INVALID_ARGS" });
+  });
+
+  it("meters the processed document against the subscription (async path bills too)", async () => {
+    const outcome = (await processJob(jobData())) as { meta: { pageCount: number; tokensUsed?: number } };
+    expect(recordDocumentUsage).toHaveBeenCalledTimes(1);
+    expect(recordDocumentUsage).toHaveBeenCalledWith("tenant_a", {
+      pages: outcome.meta.pageCount,
+      tokensUsed: outcome.meta.tokensUsed,
+    });
+  });
+
+  it("does not meter when the job fails before the pipeline runs", async () => {
+    await expect(processJob(jobData({}, "NOPE_FUNCTION"))).rejects.toBeTruthy();
+    expect(recordDocumentUsage).not.toHaveBeenCalled();
   });
 });

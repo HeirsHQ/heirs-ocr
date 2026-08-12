@@ -59,6 +59,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 All previously staged integration seams — the GLM-OCR provider, the Redis extraction
 cache, and the async BullMQ queue/worker — are now wired and test-covered. See
-[docs/architecture.md § Wiring status](./docs/architecture.md#wiring-status).
+[TECHNICAL.md § Wiring status](./TECHNICAL.md#wiring-status).
 
 [Unreleased]: https://github.com/

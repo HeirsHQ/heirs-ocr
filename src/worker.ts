@@ -1,6 +1,7 @@
 import "dotenv/config";
 
 import { initTracing, shutdownTracing } from "./observability/otel";
+import { seedPlans } from "./billing/plan-store";
 import { closeDb, ensureSchema } from "./db";
 import { logger } from "./observability/logger";
 import { startWorker } from "./jobs/worker";
@@ -13,10 +14,11 @@ import { startWorker } from "./jobs/worker";
 initTracing();
 
 // Idempotent — either process may win the race to create the schema on a fresh
-// deploy. Processed jobs record usage and resolve tenants, both of which hit Postgres.
-ensureSchema().catch((err) =>
-  logger.error("worker schema init failed", { err: err instanceof Error ? err.message : String(err) }),
-);
+// deploy. Processed jobs record usage and resolve tenants, both of which hit Postgres;
+// seeding the plan catalog here too keeps the worker self-sufficient on a cold DB.
+ensureSchema()
+  .then(seedPlans)
+  .catch((err) => logger.error("worker schema init failed", { err: err instanceof Error ? err.message : String(err) }));
 
 const worker = startWorker();
 logger.info("ocr worker started");

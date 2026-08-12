@@ -6,6 +6,7 @@ import { errorHandler, notFound } from "./http/middleware/error";
 import { metricsAuth, securityHeaders } from "./http/middleware/security-headers";
 import { metricsContentType, renderMetrics } from "./observability/metrics";
 import { adminApiRouter } from "./http/admin/routes";
+import { tenantApiRouter } from "./http/tenant/routes";
 import { corsMiddleware } from "./config/cors";
 import { ocrRouter } from "./http/routes";
 import { env } from "./config/env";
@@ -45,6 +46,11 @@ export function main() {
   // console is inert until an admin exists in Postgres (`pnpm provision:admin`).
   app.use("/admin", express.static(path.join(__dirname, "..", "public", "admin")));
   app.use("/admin", adminApiRouter);
+
+  // Tenant portal JSON API under /tenant. Same-origin (no CORS); login is open, the
+  // rest gate on a tenant session. The tenant UI is served by the separate Next app,
+  // which proxies here — so no static assets are mounted for it.
+  app.use("/tenant", tenantApiRouter);
 
   app.use(notFound);
   app.use(errorHandler);
