@@ -1,20 +1,20 @@
 "use client";
 
-import { useMemo, useState } from "react";
 import { zodResolver } from "@hookform/resolvers/zod";
-import { useForm } from "react-hook-form";
 import { KeyRound, Loader, Plus } from "lucide-react";
+import { useMemo, useState } from "react";
+import { useForm } from "react-hook-form";
 import { toast } from "sonner";
 import { z } from "zod";
 
 import { ConfirmDialog, DataTable, EmptyState, PageLayout, SecretCallout, Skeleton } from "@/components/shared";
-import { Button } from "@heirs/ui";
-import { Dialog, DialogContent } from "@heirs/ui";
-import { Input } from "@heirs/ui";
 import { useCreateTenantKey, useRevokeTenantKey, useTenantKeys } from "@/hooks/api/use-tenant-keys";
-import { getErrorMessage } from "@heirs/api-client";
 import { createKeyColumns } from "@/config/columns/keys";
+import { getErrorMessage } from "@heirs/api-client";
+import { Dialog, DialogContent } from "@heirs/ui";
 import type { TenantApiKey } from "@/types/user";
+import { Button } from "@heirs/ui";
+import { Input } from "@heirs/ui";
 
 const schema = z.object({ name: z.string().trim().max(80, "Keep the name under 80 characters").optional() });
 type FormValues = z.infer<typeof schema>;
@@ -137,7 +137,7 @@ const Page = () => {
 
         {keys.data && keys.data.keys.length > 0 && (
           <div className="rounded-md border">
-            <DataTable columns={columns} data={keys.data.keys} />
+            <DataTable columns={columns} data={keys.data.keys} total={keys.data.keys.length ||0} />
           </div>
         )}
       </div>

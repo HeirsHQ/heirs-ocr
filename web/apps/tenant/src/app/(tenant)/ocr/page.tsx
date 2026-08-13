@@ -3,11 +3,11 @@
 import { useEffect, useState } from "react";
 
 import { PageLayout, SchemaForm, cleanArgs, defaultArgs, hasArgsForm, type ArgValues } from "@/components/shared";
+import type { OcrCatalogEntry, OcrErrorBody, OcrSuccess } from "@/types/ocr";
+import { Textarea } from "@heirs/ui";
 import { Button } from "@heirs/ui";
 import { Input } from "@heirs/ui";
-import { Textarea } from "@heirs/ui";
 import { cn } from "@heirs/ui";
-import type { OcrCatalogEntry, OcrErrorBody, OcrSuccess } from "@/types/ocr";
 
 const Page = () => {
   const [functions, setFunctions] = useState<OcrCatalogEntry[]>([]);

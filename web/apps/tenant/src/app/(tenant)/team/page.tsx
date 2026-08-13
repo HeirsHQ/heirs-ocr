@@ -1,27 +1,27 @@
 "use client";
 
-import { useMemo, useState } from "react";
-import { zodResolver } from "@hookform/resolvers/zod";
-import { useForm } from "react-hook-form";
 import { Loader, UserPlus, UsersRound } from "lucide-react";
+import { zodResolver } from "@hookform/resolvers/zod";
+import { useMemo, useState } from "react";
+import { useForm } from "react-hook-form";
 import { toast } from "sonner";
 import { z } from "zod";
 
 import { ConfirmDialog, DataTable, EmptyState, PageLayout, Skeleton } from "@/components/shared";
-import { Button } from "@heirs/ui";
+import type { TenantRole, TenantUser } from "@/types/user";
+import { useTenantMe } from "@/hooks/api/use-tenant-auth";
+import { createTeamColumns } from "@/config/columns/team";
+import { getErrorMessage } from "@heirs/api-client";
 import { Dialog, DialogContent } from "@heirs/ui";
+import { Button } from "@heirs/ui";
 import { Input } from "@heirs/ui";
+import { cn } from "@heirs/ui";
 import {
   useCreateTeamMember,
   useDeleteTeamMember,
   useTenantTeam,
   useUpdateTeamMember,
 } from "@/hooks/api/use-tenant-team";
-import { useTenantMe } from "@/hooks/api/use-tenant-auth";
-import { getErrorMessage } from "@heirs/api-client";
-import { cn } from "@heirs/ui";
-import { createTeamColumns } from "@/config/columns/team";
-import type { TenantRole, TenantUser } from "@/types/user";
 
 const ROLES: TenantRole[] = ["owner", "member"];
 
@@ -183,7 +183,7 @@ const Page = () => {
 
         {team.data && team.data.users.length > 0 && (
           <div className="rounded-md border">
-            <DataTable columns={columns} data={team.data.users} />
+            <DataTable columns={columns} data={team.data.users} total={team.data.users.length ||0} />
           </div>
         )}
       </div>
