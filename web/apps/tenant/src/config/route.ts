@@ -40,11 +40,11 @@ export const TENANT_ROUTES: RouteGroup[] = [
     name: "main",
     routes: [
       { href: "/ocr", label: "OCR", icon: ScanText },
-      { href: "/keys", label: "API Keys", icon: KeyRound },
-      { href: "/team", label: "Team", icon: Users },
       { href: "/billing", label: "Billing & Usage", icon: DollarSign },
+      { href: "/team", label: "Team", icon: Users },
       { href: "/documents", label: "Documents", icon: FileStack },
       { href: "/reports", label: "Reports", icon: BarChart2 },
+      { href: "/keys", label: "API Keys", icon: KeyRound },
     ],
   },
   {
