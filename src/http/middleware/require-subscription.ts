@@ -8,7 +8,7 @@ import {
   effectiveRateLimitPerMinute,
   requireActive,
 } from "../../billing/entitlements";
-import { resolveSubscription } from "../../billing/subscriptions";
+import { resolveSubscription, SubscriptionStoreUnavailableError } from "../../billing/subscriptions";
 import { getFunction } from "../../functions/registry";
 import { OcrError, type OcrErrorCode } from "../errors";
 
@@ -18,9 +18,13 @@ import { OcrError, type OcrErrorCode } from "../errors";
  * entitlement, sensitivity ceiling, and document quota. Also publishes the plan's
  * effective per-minute rate ceiling onto `req.rateLimitMax` for the rate limiter.
  *
- * Backward-compatible: a tenant with **no subscription row** (or a briefly
- * unreachable billing store) is treated as unlimited — nothing is gated. Only an
- * explicit subscription imposes limits.
+ * Backward-compatible: a tenant with **no subscription row** is treated as
+ * unlimited — nothing is gated. Only an explicit subscription imposes limits.
+ *
+ * Fails closed on infrastructure faults: if the billing store cannot be read we
+ * answer 503 rather than waive the plan's limits. Serving through a billing outage
+ * would ungate every tenant at once — quota, entitlement, sensitivity, file-size and
+ * page caps all skipped, rate limit reset to the env default, and nothing metered.
  */
 
 /** Billing denial codes → HTTP error codes. */
@@ -80,6 +84,10 @@ export const requireSubscription = async (req: Request, _res: Response, next: Ne
     }
     next();
   } catch (err) {
+    if (err instanceof SubscriptionStoreUnavailableError) {
+      next(new OcrError("PROVIDER_UNAVAILABLE", "Billing store unavailable", { retryable: true }));
+      return;
+    }
     next(err);
   }
 };

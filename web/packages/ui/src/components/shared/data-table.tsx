@@ -21,7 +21,12 @@ import type {
   Updater,
 } from "@tanstack/react-table";
 
+import type { LucideIcon } from "lucide-react";
+import type { ReactNode } from "react";
+import { SearchX } from "lucide-react";
+
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "../ui/table";
+import { EmptyState } from "./empty-state";
 import { Pagination } from "./pagination";
 
 /**
@@ -56,6 +61,18 @@ interface Props<TData extends RowData> {
   pageSize?: number;
   rowSelection?: RowSelectionState;
   showPageSizeChange?: boolean;
+  /**
+   * What to show when the body has no rows. The default speaks to the *filtered*
+   * case ("nothing matches"), which is what a table normally hits: pages branch on
+   * a zero-length dataset before they get here and render their own `EmptyState`
+   * with the domain's wording and its "create the first one" action.
+   */
+  empty?: {
+    icon?: LucideIcon;
+    title?: string;
+    description?: string;
+    action?: ReactNode;
+  };
 }
 
 export const DataTable = <TData extends RowData>({
@@ -69,6 +86,7 @@ export const DataTable = <TData extends RowData>({
   showPageSizeChange = true,
   onRowSelectionChange,
   rowSelection: externalRowSelection,
+  empty,
 }: Props<TData>) => {
   const [columnFilters, setColumnFilters] = useState<ColumnFiltersState>([]);
   const [columnOrder, setColumnOrder] = useState<ColumnOrderState>([]);
@@ -114,7 +132,9 @@ export const DataTable = <TData extends RowData>({
               <TableRow
                 key={row.id}
                 data-state={row.getIsSelected() && "selected"}
-                className="data-[state=selected]:bg-primary/25 data-[state=selected]:text-secondary-200 h-14"
+                // `text-secondary-200` is not a token; selected rows fell back to default
+                // text on a 25% primary wash. A lighter wash keeps contrast intact.
+                className="data-[state=selected]:bg-primary/10 h-14"
               >
                 {row.getAllCells().map((cell) => (
                   <TableCell key={cell.id} className="whitespace-nowrap">
@@ -124,9 +144,20 @@ export const DataTable = <TData extends RowData>({
               </TableRow>
             ))
           ) : (
-            <TableRow>
-              <TableCell colSpan={columns.length} className="h-125 text-center">
-                No results.
+            <TableRow className="hover:bg-transparent">
+              {/* `p-0` so the state owns its own padding — the cell's default inset
+                  would push the block off-centre inside the table. */}
+              <TableCell colSpan={columns.length} className="p-0">
+                <EmptyState
+                  variant="inline"
+                  icon={empty?.icon ?? SearchX}
+                  title={empty?.title ?? "No results"}
+                  description={
+                    empty?.description ??
+                    "Nothing here matches the current filters. Try clearing them or searching for something broader."
+                  }
+                  action={empty?.action}
+                />
               </TableCell>
             </TableRow>
           )}
@@ -134,8 +165,14 @@ export const DataTable = <TData extends RowData>({
       </Table>
       {total > pageSize && (
         <div className="border-t">
-
-          <Pagination page={page} pageSize={pageSize} total={total} onPageChange={onPageChange} onPageSizeChange={onPageSizeChange} showPageSizeChange={showPageSizeChange} />
+          <Pagination
+            page={page}
+            pageSize={pageSize}
+            total={total}
+            onPageChange={onPageChange}
+            onPageSizeChange={onPageSizeChange}
+            showPageSizeChange={showPageSizeChange}
+          />
         </div>
       )}
     </div>

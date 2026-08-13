@@ -21,7 +21,7 @@ export const getPool = (): Pool => {
   if (!pool) {
     pool = new Pool({
       connectionString: env.DATABASE_URL,
-      connectionTimeoutMillis: 2000,
+      connectionTimeoutMillis: env.DB_CONNECT_TIMEOUT_MS,
     });
     pool.on("error", (err) => logger.warn("postgres pool error", { err: err.message }));
   }
@@ -140,7 +140,7 @@ export const ensureSchema = async (): Promise<void> => {
  * statement doesn't race a cold pool against a remote/TLS Postgres. Rejects on
  * timeout so a CLI fails fast rather than hanging.
  */
-export const whenDbReady = async (timeoutMs = 8000): Promise<void> => {
+export const whenDbReady = async (timeoutMs = env.DB_CONNECT_TIMEOUT_MS): Promise<void> => {
   let client: PoolClient | undefined;
   const timer = new Promise<never>((_, reject) =>
     setTimeout(() => reject(new Error(`Postgres not ready after ${timeoutMs}ms`)), timeoutMs).unref(),

@@ -11,13 +11,14 @@ import { useOcrFunctionKeys, usePlans } from "@/hooks/api/use-admin-plans";
 import { Textarea } from "@heirs/ui";
 import { Button } from "@heirs/ui";
 import { getErrorMessage } from "@heirs/api-client";
+import { Field, SelectOption } from "@heirs/ui";
 import { Input } from "@heirs/ui";
-import { cn } from "@heirs/ui";
 
-const selectClass = cn(
-  "h-8 w-full rounded-md border border-input bg-transparent px-2.5 text-sm outline-none",
-  "focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50 disabled:opacity-50",
-);
+/**
+ * Sentinel for "no subscription". The select cannot carry an empty-string value, so
+ * the absence of a plan needs an explicit option value that maps back to `""`.
+ */
+const NO_PLAN = "__none__";
 
 interface FormState {
   tenantId: string;
@@ -42,14 +43,6 @@ const empty: FormState = {
   ownerPassword: "",
   planId: "",
 };
-
-const Field = ({ label, hint, children }: { label: string; hint?: string; children: React.ReactNode }) => (
-  <div className="space-y-1">
-    <label className="text-sm font-medium">{label}</label>
-    {children}
-    {hint && <p className="text-xs text-muted-foreground">{hint}</p>}
-  </div>
-);
 
 const buildPayload = (s: FormState): { ok: true; payload: OnboardTenantPayload } | { ok: false; error: string } => {
   const tenantId = s.tenantId.trim();
@@ -259,22 +252,20 @@ const Page = () => {
             <p className="text-xs text-destructive">{getErrorMessage(plans.error)}</p>
           ) : (plans.data?.plans.length ?? 0) === 0 ? (
             <p className="text-xs text-muted-foreground">
-              No plans in the catalog yet — create one under Subscriptions.
+              No plans in the catalog yet — create one under Subscription Plans.
             </p>
           ) : (
             <Field label="Plan">
-              <select
-                className={cn(selectClass, "sm:w-72")}
-                value={s.planId}
-                onChange={(e) => set("planId", e.target.value)}
-              >
-                <option value="">No subscription (unlimited defaults)</option>
-                {plans.data?.plans.map((p) => (
-                  <option key={p.id} value={p.id}>
-                    {p.name} ({p.tier})
-                  </option>
-                ))}
-              </select>
+              <SelectOption
+                className="sm:w-72"
+                aria-label="Plan"
+                value={s.planId || NO_PLAN}
+                onValueChange={(v) => set("planId", v === NO_PLAN ? "" : v)}
+                options={[
+                  { label: "No subscription (unlimited defaults)", value: NO_PLAN },
+                  ...(plans.data?.plans ?? []).map((p) => ({ label: `${p.name} (${p.tier})`, value: p.id })),
+                ]}
+              />
             </Field>
           )}
         </section>

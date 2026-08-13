@@ -5,7 +5,7 @@ import { useMemo, useState } from "react";
 import { toast } from "sonner";
 import Link from "next/link";
 
-import { ConfirmDialog, DataTable, EmptyState, PageLayout, Skeleton } from "@/components/shared";
+import { ConfirmDialog, DataTable, EmptyState, ErrorState, PageLayout, Skeleton } from "@/components/shared";
 import { useDeletePlan, usePlans } from "@/hooks/api/use-admin-plans";
 import { createPlanColumns } from "@/config/columns/plans";
 import { getErrorMessage } from "@heirs/api-client";
@@ -32,7 +32,7 @@ const Page = () => {
   const columns = useMemo(
     () =>
       createPlanColumns({
-        editHref: (plan) => `/subscriptions/${plan.id}/edit`,
+        editHref: (plan) => `/subscription-plans/${plan.id}/edit`,
         onDelete: (plan) => setPendingDelete(plan),
       }),
     [],
@@ -40,10 +40,10 @@ const Page = () => {
 
   return (
     <PageLayout
-      title="Subscriptions"
+      title="Subscription Plans"
       subtitle="The plan catalog — pricing, entitlements, and limits per tier."
       actions={[
-        <Button key="new" render={<Link href="/subscriptions/new" />}>
+        <Button key="new" render={<Link href="/subscription-plans/new" />}>
           <Plus className="size-4" />
           New plan
         </Button>,
@@ -53,9 +53,12 @@ const Page = () => {
         {plans.isPending && <Skeleton skeleton="table" columns={5} rows={6} />}
 
         {plans.isError && (
-          <div className="rounded-md border border-destructive/40 bg-destructive/10 px-3 py-2 text-sm text-destructive">
-            {getErrorMessage(plans.error)}
-          </div>
+          <ErrorState
+            title="Couldn't load plans"
+            description={getErrorMessage(plans.error)}
+            onRetry={() => plans.refetch()}
+            retrying={plans.isFetching}
+          />
         )}
 
         {plans.data && plans.data.plans.length === 0 && (
@@ -68,7 +71,7 @@ const Page = () => {
 
         {plans.data && plans.data.plans.length > 0 && (
           <div className="rounded-md border">
-            <DataTable columns={columns} data={plans.data.plans} total={plans.data.plans.length ||0} />
+            <DataTable columns={columns} data={plans.data.plans} total={plans.data.plans.length || 0} />
           </div>
         )}
       </div>

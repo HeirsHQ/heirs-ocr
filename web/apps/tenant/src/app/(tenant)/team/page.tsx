@@ -3,19 +3,19 @@
 import { Loader, UserPlus, UsersRound } from "lucide-react";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { useMemo, useState } from "react";
-import { useForm } from "react-hook-form";
+import { Controller, useForm } from "react-hook-form";
 import { toast } from "sonner";
 import { z } from "zod";
 
-import { ConfirmDialog, DataTable, EmptyState, PageLayout, Skeleton } from "@/components/shared";
+import { ConfirmDialog, DataTable, EmptyState, ErrorState, PageLayout, Skeleton } from "@/components/shared";
 import type { TenantRole, TenantUser } from "@/types/user";
 import { useTenantMe } from "@/hooks/api/use-tenant-auth";
 import { createTeamColumns } from "@/config/columns/team";
 import { getErrorMessage } from "@heirs/api-client";
 import { Dialog, DialogContent } from "@heirs/ui";
+import { SelectOption, type Option } from "@heirs/ui";
 import { Button } from "@heirs/ui";
 import { Input } from "@heirs/ui";
-import { cn } from "@heirs/ui";
 import {
   useCreateTeamMember,
   useDeleteTeamMember,
@@ -25,6 +25,12 @@ import {
 
 const ROLES: TenantRole[] = ["owner", "member"];
 
+/** What each role can do, spelled out — "owner" alone doesn't say it grants key access. */
+const ROLE_OPTIONS: Option[] = [
+  { label: "Member — run documents", value: "member" },
+  { label: "Owner — also manage keys & team", value: "owner" },
+];
+
 const schema = z.object({
   name: z.string().trim().min(1, "Name is required"),
   email: z.string().trim().min(1, "Email is required").email("Enter a valid email"),
@@ -33,16 +39,12 @@ const schema = z.object({
 });
 type FormValues = z.infer<typeof schema>;
 
-const selectClass = cn(
-  "h-8 rounded-md border border-input bg-transparent px-2.5 text-sm outline-none",
-  "focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50 disabled:opacity-50",
-);
-
 const InviteMemberModal = () => {
   const [open, setOpen] = useState(false);
   const createMember = useCreateTeamMember();
   const {
     register,
+    control,
     handleSubmit,
     reset,
     formState: { errors },
@@ -78,13 +80,18 @@ const InviteMemberModal = () => {
                 {errors.email && <p className="text-xs text-destructive">{errors.email.message}</p>}
               </div>
               <div className="space-y-1">
-                <select className={cn(selectClass, "w-full")} aria-label="Role" {...register("role")}>
-                  {ROLES.map((role) => (
-                    <option key={role} value={role}>
-                      {role}
-                    </option>
-                  ))}
-                </select>
+                <Controller
+                  control={control}
+                  name="role"
+                  render={({ field }) => (
+                    <SelectOption
+                      options={ROLE_OPTIONS}
+                      value={field.value}
+                      onValueChange={field.onChange}
+                      aria-label="Role"
+                    />
+                  )}
+                />
               </div>
               <div className="space-y-1">
                 <Input
@@ -168,9 +175,12 @@ const Page = () => {
         {team.isPending && <Skeleton skeleton="table" columns={4} rows={5} />}
 
         {team.isError && (
-          <div className="rounded-md border border-destructive/40 bg-destructive/10 px-3 py-2 text-sm text-destructive">
-            {getErrorMessage(team.error)}
-          </div>
+          <ErrorState
+            title="Couldn't load your team"
+            description={getErrorMessage(team.error)}
+            onRetry={() => team.refetch()}
+            retrying={team.isFetching}
+          />
         )}
 
         {team.data && team.data.users.length === 0 && (
@@ -183,7 +193,7 @@ const Page = () => {
 
         {team.data && team.data.users.length > 0 && (
           <div className="rounded-md border">
-            <DataTable columns={columns} data={team.data.users} total={team.data.users.length ||0} />
+            <DataTable columns={columns} data={team.data.users} total={team.data.users.length || 0} />
           </div>
         )}
       </div>

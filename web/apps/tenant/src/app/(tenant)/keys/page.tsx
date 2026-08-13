@@ -7,7 +7,15 @@ import { useForm } from "react-hook-form";
 import { toast } from "sonner";
 import { z } from "zod";
 
-import { ConfirmDialog, DataTable, EmptyState, PageLayout, SecretCallout, Skeleton } from "@/components/shared";
+import {
+  ConfirmDialog,
+  DataTable,
+  EmptyState,
+  ErrorState,
+  PageLayout,
+  SecretCallout,
+  Skeleton,
+} from "@/components/shared";
 import { useCreateTenantKey, useRevokeTenantKey, useTenantKeys } from "@/hooks/api/use-tenant-keys";
 import { createKeyColumns } from "@/config/columns/keys";
 import { getErrorMessage } from "@heirs/api-client";
@@ -122,9 +130,12 @@ const Page = () => {
         {keys.isPending && <Skeleton skeleton="table" columns={4} rows={5} />}
 
         {keys.isError && (
-          <div className="rounded-md border border-destructive/40 bg-destructive/10 px-3 py-2 text-sm text-destructive">
-            {getErrorMessage(keys.error)}
-          </div>
+          <ErrorState
+            title="Couldn't load API keys"
+            description={getErrorMessage(keys.error)}
+            onRetry={() => keys.refetch()}
+            retrying={keys.isFetching}
+          />
         )}
 
         {keys.data && keys.data.keys.length === 0 && (
@@ -137,7 +148,7 @@ const Page = () => {
 
         {keys.data && keys.data.keys.length > 0 && (
           <div className="rounded-md border">
-            <DataTable columns={columns} data={keys.data.keys} total={keys.data.keys.length ||0} />
+            <DataTable columns={columns} data={keys.data.keys} total={keys.data.keys.length || 0} />
           </div>
         )}
       </div>

@@ -5,17 +5,26 @@ import { useMemo, useState } from "react";
 import { toast } from "sonner";
 import Link from "next/link";
 
-import { ConfirmDialog, DataTable, EmptyState, PageLayout, Skeleton, ToggleList } from "@/components/shared";
 import { useOcrFunctionKeys, usePlans } from "@/hooks/api/use-admin-plans";
 import { createTenantColumns } from "@/config/columns/tenants";
 import { getErrorMessage } from "@heirs/api-client";
 import { Dialog, DialogContent } from "@heirs/ui";
 import type { AdminTenant } from "@/types/tenant";
+import { SelectOption } from "@heirs/ui";
 import { Textarea } from "@heirs/ui";
+import { Label } from "@heirs/ui";
 import { Button } from "@heirs/ui";
 import { Switch } from "@heirs/ui";
 import { Input } from "@heirs/ui";
-import { cn } from "@heirs/ui";
+import {
+  ConfirmDialog,
+  DataTable,
+  EmptyState,
+  ErrorState,
+  PageLayout,
+  Skeleton,
+  ToggleList,
+} from "@/components/shared";
 import {
   useAssignSubscription,
   useDeleteTenant,
@@ -25,11 +34,6 @@ import {
   useTenants,
   useUpdateTenant,
 } from "@/hooks/api/use-admin-tenants";
-
-const selectClass = cn(
-  "h-8 w-full rounded-md border border-input bg-transparent px-2.5 text-sm outline-none",
-  "focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50 disabled:opacity-50",
-);
 
 type ModalKind = "edit" | "owners" | "plan";
 
@@ -81,20 +85,20 @@ const EditTenantModal = ({ row, onClose }: { row: AdminTenant; onClose: () => vo
     <Dialog open onOpenChange={(o) => !o && onClose()}>
       <DialogContent title={`Edit ${tenant.tenantId}`} description="Registry settings for this tenant.">
         <div className="space-y-3">
-          <div className="grid gap-3 sm:grid-cols-2">
+        <div className="grid gap-3 sm:grid-cols-2">
             <div className="space-y-1">
-              <label className="text-sm font-medium">Display name</label>
+              <Label>Display name</Label>
               <Input value={name} onChange={(e) => setName(e.target.value)} />
             </div>
             <div className="space-y-1">
-              <label className="text-sm font-medium">Rate limit /min</label>
+              <Label>Rate limit /min</Label>
               <Input inputMode="numeric" value={rateLimit} onChange={(e) => setRateLimit(e.target.value)} />
             </div>
           </div>
           <div className="space-y-1">
-            <label className="text-sm font-medium">
+            <Label>
               Allowed functions <span className="text-xs font-normal text-muted-foreground">(none = all)</span>
-            </label>
+            </Label>
             {functions.isPending ? (
               <p className="text-xs text-muted-foreground">Loading…</p>
             ) : (
@@ -107,7 +111,7 @@ const EditTenantModal = ({ row, onClose }: { row: AdminTenant; onClose: () => vo
             )}
           </div>
           <div className="space-y-1">
-            <label className="text-sm font-medium">Allowed origins</label>
+            <Label>Allowed origins</Label>
             <Textarea
               value={origins}
               rows={2}
@@ -115,10 +119,10 @@ const EditTenantModal = ({ row, onClose }: { row: AdminTenant; onClose: () => vo
               onChange={(e) => setOrigins(e.target.value)}
             />
           </div>
-          <label className="flex items-center gap-2 text-sm">
+          <Label className="flex items-center gap-2 text-sm font-normal">
             <Switch checked={disabled} onCheckedChange={setDisabled} />
             Disabled (key rejected without deleting)
-          </label>
+          </Label>
           <div className="flex justify-end gap-2 pt-1">
             <Button variant="ghost" onClick={onClose} disabled={update.isPending}>
               Cancel
@@ -164,7 +168,7 @@ const OwnersModal = ({ tenantId, onClose }: { tenantId: string; onClose: () => v
   return (
     <Dialog open onOpenChange={(o) => !o && onClose()}>
       <DialogContent title={`Portal access — ${tenantId}`} description="Owner logins that can sign in at /login.">
-        <div className="space-y-3">
+        <div className="space-y-5">
           {users.isPending && <p className="text-xs text-muted-foreground">Loading logins…</p>}
           {users.isError && <p className="text-xs text-destructive">{getErrorMessage(users.error)}</p>}
           {users.data && users.data.users.length > 0 ? (
@@ -188,8 +192,11 @@ const OwnersModal = ({ tenantId, onClose }: { tenantId: string; onClose: () => v
               </p>
             )
           )}
-          <div className="grid gap-2 sm:grid-cols-3">
+          <div className="grid gap-2 grid-cols-2 mt-10">
+            <div className="col-span-2">
             <Input placeholder="Owner name" value={name} onChange={(e) => setName(e.target.value)} />
+
+            </div>
             <Input type="email" placeholder="Owner email" value={email} onChange={(e) => setEmail(e.target.value)} />
             <Input
               type="password"
@@ -257,18 +264,17 @@ const PlanModal = ({ tenantId, onClose }: { tenantId: string; onClose: () => voi
             <p className="text-xs text-destructive">{getErrorMessage(plans.error)}</p>
           ) : available.length === 0 ? (
             <p className="text-xs text-muted-foreground">
-              No plans in the catalog yet — create one under Subscriptions.
+              No plans in the catalog yet — create one under Subscription Plans.
             </p>
           ) : (
             <div className="flex items-center gap-2">
-              <select className={selectClass} value={planId} onChange={(e) => setPlanId(e.target.value)}>
-                <option value="">Select a plan…</option>
-                {available.map((p) => (
-                  <option key={p.id} value={p.id}>
-                    {p.name} ({p.tier})
-                  </option>
-                ))}
-              </select>
+              <SelectOption
+                aria-label="Plan"
+                placeholder="Select a plan…"
+                value={planId || undefined}
+                onValueChange={setPlanId}
+                options={available.map((p) => ({ label: `${p.name} (${p.tier})`, value: p.id }))}
+              />
               <Button onClick={onAssign} disabled={!planId || assign.isPending}>
                 {assign.isPending ? <Loader className="size-4 animate-spin" /> : current ? "Change" : "Assign"}
               </Button>
@@ -325,9 +331,12 @@ const Page = () => {
       <div className=" space-y-6">
         {tenants.isPending && <Skeleton skeleton="table" columns={5} rows={6} />}
         {tenants.isError && (
-          <div className="rounded-md border border-destructive/40 bg-destructive/10 px-3 py-2 text-sm text-destructive">
-            {getErrorMessage(tenants.error)}
-          </div>
+          <ErrorState
+            title="Couldn't load tenants"
+            description={getErrorMessage(tenants.error)}
+            onRetry={() => tenants.refetch()}
+            retrying={tenants.isFetching}
+          />
         )}
         {tenants.data && tenants.data.tenants.length === 0 && (
           <EmptyState
@@ -338,7 +347,7 @@ const Page = () => {
         )}
         {tenants.data && tenants.data.tenants.length > 0 && (
           <div className="rounded-md border">
-            <DataTable columns={columns} data={tenants.data.tenants} total={tenants.data.tenants.length ||0} />
+            <DataTable columns={columns} data={tenants.data.tenants} total={tenants.data.tenants.length || 0} />
           </div>
         )}
       </div>

@@ -3,7 +3,7 @@
 import { ScrollText } from "lucide-react";
 import { useState } from "react";
 
-import { EmptyState, PageLayout, Skeleton } from "@/components/shared";
+import { EmptyState, ErrorState, PageLayout, Skeleton } from "@/components/shared";
 import { useAuditEvents } from "@/hooks/api/use-admin-console";
 import { getErrorMessage } from "@heirs/api-client";
 import { Input } from "@heirs/ui";
@@ -16,13 +16,13 @@ const chipTone = (action: string): string => {
   const ns = action.split(".")[0];
   switch (ns) {
     case "tenant":
-      return "bg-sky-500/10 text-sky-700 dark:text-sky-300";
+      return "bg-(--chart-1)/12 text-(--chart-1)";
     case "admin":
-      return "bg-violet-500/10 text-violet-700 dark:text-violet-300";
+      return "bg-(--chart-2)/12 text-(--chart-2)";
     case "subscription":
-      return "bg-emerald-500/10 text-emerald-700 dark:text-emerald-300";
+      return "bg-(--chart-3)/12 text-(--chart-3)";
     case "backup":
-      return "bg-amber-500/10 text-amber-700 dark:text-amber-300";
+      return "bg-(--chart-4)/12 text-(--chart-4)";
     default:
       return "bg-muted text-muted-foreground";
   }
@@ -54,9 +54,12 @@ const Page = () => {
         {events.isPending && <Skeleton skeleton="table" columns={4} rows={8} />}
 
         {events.isError && (
-          <div className="rounded-md border border-destructive/40 bg-destructive/10 px-3 py-2 text-sm text-destructive">
-            {getErrorMessage(events.error)}
-          </div>
+          <ErrorState
+            title="Couldn't load audit events"
+            description={getErrorMessage(events.error)}
+            onRetry={() => events.refetch()}
+            retrying={events.isFetching}
+          />
         )}
 
         {events.data && events.data.events.length === 0 && (

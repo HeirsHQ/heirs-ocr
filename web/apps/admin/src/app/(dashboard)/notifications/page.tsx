@@ -1,17 +1,17 @@
 "use client";
 
-import { Loader, Plus, Trash2 } from "lucide-react";
+import { Bell, Loader, Plus, Trash2 } from "lucide-react";
 import { useState } from "react";
 import { toast } from "sonner";
 
 import { useNotifications, useSaveNotifications } from "@/hooks/api/use-admin-console";
 import type { NotificationChannel, NotificationSettings } from "@/types/admin-console";
-import { PageLayout, Skeleton } from "@/components/shared";
+import { EmptyState, ErrorState, PageLayout, Skeleton } from "@/components/shared";
 import { getErrorMessage } from "@heirs/api-client";
+import { SelectOption, type Option } from "@heirs/ui";
 import { Checkbox } from "@heirs/ui";
 import { Button } from "@heirs/ui";
 import { Input } from "@heirs/ui";
-import { cn } from "@heirs/ui";
 
 const EVENT_LABELS: Record<keyof NotificationSettings["events"], string> = {
   jobFailed: "Job failed",
@@ -20,10 +20,11 @@ const EVENT_LABELS: Record<keyof NotificationSettings["events"], string> = {
   subscriptionChanged: "Subscription changed",
 };
 
-const selectClass = cn(
-  "h-8 rounded-md border border-input bg-transparent px-2.5 text-sm outline-none",
-  "focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50",
-);
+/** Delivery targets a channel can point at. */
+const CHANNEL_TYPES: Option[] = [
+  { label: "Email", value: "email" },
+  { label: "Webhook", value: "webhook" },
+];
 
 const Page = () => {
   const query = useNotifications();
@@ -43,9 +44,12 @@ const Page = () => {
   if (query.isError)
     return (
       <PageLayout title="Notifications">
-        <div className="rounded-md border border-destructive/40 bg-destructive/10 px-3 py-2 text-sm text-destructive">
-          {getErrorMessage(query.error)}
-        </div>
+        <ErrorState
+          title="Couldn't load notification settings"
+          description={getErrorMessage(query.error)}
+          onRetry={() => query.refetch()}
+          retrying={query.isFetching}
+        />
       </PageLayout>
     );
 
@@ -91,7 +95,13 @@ const Page = () => {
 
         <section className="space-y-2">
           <p className="text-sm font-medium">Channels</p>
-          {draft.channels.length === 0 && <p className="text-sm text-muted-foreground">No channels configured.</p>}
+          {draft.channels.length === 0 && (
+            <EmptyState
+              icon={Bell}
+              title="No channels configured"
+              description="Alerts have nowhere to go until you add an email address or webhook below."
+            />
+          )}
           <ul className="space-y-1.5">
             {draft.channels.map((c) => (
               <li key={c.id} className="flex items-center gap-2 rounded-md border px-3 py-2 text-sm">
@@ -117,10 +127,13 @@ const Page = () => {
             ))}
           </ul>
           <div className="flex gap-2">
-            <select className={selectClass} value={type} onChange={(e) => setType(e.target.value as never)}>
-              <option value="email">email</option>
-              <option value="webhook">webhook</option>
-            </select>
+            <SelectOption
+              className="w-36 shrink-0"
+              options={CHANNEL_TYPES}
+              value={type}
+              onValueChange={(v) => setType(v as never)}
+              aria-label="Channel type"
+            />
             <Input
               placeholder={type === "email" ? "alerts@acme.com" : "https://hooks…"}
               value={target}

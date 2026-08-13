@@ -3,22 +3,29 @@
 import { Loader, UserPlus, Users } from "lucide-react";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { useMemo, useState } from "react";
-import { useForm } from "react-hook-form";
+import { Controller, useForm } from "react-hook-form";
 import { toast } from "sonner";
 import { z } from "zod";
 
 import { useAdminUsers, useCreateAdmin, useDeleteAdmin, useUpdateAdmin } from "@/hooks/api/use-admin-users";
-import { ConfirmDialog, DataTable, EmptyState, PageLayout, Skeleton } from "@/components/shared";
+import { ConfirmDialog, DataTable, EmptyState, ErrorState, PageLayout, Skeleton } from "@/components/shared";
 import { createUserColumns } from "@/config/columns/users";
 import type { AdminRole, AdminUser } from "@/types/user";
 import { getErrorMessage } from "@heirs/api-client";
 import { Dialog, DialogContent } from "@heirs/ui";
 import { useMe } from "@/hooks/api/use-auth";
+import { SelectOption, type Option } from "@heirs/ui";
 import { Button } from "@heirs/ui";
 import { Input } from "@heirs/ui";
-import { cn } from "@heirs/ui";
 
 const ROLES: AdminRole[] = ["owner", "manager", "viewer"];
+
+/** Console roles, least → most privileged, with what each one can actually do. */
+const ROLE_OPTIONS: Option[] = [
+  { label: "Viewer — read-only", value: "viewer" },
+  { label: "Manager — manage tenants & plans", value: "manager" },
+  { label: "Owner — full access", value: "owner" },
+];
 
 const schema = z.object({
   name: z.string().trim().min(1, "Name is required"),
@@ -28,16 +35,12 @@ const schema = z.object({
 });
 type FormValues = z.infer<typeof schema>;
 
-const selectClass = cn(
-  "h-8 rounded-md border border-input bg-transparent px-2.5 text-sm outline-none",
-  "focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50 disabled:opacity-50",
-);
-
 const InviteUserModal = () => {
   const [open, setOpen] = useState(false);
   const createAdmin = useCreateAdmin();
   const {
     register,
+    control,
     handleSubmit,
     reset,
     formState: { errors },
@@ -73,13 +76,18 @@ const InviteUserModal = () => {
                 {errors.email && <p className="text-xs text-destructive">{errors.email.message}</p>}
               </div>
               <div className="space-y-1">
-                <select className={cn(selectClass, "w-full")} aria-label="Role" {...register("role")}>
-                  {ROLES.map((role) => (
-                    <option key={role} value={role}>
-                      {role}
-                    </option>
-                  ))}
-                </select>
+                <Controller
+                  control={control}
+                  name="role"
+                  render={({ field }) => (
+                    <SelectOption
+                      options={ROLE_OPTIONS}
+                      value={field.value}
+                      onValueChange={field.onChange}
+                      aria-label="Role"
+                    />
+                  )}
+                />
               </div>
               <div className="space-y-1">
                 <Input
@@ -164,9 +172,12 @@ const Page = () => {
       <div className="space-y-6">
         {users.isPending && <Skeleton skeleton="table" columns={4} rows={5} />}
         {users.isError && (
-          <div className="rounded-md border border-destructive/40 bg-destructive/10 px-3 py-2 text-sm text-destructive">
-            {getErrorMessage(users.error)}
-          </div>
+          <ErrorState
+            title="Couldn't load console users"
+            description={getErrorMessage(users.error)}
+            onRetry={() => users.refetch()}
+            retrying={users.isFetching}
+          />
         )}
         {users.data && users.data.admins.length === 0 && (
           <EmptyState icon={Users} title="No console users" description="Add a user above to grant console access." />
@@ -174,7 +185,7 @@ const Page = () => {
 
         {users.data && users.data.admins.length > 0 && (
           <div className="rounded-md border">
-            <DataTable columns={columns} data={users.data.admins} total={users.data.admins.length ||0} />
+            <DataTable columns={columns} data={users.data.admins} total={users.data.admins.length || 0} />
           </div>
         )}
       </div>

@@ -2,7 +2,7 @@ import { Queue, type JobState } from "bullmq";
 import IORedis from "ioredis";
 
 import { OcrErrorCode, type OcrErrorCode as OcrErrorCodeType } from "../http/errors";
-import type { OcrRequest } from "../pipeline";
+import type { OcrRequest, OcrResponseMeta } from "../pipeline";
 import { env } from "../config/env";
 
 /**
@@ -17,12 +17,21 @@ export type OcrJobData = {
 
 export type JobStatus = "queued" | "active" | "completed" | "failed";
 
+/**
+ * A job's public state. On completion `result` and `meta` are the *same two fields*
+ * the sync `POST /v1/ocr/:function` returns, unwrapped from the pipeline outcome —
+ * so a client can parse both paths with one type instead of special-casing a
+ * `{result: {result, meta}}` nesting that only the async route produced.
+ */
 export type JobRecord = {
   jobId: string;
   status: JobStatus;
   /** Tenant that submitted the job — used to scope lookups; never cross-tenant. */
   tenantId?: string;
+  /** The OCR function key, echoed so the async response matches the sync envelope. */
+  function?: string;
   result?: unknown;
+  meta?: OcrResponseMeta;
   error?: { code: string; message: string };
 };
 
@@ -117,9 +126,22 @@ export const getQueueStats = async (): Promise<QueueStats> => {
   };
 };
 
+/**
+ * Retry policy. BullMQ defaults to a **single** attempt, which meant one Azure 429,
+ * one Redis blip, or a worker restart mid-deploy permanently lost the job — and the
+ * async path is by definition where the large, expensive documents go. Three
+ * attempts with exponential backoff (5s, 10s) rides out transient faults; a
+ * deterministic failure is raised as `UnrecoverableError` by the worker so it burns
+ * one attempt rather than three (see `src/jobs/worker.ts`).
+ */
+const JOB_ATTEMPTS = 3;
+const JOB_BACKOFF_MS = 5_000;
+
 export const ocrQueue: OcrQueue = {
   async enqueue(data) {
     const job = await getQueue().add(OCR_QUEUE_NAME, data, {
+      attempts: JOB_ATTEMPTS,
+      backoff: { type: "exponential", delay: JOB_BACKOFF_MS },
       removeOnComplete: { age: 24 * 60 * 60, count: 1000 },
       removeOnFail: { age: 7 * 24 * 60 * 60 },
     });
@@ -132,8 +154,19 @@ export const ocrQueue: OcrQueue = {
     if (!job) return undefined;
 
     const status = toStatus(await job.getState());
-    const record: JobRecord = { jobId, status, tenantId: job.data.request.tenantId };
-    if (status === "completed") record.result = job.returnvalue;
+    const record: JobRecord = {
+      jobId,
+      status,
+      tenantId: job.data.request.tenantId,
+      function: job.data.function,
+    };
+    if (status === "completed") {
+      // `job.returnvalue` is the pipeline outcome (`{result, meta}`); flatten it so
+      // the payload mirrors the sync success envelope.
+      const outcome = job.returnvalue as { result?: unknown; meta?: OcrResponseMeta } | undefined;
+      record.result = outcome?.result;
+      record.meta = outcome?.meta;
+    }
     if (status === "failed") record.error = decodeJobError(job.failedReason);
     return record;
   },

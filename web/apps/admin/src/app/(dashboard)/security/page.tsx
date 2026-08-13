@@ -1,24 +1,25 @@
 "use client";
 
-import { Loader, Plus, Trash2 } from "lucide-react";
+import { Globe, Loader, Plus, Trash2 } from "lucide-react";
 import { useState } from "react";
 import { toast } from "sonner";
 
 import type { SecurityPosture, SecuritySettings } from "@/types/admin-console";
 import { useSaveSecurity, useSecurity } from "@/hooks/api/use-admin-console";
-import { PageLayout, Skeleton } from "@/components/shared";
+import { EmptyState, ErrorState, PageLayout, Skeleton, StatusBadge } from "@/components/shared";
 import { getErrorMessage } from "@heirs/api-client";
 import { Checkbox } from "@heirs/ui";
+import { Label } from "@heirs/ui";
 import { Button } from "@heirs/ui";
 import { Input } from "@heirs/ui";
-import { cn } from "@heirs/ui";
 
+/** Live posture read off the environment — amber means "not hardened", not "broken". */
 const Pill = ({ label, ok, value }: { label: string; ok: boolean; value?: string }) => (
-  <span className="inline-flex items-center gap-1.5 rounded-md border px-2 py-1 text-sm">
-    <span className={cn("inline-block size-2 rounded-full", ok ? "bg-emerald-500" : "bg-amber-500")} />
-    {label}
-    {value && <span className="text-xs text-muted-foreground">{value}</span>}
-  </span>
+  <StatusBadge
+    tone={ok ? "healthy" : "attention"}
+    label={value ? `${label} · ${value}` : label}
+    className="normal-case"
+  />
 );
 
 const PostureView = ({ p }: { p: SecurityPosture }) => (
@@ -49,9 +50,12 @@ const Page = () => {
   if (query.isError)
     return (
       <PageLayout title="Security">
-        <div className="rounded-md border border-destructive/40 bg-destructive/10 px-3 py-2 text-sm text-destructive">
-          {getErrorMessage(query.error)}
-        </div>
+        <ErrorState
+          title="Couldn't load security settings"
+          description={getErrorMessage(query.error)}
+          onRetry={() => query.refetch()}
+          retrying={query.isFetching}
+        />
       </PageLayout>
     );
 
@@ -96,7 +100,7 @@ const Page = () => {
 
           <div className="grid gap-4 sm:grid-cols-2">
             <div className="space-y-1">
-              <label className="text-sm font-medium">Session idle timeout (min)</label>
+              <Label>Session idle timeout (min)</Label>
               <Input
                 type="number"
                 min={1}
@@ -105,7 +109,7 @@ const Page = () => {
               />
             </div>
             <div className="space-y-1">
-              <label className="text-sm font-medium">Password minimum length</label>
+              <Label>Password minimum length</Label>
               <Input
                 type="number"
                 min={8}
@@ -117,9 +121,15 @@ const Page = () => {
           </div>
 
           <div className="space-y-2">
-            <label className="text-sm font-medium">IP allowlist</label>
+            <Label>IP allowlist</Label>
+            {/* An empty allowlist is permissive, not merely unset — say so, because
+                "no entries" reads as "locked down" to anyone skimming. */}
             {draft.ipAllowlist.length === 0 && (
-              <p className="text-xs text-muted-foreground">Empty — all IPs allowed.</p>
+              <EmptyState
+                icon={Globe}
+                title="No IP restrictions"
+                description="An empty allowlist lets the console be reached from any address. Add an entry below to restrict it."
+              />
             )}
             <ul className="space-y-1.5">
               {draft.ipAllowlist.map((entry) => (

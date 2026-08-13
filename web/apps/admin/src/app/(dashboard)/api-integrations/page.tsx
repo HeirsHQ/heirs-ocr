@@ -1,11 +1,11 @@
 "use client";
 
-import { Loader, Plus, Trash2 } from "lucide-react";
+import { Loader, Plug, Plus, Trash2 } from "lucide-react";
 import { useState } from "react";
 import { toast } from "sonner";
 
 import { useApiIntegrations, useSaveApiIntegrations } from "@/hooks/api/use-admin-console";
-import { PageLayout, SelectOption, Skeleton } from "@/components/shared";
+import { EmptyState, ErrorState, PageLayout, SelectOption, Skeleton } from "@/components/shared";
 import type { ApiIntegrationSettings } from "@/types/admin-console";
 import { getErrorMessage } from "@heirs/api-client";
 import { Checkbox } from "@heirs/ui";
@@ -33,9 +33,12 @@ const Page = () => {
   if (query.isError)
     return (
       <PageLayout title="API Integrations">
-        <div className="rounded-md border border-destructive/40 bg-destructive/10 px-3 py-2 text-sm text-destructive">
-          {getErrorMessage(query.error)}
-        </div>
+        <ErrorState
+          title="Couldn't load integration settings"
+          description={getErrorMessage(query.error)}
+          onRetry={() => query.refetch()}
+          retrying={query.isFetching}
+        />
       </PageLayout>
     );
 
@@ -75,9 +78,11 @@ const Page = () => {
     <PageLayout title="API Integrations" subtitle="Outbound endpoints the platform can push events to.">
       <div className=" space-y-6">
         {draft.integrations.length === 0 && (
-          <p className="rounded-md border border-dashed px-3 py-8 text-center text-sm text-muted-foreground">
-            No integrations configured.
-          </p>
+          <EmptyState
+            icon={Plug}
+            title="No integrations configured"
+            description="Add an endpoint below and the platform will push events to it as they happen."
+          />
         )}
         <ul className="space-y-1.5">
           {draft.integrations.map((it) => (

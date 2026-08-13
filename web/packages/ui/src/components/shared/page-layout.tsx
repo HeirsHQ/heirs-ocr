@@ -9,17 +9,24 @@ interface Props {
   subtitle?: string;
 }
 
+/**
+ * Standard page frame: a titled header with an action slot, then the content.
+ *
+ * The header carries real hierarchy — the title outweighs the subtitle in size,
+ * weight, and colour — because every page in the console looked alike when both
+ * lines were the same size and the title was only a shade darker.
+ */
 export const PageLayout = ({ children, title, actions, subtitle }: Props) => {
   return (
-    <div className="h-full space-y-4">
-      <div className="flex items-center justify-between">
-        <div className="">
-          <p className="font-medium">{title}</p>
-          <p className="text-sm text-muted-foreground">{subtitle}</p>
+    <div className="flex h-full flex-col gap-6">
+      <header className="flex flex-wrap items-start justify-between gap-4">
+        <div className="space-y-1">
+          <h1 className="text-xl font-semibold tracking-tight text-balance">{title}</h1>
+          {subtitle && <p className="text-muted-foreground max-w-prose text-sm text-pretty">{subtitle}</p>}
         </div>
-        <div className="flex items-center gap-x-4">{actions}</div>
-      </div>
-      <div className="w-full min-h-0">{children}</div>
+        {actions && <div className="flex shrink-0 items-center gap-2">{actions}</div>}
+      </header>
+      <div className="min-h-0 w-full flex-1">{children}</div>
     </div>
   );
 };

@@ -108,6 +108,42 @@ export const resolveTenant = async (apiKey: string): Promise<Tenant | undefined>
   return tenant.disabled ? undefined : tenant;
 };
 
+// Org-level state, cached separately from the per-key cache above (different key
+// space: tenantId vs key-hash). Same TTL, and cleared alongside it on every mutation.
+type OrgCacheEntry = { disabled: boolean; expiresAt: number };
+const orgCache = new Map<string, OrgCacheEntry>();
+
+/**
+ * Whether a whole tenant org is disabled, for callers that authenticate with a
+ * **session** rather than an API key and so have no key row of their own.
+ *
+ * The registry is keyed per API key, not per org, so "disable this tenant" is
+ * expressed by disabling that tenant's keys. An org therefore counts as disabled
+ * when it has key rows and *every* one of them is disabled. An org with no keys at
+ * all (portal-only, never issued a key) is not disabled — there is nothing to have
+ * been turned off.
+ *
+ * Without this the session path hardcoded `disabled: false`, so disabling or
+ * revoking every key for a tenant stopped their API traffic but left their users
+ * running documents through the portal.
+ */
+export const isTenantOrgDisabled = async (tenantId: string): Promise<boolean> => {
+  const hit = orgCache.get(tenantId);
+  if (hit && hit.expiresAt > Date.now()) return hit.disabled;
+
+  const { rows } = await query<{ total: string; enabled: string }>(
+    `SELECT count(*) AS total, count(*) FILTER (WHERE NOT disabled) AS enabled
+       FROM tenants WHERE tenant_id = $1`,
+    [tenantId],
+  );
+  const total = Number(rows[0]?.total ?? 0);
+  const enabled = Number(rows[0]?.enabled ?? 0);
+  const disabled = total > 0 && enabled === 0;
+
+  orgCache.set(tenantId, { disabled, expiresAt: Date.now() + cacheTtlMs() });
+  return disabled;
+};
+
 /**
  * Provenance for a registry mutation. `actor` identifies who made the change (a
  * CLI operator, or a future admin API's authenticated principal). Carried into
@@ -146,6 +182,9 @@ export const putTenant = async (apiKey: string, tenant: Tenant, audit: AuditCont
     ],
   );
   cache.delete(keyHash);
+  // Any key change can flip the org's derived disabled state; the map is tiny and
+  // mutations are rare, so clear it wholesale rather than track tenantId per site.
+  orgCache.clear();
   logger.info("tenant.provisioned", {
     tenantId: tenant.tenantId,
     keyHash,
@@ -159,6 +198,9 @@ export const putTenant = async (apiKey: string, tenant: Tenant, audit: AuditCont
 export const revokeApiKey = async (apiKey: string, audit: AuditContext = {}): Promise<number> => {
   const keyHash = hashApiKey(apiKey);
   cache.delete(keyHash);
+  // Any key change can flip the org's derived disabled state; the map is tiny and
+  // mutations are rare, so clear it wholesale rather than track tenantId per site.
+  orgCache.clear();
   const { rowCount } = await query(`DELETE FROM tenants WHERE key_hash = $1`, [keyHash]);
   const removed = rowCount ?? 0;
   logger.info("tenant.revoked", { keyHash, actor: audit.actor ?? "unknown", removed });
@@ -238,6 +280,9 @@ export const updateTenantByHash = async (
   if (!rows[0]) return undefined;
 
   cache.delete(keyHash);
+  // Any key change can flip the org's derived disabled state; the map is tiny and
+  // mutations are rare, so clear it wholesale rather than track tenantId per site.
+  orgCache.clear();
   const next = rowToTenant(rows[0]);
   logger.info("tenant.updated", {
     tenantId: next.tenantId,
@@ -253,6 +298,9 @@ export const updateTenantByHash = async (
 /** Removes a tenant by its key-hash (hard revoke). Emits `tenant.revoked`. */
 export const revokeByHash = async (keyHash: string, audit: AuditContext = {}): Promise<number> => {
   cache.delete(keyHash);
+  // Any key change can flip the org's derived disabled state; the map is tiny and
+  // mutations are rare, so clear it wholesale rather than track tenantId per site.
+  orgCache.clear();
   const { rowCount } = await query(`DELETE FROM tenants WHERE key_hash = $1`, [keyHash]);
   const removed = rowCount ?? 0;
   logger.info("tenant.revoked", { keyHash, actor: audit.actor ?? "unknown", removed });

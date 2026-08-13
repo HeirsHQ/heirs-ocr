@@ -5,11 +5,11 @@ import { DatabaseBackup, Loader, RotateCcw } from "lucide-react";
 import { useState } from "react";
 import { toast } from "sonner";
 
-
 import { useBackups, useCreateBackup, useRestoreBackup } from "@/hooks/api/use-admin-console";
-import { ConfirmDialog, EmptyState, PageLayout, Skeleton } from "@/components/shared";
+import { ConfirmDialog, EmptyState, ErrorState, PageLayout, Skeleton } from "@/components/shared";
 import type { BackupManifest } from "@/types/admin-console";
 import { getErrorMessage } from "@heirs/api-client";
+import { Label } from "@heirs/ui";
 import { Button } from "@heirs/ui";
 import { Input } from "@heirs/ui";
 
@@ -62,7 +62,7 @@ const Page = () => {
 
         <div className="flex flex-wrap items-end gap-2">
           <div className="flex-1 space-y-1">
-            <label className="text-sm font-medium">Note (optional)</label>
+            <Label>Note (optional)</Label>
             <Input placeholder="e.g. before plan migration" value={note} onChange={(e) => setNote(e.target.value)} />
           </div>
           <Button onClick={onCreate} disabled={create.isPending}>
@@ -74,9 +74,12 @@ const Page = () => {
         {backups.isPending && <Skeleton skeleton="table" columns={6} rows={5} />}
 
         {backups.isError && (
-          <div className="rounded-md border border-destructive/40 bg-destructive/10 px-3 py-2 text-sm text-destructive">
-            {getErrorMessage(backups.error)}
-          </div>
+          <ErrorState
+            title="Couldn't load backups"
+            description={getErrorMessage(backups.error)}
+            onRetry={() => backups.refetch()}
+            retrying={backups.isFetching}
+          />
         )}
 
         {backups.data && backups.data.backups.length === 0 && (

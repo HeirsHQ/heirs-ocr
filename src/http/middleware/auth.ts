@@ -2,7 +2,7 @@ import type { NextFunction, Request, Response } from "express";
 import { randomBytes } from "crypto";
 
 import { logger } from "../../observability/logger";
-import { resolveTenant } from "../../auth/tenants";
+import { isTenantOrgDisabled, resolveTenant } from "../../auth/tenants";
 import { SESSION_COOKIE as TENANT_SESSION_COOKIE, resolveSession } from "../../auth/tenant-session";
 import { parseCookies } from "./admin-auth";
 import { env } from "../../config/env";
@@ -58,6 +58,13 @@ export const auth = async (req: Request, _res: Response, next: NextFunction): Pr
     if (token) {
       const session = await resolveSession(token);
       if (session) {
+        // An operator who disables/revokes a tenant's keys means the whole org, not
+        // just its direct API traffic — previously `disabled` was hardcoded false
+        // here, so the org's users kept running documents through the portal.
+        if (await isTenantOrgDisabled(session.tenantId)) {
+          next(new OcrError("FORBIDDEN", "This organisation is disabled"));
+          return;
+        }
         req.tenantId = session.tenantId;
         // Org-level access: no per-key allowedFunctions — subscription + rate limit gate it.
         req.tenant = { tenantId: session.tenantId, disabled: false };

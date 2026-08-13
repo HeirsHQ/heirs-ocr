@@ -27,18 +27,24 @@ let worker: Worker | undefined;
  */
 const boot = async (): Promise<void> => {
   await Promise.all([whenRedisReady(), whenDbReady()]);
+
+  // Hard prerequisite — a worker without the schema drains the queue by failing
+  // every job. Let it propagate and exit rather than start and destroy work.
+  await ensureSchema();
+
   try {
-    await ensureSchema();
     await seedPlans();
   } catch (err) {
-    logger.error("worker schema init failed", { err: err instanceof Error ? err.message : String(err) });
+    logger.error("worker plan seeding failed (continuing; retried next boot)", {
+      err: err instanceof Error ? err.message : String(err),
+    });
   }
   worker = startWorker();
   logger.info("ocr worker started");
 };
 
 boot().catch((err) => {
-  logger.error("worker boot failed: backing stores unavailable", {
+  logger.error("worker boot failed: backing stores unreachable or schema could not be applied", {
     err: err instanceof Error ? err.message : String(err),
   });
   process.exit(1);

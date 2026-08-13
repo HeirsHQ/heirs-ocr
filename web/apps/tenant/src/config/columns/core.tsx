@@ -6,6 +6,7 @@ import Link from "next/link";
 
 import type { DataTableFeatures } from "@heirs/ui";
 import { Popover, PopoverContent, PopoverTrigger } from "@heirs/ui";
+import { SelectOption } from "@heirs/ui";
 import { Checkbox } from "@heirs/ui";
 import { cn, formatCurrency } from "@heirs/ui";
 import { Button } from "@heirs/ui";
@@ -15,13 +16,16 @@ export type Column<T extends RowData> = ColumnDef<DataTableFeatures, T, unknown>
 
 type TabelActionVariant = "amber" | "default" | "destructive" | "info" | "success" | "warning";
 
+// Tokened so the menu is legible in dark mode; the previous fixed `gray-700`
+// text on `gray-100` inverted into near-invisibility. `success` also referenced a
+// `success-600` scale that was never defined, so those items rendered unstyled.
 const variants: Record<TabelActionVariant, string> = {
-  amber: "text-orange-700 hover:bg-orange-50",
-  default: "text-gray-600 hover:bg-gray-200",
-  destructive: "text-red-600 hover:bg-red-50",
-  info: "text-blue-600 hover:bg-blue-50",
-  success: "text-success-600 hover:bg-success-50",
-  warning: "text-yellow-600 hover:bg-yellow-50",
+  amber: "text-warning hover:bg-warning/10",
+  default: "text-foreground hover:bg-accent",
+  destructive: "text-destructive hover:bg-destructive/10",
+  info: "text-primary hover:bg-primary/10",
+  success: "text-success hover:bg-success/10",
+  warning: "text-warning hover:bg-warning/10",
 };
 
 interface TableActionItem<T> {
@@ -89,9 +93,15 @@ const RowActions = <T extends object>({
                 {content}
               </Link>
             ) : (
-              <button key={index} type="button" className={className} onClick={() => item.onClick?.(row)}>
+              <Button
+                key={index}
+                type="button"
+                variant="ghost"
+                className={cn(className, "h-auto justify-start font-normal")}
+                onClick={() => item.onClick?.(row)}
+              >
                 {content}
-              </button>
+              </Button>
             );
           })}
         </PopoverContent>
@@ -202,7 +212,7 @@ export const PercentageCell = ({ value, decimals = 1 }: { value: number; decimal
 
 export const BooleanCell = ({ value, labels = ["Yes", "No"] }: { value: boolean; labels?: [string, string] }) => {
   return (
-    <span className={cn("text-xs font-medium", value ? "text-green-600" : "text-red-500")}>
+    <span className={cn("text-xs font-medium", value ? "text-success" : "text-destructive")}>
       {value ? labels[0] : labels[1]}
     </span>
   );
@@ -231,14 +241,14 @@ const STATUS_DEFAULTS: Record<string, StatusVariant> = {
 };
 
 export const STATUS_STYLES: Record<StatusVariant, string> = {
-  amber: "bg-orange-100 text-orange-700 border-orange-200",
-  danger: "bg-red-100 text-red-700 border-red-200",
-  draft: "bg-gray-100 text-gray-700 border-gray-200",
-  info: "bg-blue-100 text-blue-700 border-blue-200",
-  neutral: "bg-gray-100 text-gray-500 border-gray-200",
-  outline: "bg-transparent text-black border-black",
-  success: "bg-green-100 text-green-700 border-green-200",
-  warning: "bg-yellow-100 text-yellow-700 border-yellow-200",
+  amber: "bg-warning/10 text-warning border-warning/30",
+  danger: "bg-destructive/10 text-destructive border-destructive/30",
+  draft: "bg-muted text-muted-foreground border-border",
+  info: "bg-primary/10 text-primary border-primary/30",
+  neutral: "bg-muted text-muted-foreground border-border",
+  outline: "bg-transparent text-foreground border-foreground",
+  success: "bg-success/10 text-success border-success/30",
+  warning: "bg-warning/10 text-warning border-warning/30",
 };
 
 interface StatusCellProps<TStatus extends string> {
@@ -282,7 +292,7 @@ export const SerialNumberCell = <T extends RowData>({ row }: { row: Row<DataTabl
   <span>{row.index + 1}</span>
 );
 
-/** Inline `<select>` cell for editing an enum-valued field (e.g. a role) directly in the row. */
+/** Inline select cell for editing an enum-valued field (e.g. a role) directly in the row. */
 export const SelectCell = <V extends string>({
   value,
   options,
@@ -296,20 +306,13 @@ export const SelectCell = <V extends string>({
   disabled?: boolean;
   ariaLabel?: string;
 }) => (
-  <select
+  <SelectOption
+    size="sm"
+    className="w-32 capitalize"
     aria-label={ariaLabel}
     value={value}
     disabled={disabled}
-    onChange={(event) => onChange(event.target.value as V)}
-    className={cn(
-      "h-8 rounded-md border border-input bg-transparent px-2.5 text-sm capitalize outline-none",
-      "focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50 disabled:opacity-50",
-    )}
-  >
-    {options.map((option) => (
-      <option key={option} value={option} className="capitalize">
-        {option}
-      </option>
-    ))}
-  </select>
+    onValueChange={(next) => onChange(next as V)}
+    options={options.map((option) => ({ label: option, value: option }))}
+  />
 );
