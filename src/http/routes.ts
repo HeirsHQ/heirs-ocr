@@ -2,6 +2,9 @@ import { Router, type Request, type Response, type NextFunction } from "express"
 
 import { buildCatalog, getFunction } from "../functions/registry";
 import { authorizeFunction } from "./middleware/authorize";
+import { requireSubscription } from "./middleware/require-subscription";
+import { effectiveLimits } from "../billing/entitlements";
+import { recordDocumentUsage } from "../billing/subscriptions";
 import { runPipeline, type OcrRequest } from "../pipeline";
 import { ocrQueue, type JobRecord } from "../jobs/queue";
 import { sensitivity } from "./middleware/sensitivity";
@@ -44,6 +47,7 @@ ocrRouter.post(
   "/:function",
   auth,
   authorizeFunction,
+  requireSubscription,
   rateLimit,
   sensitivity,
   upload.single(FILE_FIELD),
@@ -58,11 +62,22 @@ ocrRouter.post(
         throw new OcrError("INVALID_ARGS", `File is required in the '${FILE_FIELD}' field`);
       }
 
+      // Plan ceilings (may be tighter than the global caps; trials narrow them
+      // further). File size is checked here; the page cap is threaded onto the
+      // request and enforced in the pipeline, once the true page count is known —
+      // which also covers the async path (the worker runs the same request). The
+      // global MAX_FILE_SIZE_BYTES is already enforced by multer.
+      const planLimits = req.subscription ? effectiveLimits(req.subscription) : undefined;
+      if (planLimits?.maxFileSizeBytes != null && req.file.size > planLimits.maxFileSizeBytes) {
+        throw new OcrError("FILE_TOO_LARGE", `Upload exceeds your plan limit of ${planLimits.maxFileSizeBytes} bytes`);
+      }
+
       const request: OcrRequest = {
         file: { buffer: req.file.buffer, originalName: req.file.originalname },
         args: parseArgsField(req.body?.[ARGS_FIELD]),
         requestId: req.requestId!,
         tenantId: req.tenantId!,
+        planMaxPages: planLimits?.maxPagesPerDocument ?? null,
       };
 
       // Large jobs go async (202 + statusUrl); both paths call the identical
@@ -83,6 +98,16 @@ ocrRouter.post(
       }
 
       const outcome = await runPipeline(def, request, getPipelineDeps());
+      // Meter the processed document against the subscription (period usage +
+      // per-document/overage charge + trial burn-down). Fire-and-forget; no-op when
+      // the tenant has no subscription. Async-queued jobs are metered by the worker
+      // (src/jobs/worker.ts) once they run off-request.
+      if (req.subscription) {
+        recordDocumentUsage(request.tenantId, {
+          pages: outcome.meta.pageCount,
+          tokensUsed: outcome.meta.tokensUsed,
+        });
+      }
       sendSuccess(res, 200, {
         requestId: request.requestId,
         function: def.key,

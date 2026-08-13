@@ -5,6 +5,7 @@ import { runPipeline, type OcrRequest } from "../pipeline";
 import { getFunction } from "../functions/registry";
 import { logger } from "../observability/logger";
 import { getPipelineDeps } from "../http/deps";
+import { recordDocumentUsage } from "../billing/subscriptions";
 import { OcrError } from "../http/errors";
 
 /** Off-request jobs are less latency-sensitive; a modest fixed concurrency. */
@@ -21,7 +22,17 @@ export const processJob = async (data: OcrJobData): Promise<unknown> => {
     throw new OcrError("INVALID_ARGS", `Unknown function '${data.function}'`);
   }
   const request = reviveRequest(data.request);
-  return runPipeline(def, request, getPipelineDeps());
+  const outcome = await runPipeline(def, request, getPipelineDeps());
+  // Meter the processed document against the subscription — the sync path does this
+  // inline in the route handler (routes.ts), so the async path must do it here or a
+  // queued job would be billed as free. Fire-and-forget; `recordDocumentUsage`
+  // resolves the subscription itself and no-ops when the tenant has none. Only
+  // reached on success — `runPipeline` throws (before this line) on failure.
+  recordDocumentUsage(request.tenantId, {
+    pages: outcome.meta.pageCount,
+    tokensUsed: outcome.meta.tokensUsed,
+  });
+  return outcome;
 };
 
 /**

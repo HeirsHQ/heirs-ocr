@@ -25,7 +25,8 @@ COPY scripts ./scripts
 RUN pnpm install --frozen-lockfile
 COPY tsconfig.json ./
 COPY src ./src
-RUN pnpm run build
+# API image builds only the API (tsc). The web console is a separate image (web/Dockerfile).
+RUN pnpm run build:api
 
 # ---- prod-deps: production-only node_modules -----------------------------
 FROM base AS prod-deps

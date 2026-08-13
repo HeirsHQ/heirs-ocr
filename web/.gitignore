@@ -1,0 +1,22 @@
+# Dependencies
+node_modules/
+.pnp
+.pnp.*
+
+# Builds / Next.js output
+.next/
+out/
+build/
+dist/
+*.tsbuildinfo
+next-env.d.ts
+
+# Env (never commit real values; keep the *.example templates)
+.env
+.env.*
+!.env*.example
+
+# Misc
+.DS_Store
+*.log
+.turbo

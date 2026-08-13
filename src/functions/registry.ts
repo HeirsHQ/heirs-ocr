@@ -1,14 +1,18 @@
 import { OcrFunction, type OcrFunctionDefinition, type OcrFunctionKey } from "./define";
-import { autoExtraction } from "./auto-extraction";
-import { documentAuthenticity } from "./document-authenticity";
+import { bankStatementAnalysis } from "./bank-statement-analysis";
 import { documentClassification } from "./document-classification";
+import { documentAuthenticity } from "./document-authenticity";
 import { formDataExtraction } from "./form-data-extraction";
+import { autoExtraction } from "./auto-extraction";
+import { budgetAnalysis } from "./budget-analysis";
 import { idVerification } from "./id-verification";
 import { receiptParsing } from "./receipt-parsing";
 import { textExtraction } from "./text-extraction";
 import { resumeParsing } from "./resume-parsing";
 import type { JsonSchema } from "../llm/schema";
+import { expenseClaim } from "./expense-claim";
 import { toJsonSchema } from "../llm/schema";
+import { loanReview } from "./loan-review";
 import { signing } from "./signing";
 
 /** Heterogeneous arg/result types across the catalog; the registry is keyed by function. */
@@ -24,6 +28,10 @@ const definitions: AnyOcrFunctionDefinition[] = [
   signing,
   documentAuthenticity,
   autoExtraction,
+  budgetAnalysis,
+  expenseClaim,
+  loanReview,
+  bankStatementAnalysis,
 ];
 
 const registry = new Map<OcrFunctionKey, AnyOcrFunctionDefinition>(definitions.map((d) => [d.key, d]));

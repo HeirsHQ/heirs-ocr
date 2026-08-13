@@ -23,6 +23,10 @@ dist-ssr
 *.sln
 *.sw?
 
+# The frontend workspace formats itself (web/ has its own tooling) — keep root
+# prettier off it entirely.
+/web
+
 # Environment variables
 .env
 .env.*

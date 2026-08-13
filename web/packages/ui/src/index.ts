@@ -1,0 +1,41 @@
+// Public surface of @heirs/ui — presentational primitives shared by both apps.
+export * from "./lib/utils";
+export * from "./types";
+
+// shadcn / base-ui primitives
+export * from "./components/ui/badge";
+export * from "./components/ui/button-group";
+export * from "./components/ui/button";
+export * from "./components/ui/chart";
+export * from "./components/ui/checkbox";
+export * from "./components/ui/combobox";
+export * from "./components/ui/command";
+export * from "./components/ui/dialog";
+export * from "./components/ui/dropdown-menu";
+export * from "./components/ui/input-group";
+export * from "./components/ui/input";
+export * from "./components/ui/label";
+export * from "./components/ui/popover";
+export * from "./components/ui/radio-group";
+export * from "./components/ui/select";
+export * from "./components/ui/separator";
+export * from "./components/ui/sonner";
+export * from "./components/ui/switch";
+export * from "./components/ui/table";
+export * from "./components/ui/textarea";
+export * from "./components/ui/toggle-group";
+export * from "./components/ui/toggle";
+
+// shared presentational components
+export * from "./components/shared/confirm-dialog";
+export * from "./components/shared/data-table";
+export * from "./components/shared/empty-state";
+export * from "./components/shared/page-layout";
+export * from "./components/shared/schema-form";
+export * from "./components/shared/searchable-select";
+export * from "./components/shared/secret-callout";
+export * from "./components/shared/select-option";
+export * from "./components/shared/skeleton";
+export * from "./components/shared/stat-tile";
+export * from "./components/shared/tab-panel";
+export * from "./components/shared/toggle-list";

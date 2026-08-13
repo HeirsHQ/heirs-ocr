@@ -176,6 +176,19 @@ export const listTenants = async (): Promise<Array<{ keyHash: string; tenant: Te
 };
 
 /**
+ * The API keys belonging to one tenant org, each paired with its key-hash. Backs the
+ * tenant portal's key-management screen — the raw key is unrecoverable, so the hash
+ * (surfaced to the UI as a short prefix) is the only stable per-key identifier. A
+ * single org can hold several keys (the registry is keyed by key-hash, not tenant).
+ */
+export const listKeysForTenant = async (tenantId: string): Promise<Array<{ keyHash: string; tenant: Tenant }>> => {
+  const { rows } = await query<TenantRow>(`SELECT * FROM tenants WHERE tenant_id = $1 ORDER BY created_at ASC`, [
+    tenantId,
+  ]);
+  return rows.map((row) => ({ keyHash: row.key_hash, tenant: rowToTenant(row) }));
+};
+
+/**
  * The admin console identifies tenants by their key-hash (the raw key is
  * unrecoverable), so the mutators below key off the hash — the counterpart to the
  * raw-key {@link putTenant}/{@link revokeApiKey} used by CLI provisioning.

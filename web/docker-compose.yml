@@ -1,0 +1,46 @@
+# Frontend stack — the admin console and tenant portal, run SEPARATELY from the OCR
+# service (which has its own compose at the repo root). Each app is its own image on
+# its own port/origin. They reach the OCR API over the network via OCR_API_URL; set
+# it to wherever the API runs (a deployed URL, or the host when the API's compose is
+# up locally — the default below uses the Docker host gateway).
+#
+#   docker compose up --build            # admin on :3000, tenant on :3001
+#   OCR_API_URL=https://api.example.com docker compose up --build
+#
+# In production these deploy to their own origins (admin.* and app.*).
+
+services:
+  # --- Admin console (admin.* in production) -------------------------------------
+  # The browser only ever talks same-origin to Next; the server-side proxy reaches
+  # the API and forwards the admin_session cookie.
+  admin:
+    build:
+      context: .
+      dockerfile: apps/admin/Dockerfile
+    image: heirs-admin-web
+    environment:
+      NODE_ENV: production
+      PORT: "3000"
+      OCR_API_URL: "${OCR_API_URL:-http://host.docker.internal:8080}"
+    ports:
+      - "3000:3000"
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+
+  # --- Tenant portal (app.* in production) ---------------------------------------
+  # Its OCR proxy attaches OCR_API_KEY server-side, holding it out of the browser.
+  # Leave OCR_API_KEY empty only when the API runs with AUTH_ENABLED=false.
+  tenant:
+    build:
+      context: .
+      dockerfile: apps/tenant/Dockerfile
+    image: heirs-tenant-web
+    environment:
+      NODE_ENV: production
+      PORT: "3001"
+      OCR_API_URL: "${OCR_API_URL:-http://host.docker.internal:8080}"
+      OCR_API_KEY: "${OCR_API_KEY:-}"
+    ports:
+      - "3001:3001"
+    extra_hosts:
+      - "host.docker.internal:host-gateway"

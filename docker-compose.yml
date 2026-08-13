@@ -8,6 +8,11 @@
 #   docker compose --profile local-infra up --build  # ...plus a throwaway local redis + postgres
 #   docker compose run --rm api node build/scripts/provision-tenant.js list
 #
+# This stack runs only the OCR service (api + worker). The admin console and tenant
+# portal are separate deployables in the web/ workspace — run them on their own with
+# `web/docker-compose.yml` (or `pnpm -C web dev`); they reach the API over the network
+# via their own OCR_API_URL.
+#
 # To run fully local instead of managed: enable the `local-infra` profile AND point
 # REDIS_URL=redis://redis:6379 and DATABASE_URL=postgres://<POSTGRES_USER>:<POSTGRES_PASSWORD>@postgres:5432/<POSTGRES_DB>
 # in your .env (the in-network service names).

@@ -3,6 +3,8 @@
  * without touching call sites. Sensitivity-aware redaction is applied upstream
  *: `pii` functions must never pass raw document text here.
  */
+import { captureLog, type LogLevel } from "./log-buffer";
+
 export type LogFields = Record<string, unknown>;
 
 export interface Logger {
@@ -15,11 +17,14 @@ export interface Logger {
 }
 
 const write = (level: string, msg: string, base: LogFields, fields?: LogFields): void => {
-  const entry = { level, msg, time: new Date().toISOString(), ...base, ...fields };
+  const merged = { ...base, ...fields };
+  const entry = { level, msg, time: new Date().toISOString(), ...merged };
   const line = JSON.stringify(entry);
   if (level === "error") console.error(line);
   else if (level === "warn") console.warn(line);
   else console.log(line);
+  // Mirror into the bounded Redis tail for the console "logs" view (best-effort).
+  captureLog(level as LogLevel, msg, merged);
 };
 
 export const createLogger = (base: LogFields = {}): Logger => ({

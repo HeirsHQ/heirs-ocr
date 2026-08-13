@@ -1,0 +1,18 @@
+{
+  "name": "heirs-frontend",
+  "version": "0.1.0",
+  "private": true,
+  "scripts": {
+    "dev:admin": "pnpm -C apps/admin dev",
+    "dev:tenant": "pnpm -C apps/tenant dev",
+    "dev": "pnpm -r --parallel --filter \"./apps/*\" dev",
+    "build": "pnpm -r --filter \"./apps/*\" build",
+    "build:admin": "pnpm -C apps/admin build",
+    "build:tenant": "pnpm -C apps/tenant build",
+    "lint": "pnpm -r --filter \"./apps/*\" lint",
+    "format": "pnpm -r --filter \"./apps/*\" format",
+    "check": "pnpm -r --filter \"./apps/*\" check",
+    "typecheck": "pnpm -r typecheck"
+  },
+  "packageManager": "pnpm@11.13.0"
+}

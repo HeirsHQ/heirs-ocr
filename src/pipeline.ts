@@ -27,6 +27,14 @@ export type OcrRequest = {
   args: unknown;
   requestId: string;
   tenantId: string;
+  /**
+   * Per-document page ceiling from the tenant's subscription (the plan's
+   * `effectiveLimits.maxPagesPerDocument`, trial cap already folded in), snapshotted
+   * by the route handler at submission. `null`/absent means no plan cap. Enforced in
+   * the pipeline alongside the function's own `maxPages`, so it also holds across the
+   * async queue boundary (the worker runs the same request off-line).
+   */
+  planMaxPages?: number | null;
 };
 
 export type OcrResponseMeta = {
@@ -93,6 +101,15 @@ export const runPipeline = async <TArgs, TResult>(
 
     if (doc.pageCount > def.maxPages) {
       throw new OcrError("PAGE_LIMIT_EXCEEDED", `${def.key} allows ${def.maxPages} pages; got ${doc.pageCount}`);
+    }
+    // Per-subscription page ceiling, layered on top of the function's own cap. May be
+    // tighter than `def.maxPages` (e.g. a trial); reported separately so the caller
+    // knows the limit is a plan constraint, not the function's.
+    if (req.planMaxPages != null && doc.pageCount > req.planMaxPages) {
+      throw new OcrError(
+        "PAGE_LIMIT_EXCEEDED",
+        `Your plan allows ${req.planMaxPages} pages per document; got ${doc.pageCount}`,
+      );
     }
 
     // `pii`/`restricted` functions get a redacting logger so raw document text and

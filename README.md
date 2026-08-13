@@ -1,124 +1,88 @@
 # Heirs OCR Service
 
-A single Express service that exposes a **catalog of document functions**. A caller
-picks a function (parse this receipt, verify this ID, classify this document), uploads
-a file, and passes function-specific arguments. Any supported input — PDF, image, DOCX,
-plain text — is normalized into one canonical markdown + layout representation, then a
-per-function interpretation step runs on top of it.
+Turn any document into structured, validated data through one uniform API. A caller
+picks a **function** (parse this receipt, verify this ID, analyze this bank statement),
+uploads a file, and gets back a typed JSON result. Any supported input — PDF, image,
+DOCX, plain text — is normalized into one canonical markdown + layout representation,
+then a per-function interpretation step runs on top of it.
 
 The organizing principle: **extraction is shared, interpretation is per-function.**
-Adding a new capability means adding one folder under `src/functions/` and one registry
-line — nothing else changes.
+Adding a capability means adding one folder under `src/functions/` and one registry line —
+nothing else changes.
+
+The repo ships three things:
+
+- **The OCR API** — an Express service exposing the function catalog at `/v1/ocr/*`.
+- **A multi-tenant SaaS layer** — Postgres-backed tenants + API keys, an admin console,
+  a self-service tenant portal, and a subscription/billing model with plans, quotas,
+  and entitlements.
+- **A web frontend** — a Next.js app (`web/`) serving both the admin dashboard and the
+  tenant portal.
 
 ## Documentation
 
-| Doc                                                    | What's in it                                                                                 |
-| ------------------------------------------------------ | -------------------------------------------------------------------------------------------- |
-| [docs/architecture.md](./docs/architecture.md)         | Layered design, providers, the function registry, and the request pipeline                   |
-| [docs/glm-ocr.md](./docs/glm-ocr.md)                   | GLM-OCR integration reference — API contract, base64/chunking, data residency, updates       |
-| [docs/tamper-detection.md](./docs/tamper-detection.md) | How `DOCUMENT_AUTHENTICITY` tells a **doctored** document from a legitimately **filled** one |
-| [CHANGELOG.md](./CHANGELOG.md)                         | Notable changes per release                                                                  |
+The documentation set is four files. This README is the map; the other three go deep.
+
+| Doc                                      | What's in it                                                                                                                                                                  |
+| ---------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **[API_SPEC.md](./API_SPEC.md)**         | The external HTTP contract: endpoints, request/response envelopes, error codes, auth, entitlements. Source of truth for callers.                                              |
+| **[TECHNICAL.md](./TECHNICAL.md)**       | Internal design: architecture, providers, GLM-OCR, tamper detection, billing model, observability, ops runbook, security/vendor threat model, governance, tech debt, roadmap. |
+| **[CONTRIBUTION.md](./CONTRIBUTION.md)** | How to set up, build, test, and extend the service — and the conventions to follow.                                                                                           |
+| [CHANGELOG.md](./CHANGELOG.md)           | Notable changes per release.                                                                                                                                                  |
 
 ## How it works
 
 ```
 POST /v1/ocr/:function   (multipart: file + args)
       │
-  1. Ingest     sniff magic bytes → sha256 → validate type
-  2. Extract    router → provider (GLM-OCR / Tesseract / pdf-parse / mammoth) → RecognizedDocument
-  3. Interpret  function.execute(ctx, args)  → Azure OpenAI structured output
+  auth → authorize → subscription → rate-limit → sensitivity → upload
+      │
+  1. Ingest     sniff magic bytes → sha256 → validate type against fn.accepts
+  2. Extract    router → provider (GLM-OCR / Tesseract / pdf-parse / mammoth / plain-text) → RecognizedDocument
+  3. Interpret  fn.execute(ctx, args)  → Azure OpenAI structured output (or deterministic)
   4. Validate   Zod result schema + business rules → typed result
 ```
 
 Extraction is cached (keyed on the file's sha256) so the same document hitting two
-functions pays for OCR once. The orchestration lives in one place —
-[`src/pipeline.ts`](./src/pipeline.ts) — so the sync path and the async queue worker run
-the identical code.
+functions pays for OCR once. Orchestration lives in one place —
+[`src/pipeline.ts`](./src/pipeline.ts) — so the synchronous path and the async queue
+worker run the identical code. Large or multi-page uploads route to a BullMQ queue
+(`202 Accepted` + a `statusUrl`); everything else runs inline.
 
 ## Functions
 
-| Function                  | Does                                       | Notes                                                                       |
-| ------------------------- | ------------------------------------------ | --------------------------------------------------------------------------- |
-| `TEXT_EXTRACTION`         | Raw markdown / plain text                  | No LLM. The cheap path + smoke test.                                        |
-| `DOCUMENT_CLASSIFICATION` | Label a document                           | Page-1-only by default; composable for auto-routing.                        |
-| `RECEIPT_PARSING`         | Merchant, items, totals                    | NGN default, 7.5% VAT, deterministic total reconciliation.                  |
-| `FORM_DATA_EXTRACTION`    | Caller-defined fields                      | Dynamic schema; field-count/depth caps.                                     |
-| `RESUME_PARSING`          | Contact, experience, education…            | Uses layout bboxes to fix two-column reading order.                         |
-| `ID_VERIFICATION`         | NIN / passport / licence fields + checks   | **PII.** MRZ validated deterministically. Document-content-only assurance.  |
-| `SIGNING`                 | Signature/seal detection, execution status | Needs GLM-OCR layout + seal strength.                                       |
-| `DOCUMENT_AUTHENTICITY`   | Doctored-vs-filled tamper signals          | Deterministic (no OCR/LLM); PDF signature + metadata, image editor markers. |
+Thirteen functions, discoverable at runtime via `GET /v1/ocr/functions` (which returns
+JSON Schemas for args and result per function).
 
-`GET /v1/ocr/functions` returns the live catalog with JSON Schemas for args and result
-per function.
+| Function                  | Does                                                  | LLM    | Sensitivity |
+| ------------------------- | ----------------------------------------------------- | ------ | ----------- |
+| `TEXT_EXTRACTION`         | Canonical markdown / plain text                       | no     | standard    |
+| `DOCUMENT_CLASSIFICATION` | Label a document into a type                          | yes    | standard    |
+| `RECEIPT_PARSING`         | Merchant, line items, totals, tax reconciliation      | yes    | standard    |
+| `FORM_DATA_EXTRACTION`    | Caller-defined fields (dynamic schema)                | yes    | standard    |
+| `RESUME_PARSING`          | Contact, experience, education                        | yes    | standard    |
+| `ID_VERIFICATION`         | ID fields + MRZ, verified deterministically           | yes    | **pii**     |
+| `SIGNING`                 | Signature/seal detection + execution status           | vision | standard    |
+| `DOCUMENT_AUTHENTICITY`   | Doctored-vs-filled tamper signals (raw bytes)         | no     | standard    |
+| `AUTO_EXTRACTION`         | Classify, then route to the matching parser           | yes    | **pii**     |
+| `BUDGET_ANALYSIS`         | Categorized budget line items + reconciliation        | yes    | standard    |
+| `EXPENSE_CLAIM`           | Claimant, line items, totals, missing-receipt check   | yes    | standard    |
+| `LOAN_REVIEW`             | Borrower financials + affordability recommendation    | yes    | **pii**     |
+| `BANK_STATEMENT_ANALYSIS` | Transactions, balances, inflow/outflow reconciliation | yes    | **pii**     |
 
-## Authentication
+Deterministic post-validation (MRZ checksums, receipt/expense/budget totals,
+bank-statement reconciliation, tamper heuristics) runs in code — the LLM extracts what
+the document shows; verdicts are recomputed and never trust the model's arithmetic.
 
-The service is **server-to-server**: consuming apps call it from their **backend** with
-a secret API key — never from browser JavaScript (which would expose the key).
-
-```
-Authorization: Bearer <api-key>        # or:  X-API-Key: <api-key>
-```
-
-Keys map to **tenants** held in Postgres. Only the sha256 of each key is stored, so a
-database dump can't be replayed as credentials. Provision and revoke at runtime with no
-redeploy:
-
-```bash
-pnpm provision:tenant create acme --rate 120 --functions RECEIPT_PARSING,TEXT_EXTRACTION
-#   → prints the raw API key ONCE (store it now; it can't be recovered)
-pnpm provision:tenant revoke <api-key>
-```
-
-`--functions` scopes a key to specific functions (omit for all) — e.g. keep
-`ID_VERIFICATION` off keys that shouldn't touch PII. A disallowed call returns `403 FORBIDDEN`.
-
-Because it's server-to-server, **CORS is default-closed** — backend callers ignore CORS,
-and no browser origin is allowed unless you explicitly list it in `CORS_ALLOWED_ORIGINS`
-(the wildcard `*` is never used). Set `AUTH_ENABLED=false` to bypass auth for local dev only.
-
-## Admin console
-
-A small operator UI is served by the same Express app at **`/admin`** — a static,
-dependency-free page backed by JSON routes under `/admin/api`. It does two things:
-
-- **Tenant management** — create (raw key shown once), enable/disable, revoke, and edit
-  rate limits / allowed functions, without touching the CLI.
-- **Observability** — request counts, error rate, tokens, provider fallbacks, a
-  health/provider matrix, BullMQ queue depth + recent jobs, and per-tenant usage.
-
-Access is by **named admin users** (stored in Postgres, like tenants; passwords hashed with
-argon2) with three roles: `owner` (everything, incl. managing admins), `manager` (tenant
-CRUD + observability), and `viewer` (read-only observability). Login sets an httpOnly
-session cookie; the UI only renders what the role permits.
-
-The **first owner is seeded automatically at startup** when the admin registry is empty
-(idempotent — it never overwrites a changed password or a deleted account), using
-`ADMIN_BOOTSTRAP_EMAIL` / `ADMIN_BOOTSTRAP_PASSWORD`. So a fresh deploy just works: open
-`http://localhost:8080/admin`, sign in, and **change the password**. Owners then manage
-other admins from the UI.
-
-A `provision:admin` CLI is also available for scripted management:
-
-```bash
-pnpm provision:admin list
-pnpm provision:admin create --email a@x.com --role manager
-pnpm provision:admin delete <email>
-```
-
-Session lifetime is set by `ADMIN_SESSION_TTL_SECONDS` (default 8h). Since `/admin` is
-same-origin it needs no CORS entry; keep it on an internal network in production.
-
-## API
+## The API in one screen
 
 ```
-GET  /v1/ocr/functions        catalog + JSON Schemas
-POST /v1/ocr/:function         multipart: `file` (the document) + `args` (JSON string)
+GET  /v1/ocr/functions        catalog + JSON Schemas (no auth)
+POST /v1/ocr/:function         multipart: file + args (JSON string)
 GET  /v1/ocr/jobs/:id          async job status + result
 GET  /healthz  /readyz         liveness / readiness
+GET  /metrics                  Prometheus scrape (bearer-guarded)
 ```
-
-All `/v1/ocr/*` routes require a valid API key (see [Authentication](#authentication)).
 
 **Success**
 
@@ -144,75 +108,136 @@ All `/v1/ocr/*` routes require a valid API key (see [Authentication](#authentica
 { "error": { "code": "NO_TEXT_DETECTED", "message": "...", "requestId": "req_01J...", "retryable": false } }
 ```
 
-Codes: `UNAUTHORIZED` · `FORBIDDEN` · `UNSUPPORTED_MEDIA_TYPE` · `FILE_TOO_LARGE` ·
-`PAGE_LIMIT_EXCEEDED` · `INVALID_ARGS` · `NO_TEXT_DETECTED` · `EXTRACTION_FAILED` ·
-`PROVIDER_UNAVAILABLE` · `INTERPRETATION_FAILED` · `SCHEMA_VALIDATION_FAILED` · `RATE_LIMITED`.
+Full contract — every code, status, and field — is in **[API_SPEC.md](./API_SPEC.md)**.
 
-> The synchronous path is the one wired today. The async queue (`202 Accepted` +
-> `statusUrl` for large/multi-page requests) and the `GET /jobs/:id` lookup are staged
-> seams — see [docs/architecture.md § Not yet wired](./docs/architecture.md#not-yet-wired).
+## Authentication
+
+The OCR API is **server-to-server**: consuming apps call it from their **backend** with a
+secret API key — never from browser JavaScript (which would expose the key).
+
+```
+Authorization: Bearer <api-key>        # or:  X-API-Key: <api-key>
+```
+
+Keys map to **tenants** held in Postgres. Only the sha256 of each key is stored, so a
+database dump can't be replayed as credentials. Provision and revoke at runtime with no
+redeploy (or from the admin console / tenant portal):
+
+```bash
+pnpm provision:tenant create acme --rate 120 --functions RECEIPT_PARSING,TEXT_EXTRACTION
+#   → prints the raw API key ONCE (store it now; it can't be recovered)
+pnpm provision:tenant revoke <api-key>
+```
+
+CORS is **default-closed** (backend callers ignore CORS; no browser origin is allowed
+unless explicitly listed in `CORS_ALLOWED_ORIGINS` — the wildcard `*` is never used).
+Set `AUTH_ENABLED=false` to bypass auth for local dev only (it throws at boot in prod).
+
+## Subscriptions & multi-tenancy
+
+Every tenant may carry a **subscription** to a **plan** (Free Trial, Pay-As-You-Go,
+Starter, Business, Enterprise). The plan's entitlements — allowed functions, sensitivity
+ceiling, per-minute rate, document quota, file/page caps, feature flags — are enforced
+centrally by middleware and metered per processed document. A tenant with no subscription
+is treated as unlimited (backward-compatible). See TECHNICAL.md § Billing & subscriptions.
+
+Two operator surfaces, both served by the same Express app and by the Next.js frontend:
+
+- **Admin console** (`/admin`, `/admin/api`) — manage tenants, admins, plans,
+  subscriptions, and observe request counts, error rate, tokens, queue depth, and usage.
+  Role-based: `owner` / `manager` / `viewer`. The first owner is seeded from env at
+  startup.
+- **Tenant portal** (`/tenant/api`) — a tenant's own users manage their API keys and
+  team (`owner` / `member` roles), and run OCR in-app via a session cookie.
 
 ## Quickstart
 
+This repo holds **two independent deployables**: the OCR service (backend, at the
+repo root) and the frontend (`web/` — a self-contained pnpm workspace with an admin
+console and a tenant portal). They build, run, and deploy separately.
+
 ```bash
+# --- OCR service (backend) ---
 pnpm install
-cp .env.example .env     # then fill in keys
-pnpm dev                 # nodemon
-# or
-pnpm build && pnpm start
+cp .env.example .env       # then fill in Redis/Postgres URLs (+ Azure/GLM keys to enable those paths)
+pnpm dev                   # API only (nodemon)
+pnpm build && pnpm start   # production: tsc → node build/index.js
+pnpm worker                # async queue worker: node build/worker.js
 ```
 
-Requires Node 22+, a Redis instance (extraction cache + queue + rate limiter + sessions),
-a Postgres database (tenants, admin users, usage), and — to enable the LLM/GLM paths —
-Azure OpenAI and GLM-OCR credentials. The Postgres schema is created idempotently at startup.
+```bash
+# --- Frontend apps (run separately) ---
+cd web
+pnpm install
+pnpm dev                   # admin on :3000, tenant on :3001 (both apps)
+pnpm build                 # builds apps/admin + apps/tenant
+```
+
+The apps proxy API calls to `OCR_API_URL` (see each app's `.env.local.example`).
+
+Requires **Node 22+**, **pnpm**, a **Redis** instance (extraction cache + queue + rate
+limiter + sessions), and a **Postgres** database (tenants, admins, usage, plans,
+subscriptions). To enable the LLM/GLM paths, add Azure OpenAI and GLM-OCR credentials.
+The Postgres schema is created idempotently at startup.
+
+> `docker compose up --build` runs only the OCR service (`api` + `worker`) against your
+> configured `REDIS_URL` / `DATABASE_URL`; add `--profile local-infra` for a throwaway
+> Redis + Postgres. The apps have their own stack — `docker compose -f web/docker-compose.yml
+up --build` (admin :3000, tenant :3001). See TECHNICAL.md § Operations for the topology.
 
 > If `GLM_ENABLED=true`, a `GLM_API_KEY` is required or the service throws at startup.
-> Likewise `AZURE_OPENAI_ENABLED=true` requires `AZURE_OPENAI_API_KEY`. Set either flag
-> to `false` to run without that dependency.
+> Likewise `AZURE_OPENAI_ENABLED=true` requires `AZURE_OPENAI_API_KEY`. Leave either flag
+> `false` to run without that dependency.
 
 ## Configuration
 
-Environment is Zod-validated at startup in [`src/config/env.ts`](./src/config/env.ts) —
-an invalid config throws immediately. Copy [`.env.example`](./.env.example) and fill it in.
+Environment is Zod-validated at startup in [`src/config/env.ts`](./src/config/env.ts) — an
+invalid config throws immediately. Copy [`.env.example`](./.env.example) and fill it in.
 
-| Var                                                                        | Default                        | Purpose                                                |
-| -------------------------------------------------------------------------- | ------------------------------ | ------------------------------------------------------ |
-| `PORT`                                                                     | `8080`                         | HTTP port                                              |
-| `NODE_ENV`                                                                 | `development`                  | `development` \| `production` \| `test`                |
-| `REDIS_URL`                                                                | **required** (no default)      | Extraction cache + BullMQ + rate limiter + sessions    |
-| `DATABASE_URL`                                                             | **required** (no default)      | Postgres: tenants, admin users, usage counters         |
-| `AUTH_ENABLED`                                                             | `true`                         | API-key auth; `false` bypasses (local dev only)        |
-| `API_KEY_CACHE_TTL_SECONDS`                                                | `30`                           | In-memory TTL for validated keys                       |
-| `CORS_ALLOWED_ORIGINS`                                                     | `` (closed)                    | Comma-separated browser origins; empty = no CORS       |
-| `RATE_LIMIT_ENABLED`                                                       | `true`                         | Per-tenant rate limiting (fails open if Redis is down) |
-| `RATE_LIMIT_MAX`                                                           | `60`                           | Requests per window                                    |
-| `RATE_LIMIT_WINDOW_SECONDS`                                                | `60`                           | Rate-limit window                                      |
-| `MAX_FILE_SIZE_BYTES`                                                      | 50 MB                          | Upload cap                                             |
-| `ASYNC_PAGE_THRESHOLD`                                                     | `5`                            | Go async above this many pages                         |
-| `ASYNC_SIZE_THRESHOLD_BYTES`                                               | 5 MB                           | Go async above this size                               |
-| `EXTRACTION_CACHE_TTL_SECONDS`                                             | 7 days                         | Extraction cache TTL                                   |
-| `AZURE_OPENAI_ENABLED`                                                     | `false`                        | Interpretation layer master switch                     |
-| `AZURE_OPENAI_API_KEY` / `_ENDPOINT` / `_API_VERSION` / `_DEPLOYMENT_NAME` | —                              | Required when enabled                                  |
-| `GLM_ENABLED`                                                              | `false`                        | GLM-OCR master switch                                  |
-| `GLM_API_KEY`                                                              | —                              | Required when enabled                                  |
-| `GLM_BASE_URL`                                                             | `https://api.z.ai/api/paas/v4` | Swap to a self-hosted URL for PII                      |
-| `GLM_MAX_PAGES`                                                            | `30`                           | Chunk-size ceiling                                     |
-| `GLM_CONCURRENCY`                                                          | `8`                            | Bounded parallel page calls                            |
+| Var                                                                                 | Default              | Purpose                                                      |
+| ----------------------------------------------------------------------------------- | -------------------- | ------------------------------------------------------------ |
+| `PORT`                                                                              | `8080`               | HTTP port                                                    |
+| `NODE_ENV`                                                                          | `development`        | `development` \| `production` \| `test`                      |
+| `REDIS_URL`                                                                         | **required**         | Extraction cache + BullMQ + rate limiter + sessions          |
+| `DATABASE_URL`                                                                      | **required**         | Postgres: tenants, admins, usage, plans, subscriptions       |
+| `AUTH_ENABLED`                                                                      | `true`               | API-key auth; `false` bypasses (local dev only)              |
+| `API_KEY_CACHE_TTL_SECONDS`                                                         | `30`                 | In-memory TTL for validated keys                             |
+| `ADMIN_BOOTSTRAP_EMAIL` / `ADMIN_BOOTSTRAP_PASSWORD`                                | —                    | Seeds the first admin owner at startup                       |
+| `ADMIN_SESSION_TTL_SECONDS` / `TENANT_SESSION_TTL_SECONDS`                          | `28800` (8h)         | Admin / tenant portal session lifetime                       |
+| `CORS_ALLOWED_ORIGINS`                                                              | `` (closed)          | Comma-separated browser origins; empty = no CORS             |
+| `RATE_LIMIT_ENABLED` / `_MAX` / `_WINDOW_SECONDS`                                   | `true` / `60` / `60` | Per-tenant rate limiting (fails open if Redis down)          |
+| `MAX_FILE_SIZE_BYTES`                                                               | 50 MiB               | Upload cap                                                   |
+| `ASYNC_PAGE_THRESHOLD` / `ASYNC_SIZE_THRESHOLD_BYTES`                               | `5` / 5 MiB          | Above either → job goes async                                |
+| `EXTRACTION_CACHE_TTL_SECONDS`                                                      | 7 days               | Extraction cache TTL                                         |
+| `METRICS_AUTH_TOKEN`                                                                | unset                | Bearer token for `/metrics`; unset = open (private net only) |
+| `LLM_COST_NGN_PER_1K_TOKENS` / `LOW_CONFIDENCE_THRESHOLD`                           | `0` / `0.7`          | Cost + quality SLI knobs                                     |
+| `OTEL_EXPORTER_OTLP_ENDPOINT`                                                       | unset                | Set → traces ship over OTLP/HTTP                             |
+| `AZURE_OPENAI_ENABLED` (+ `_API_KEY`/`_ENDPOINT`/`_API_VERSION`/`_DEPLOYMENT_NAME`) | `false`              | Interpretation layer master switch                           |
+| `GLM_ENABLED` (+ `_API_KEY`)                                                        | `false`              | GLM-OCR master switch                                        |
+| `GLM_BASE_URL` / `GLM_MAX_PAGES` / `GLM_CONCURRENCY`                                | z.ai / `30` / `8`    | GLM endpoint (swap for PII/self-host), chunk + concurrency   |
 
 ## Project layout
 
 ```
 src/
   config/         env (Zod) + provider policy + CORS
-  auth/           Postgres-backed tenant / API-key + admin registry
+  auth/           Postgres-backed tenants / API keys + admins + tenant-users + sessions + login throttle
+  billing/        plans, subscriptions, entitlements (pure decisions), plan store
   ingest/         multer upload + magic-byte sniff + sha256
   providers/      OcrProvider implementations (glm/ tesseract pdf-text mammoth plain-text) + router
   functions/      one folder per function: args, result, prompt, execute + registry
   authenticity/   deterministic tamper analysis (PDF + image)
   llm/            Azure OpenAI structured-output wrapper; Zod → JSON Schema
-  http/           routes, error envelope, middleware
+  http/           routes (ocr, admin, tenant), error envelope, middleware
   jobs/           BullMQ queue + worker for async requests
-  observability/  logger, metrics, tracing
-  scripts/        provision-tenant CLI
-docs/             see the table above
+  observability/  logger (redaction), metrics, tracing, usage
+  scripts/        provision-tenant / provision-admin CLIs
+web/              Next.js frontend (admin dashboard + tenant portal)
 ```
+
+See **[TECHNICAL.md](./TECHNICAL.md)** for the full design and **[CONTRIBUTION.md](./CONTRIBUTION.md)**
+to start hacking.
+
+## License
+
+UNLICENSED — © Heirs. Internal use.

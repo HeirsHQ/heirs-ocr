@@ -28,6 +28,14 @@ export const getRedis = (): Redis => {
 };
 
 /**
+ * The shared client **only if it already exists** — never creates one. Used by
+ * side-channel writers (the log ring buffer) that want to piggyback on an
+ * established connection but must not, by their mere presence, open a Redis socket
+ * in a process that otherwise never touches Redis (short-lived CLIs, unit tests).
+ */
+export const peekRedis = (): Redis | undefined => client;
+
+/**
  * Resolves once the shared client is connected and writeable. Because commands
  * use `enableOfflineQueue: false`, a short-lived process (the provisioning CLIs)
  * would otherwise fire its first command before the socket is ready and get
