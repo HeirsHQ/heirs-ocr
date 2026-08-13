@@ -1,8 +1,8 @@
 import React from "react";
 
-import { Header } from "./header";
-import { Sidebar } from "./sidebar";
 import type { Area } from "@/config/route";
+import { Sidebar } from "./sidebar";
+import { Header } from "./header";
 
 interface Props {
   area: Area;
@@ -23,7 +23,7 @@ export const AppShell = ({ area, children }: Props) => (
     <div className="flex h-full min-w-0 flex-1 flex-col">
       <Header />
       <main className="min-h-0 flex-1 overflow-y-auto">
-        <div className="mx-auto w-full max-w-[90rem] px-6 py-6">{children}</div>
+        <div className="mx-auto w-full max-w-360 px-6 py-6">{children}</div>
       </main>
     </div>
   </div>
