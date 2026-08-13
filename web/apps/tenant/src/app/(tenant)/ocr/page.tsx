@@ -3,6 +3,10 @@
 import { useEffect, useState } from "react";
 
 import { PageLayout, SchemaForm, cleanArgs, defaultArgs, hasArgsForm, type ArgValues } from "@/components/shared";
+import { Field, SelectOption, StatusBadge } from "@heirs/ui";
+import { Textarea } from "@heirs/ui";
+import { Button } from "@heirs/ui";
+import { Input } from "@heirs/ui";
 import type {
   OcrAccepted,
   OcrCatalogEntry,
@@ -12,10 +16,6 @@ import type {
   OcrResponseMeta,
   OcrSuccess,
 } from "@/types/ocr";
-import { Field, SelectOption, StatusBadge } from "@heirs/ui";
-import { Textarea } from "@heirs/ui";
-import { Button } from "@heirs/ui";
-import { Input } from "@heirs/ui";
 
 /** Mirrors the backend's MAX_FILE_SIZE_BYTES default — rejects locally before a long upload. */
 const MAX_FILE_SIZE_BYTES = 50 * 1024 * 1024;
@@ -256,7 +256,6 @@ const Page = () => {
   return (
     <PageLayout title="Run OCR" subtitle="Upload a document, pick a function, and see the structured result.">
       <div className="grid items-start gap-6 lg:grid-cols-2">
-        {/* Request */}
         <div className="bg-card border-hairline space-y-5 rounded-lg border p-5">
           <Field
             label="Function"
@@ -297,7 +296,6 @@ const Page = () => {
             )}
             hint={file ? `${file.name} · ${formatBytes(file.size)}` : undefined}
           />
-
           {schemaMode ? (
             <Field label="Args" hint="Function-specific options; defaults apply when a field is left empty.">
               <SchemaForm schema={selected?.argsSchema} values={argValues} onChange={setArgValues} />
@@ -318,7 +316,6 @@ const Page = () => {
               )}
             />
           )}
-
           <Button onClick={run} disabled={busy || !selectedKey} className="w-full sm:w-auto">
             {busy ? "Running…" : "Run document"}
           </Button>
@@ -331,7 +328,6 @@ const Page = () => {
               {error}
             </div>
           )}
-
           {jobId && (
             <div className="border-hairline space-y-2 rounded-md border px-3 py-3 text-sm">
               <StatusBadge
@@ -345,7 +341,6 @@ const Page = () => {
               </p>
             </div>
           )}
-
           {result && (
             <>
               {result.meta && (
@@ -362,12 +357,11 @@ const Page = () => {
                   Request <span className="font-mono">{result.requestId}</span> — quote this when contacting support.
                 </p>
               )}
-              <pre className="border-hairline bg-muted/40 max-h-[60dvh] overflow-auto rounded-md border p-3 font-mono text-xs">
+              <pre className="border-hairline bg-muted/40 max-h-[60dvh] overflow-clip rounded-md border p-3 font-mono text-xs whitespace-pre-wrap wrap-break-word">
                 {JSON.stringify(result.result, null, 2)}
               </pre>
             </>
           )}
-
           {!error && !result && !jobId && (
             <p className="text-muted-foreground py-8 text-center text-sm">
               Pick a function and a document, then run it. The structured result appears here.
