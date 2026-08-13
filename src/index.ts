@@ -4,9 +4,9 @@ import http from "http";
 import { initTracing, shutdownTracing } from "./observability/otel";
 import { ensureBootstrapAdmin } from "./auth/admins";
 import { seedPlans } from "./billing/plan-store";
-import { closeDb, ensureSchema } from "./db";
+import { closeDb, ensureSchema, whenDbReady } from "./db";
 import { logger } from "./observability/logger";
-import { closeRedis } from "./redis";
+import { closeRedis, whenRedisReady } from "./redis";
 import { env } from "./config/env";
 import { main } from "./main";
 
@@ -21,16 +21,39 @@ if (env.NODE_ENV === "production" && !env.METRICS_AUTH_TOKEN) {
   logger.warn("/metrics is unauthenticated (METRICS_AUTH_TOKEN unset) — restrict this port to a private network");
 }
 
-// Create the durable schema (idempotent), then seed the first admin console owner
-// and the default plan catalog when each is empty. A failure here (e.g. Postgres
-// briefly down) must not stop the service from starting — it's retried on the next
-// boot and the console is simply unusable until it lands.
-ensureSchema()
-  .then(ensureBootstrapAdmin)
-  .then(seedPlans)
-  .catch((err) => logger.error("boot bootstrap failed", { err: err instanceof Error ? err.message : String(err) }));
+/**
+ * Boot sequence. We wait for the backing stores to be reachable **before** the
+ * server accepts traffic — otherwise the very first request (e.g. an admin login,
+ * or resolving a session while loading data) races an unconnected Redis/Postgres
+ * client and gets a spurious 503 "store unavailable", which then "fixes itself" on
+ * the next attempt once the sockets are up. Waiting here removes that cold-start
+ * race entirely.
+ *
+ * Schema creation + seeding the first console owner and default plan catalog run
+ * after the connections are up; they stay best-effort (retried on the next boot),
+ * so a transient seed failure doesn't take the whole service down. If the stores
+ * can't be reached at all, we exit non-zero so the orchestrator restarts us rather
+ * than serving a broken instance.
+ */
+const boot = async (): Promise<void> => {
+  await Promise.all([whenRedisReady(), whenDbReady()]);
+  try {
+    await ensureSchema();
+    await ensureBootstrapAdmin();
+    await seedPlans();
+  } catch (err) {
+    logger.error("boot bootstrap failed", { err: err instanceof Error ? err.message : String(err) });
+  }
+};
 
-server.listen(Number(env.PORT), () => logger.info(`service listening on http://localhost:${env.PORT}`));
+boot()
+  .then(() => server.listen(Number(env.PORT), () => logger.info(`service listening on http://localhost:${env.PORT}`)))
+  .catch((err) => {
+    logger.error("boot failed: backing stores unavailable", {
+      err: err instanceof Error ? err.message : String(err),
+    });
+    process.exit(1);
+  });
 
 /**
  * Graceful shutdown: stop accepting new connections, let in-flight requests

@@ -1,16 +1,22 @@
-name: Build App
+name: API CI
 
+# Backend (OCR service) only. The frontend apps in web/ have their own workflow
+# (web-ci.yaml); changes confined to web/ don't trigger this one.
 on:
   push:
     branches:
       - main
       - staging
       - development
+    paths-ignore:
+      - "web/**"
   pull_request:
     branches:
       - main
       - staging
       - development
+    paths-ignore:
+      - "web/**"
 
 jobs:
   build:
@@ -39,5 +45,5 @@ jobs:
       - name: Test
         run: pnpm test
 
-      - name: Build app
-        run: pnpm run build
+      - name: Build API
+        run: pnpm run build:api

@@ -152,28 +152,38 @@ Two operator surfaces, both served by the same Express app and by the Next.js fr
 
 ## Quickstart
 
+This repo holds **two independent deployables**: the OCR service (backend, at the
+repo root) and the frontend (`web/` — a self-contained pnpm workspace with an admin
+console and a tenant portal). They build, run, and deploy separately.
+
 ```bash
+# --- OCR service (backend) ---
 pnpm install
 cp .env.example .env       # then fill in Redis/Postgres URLs (+ Azure/GLM keys to enable those paths)
-pnpm dev                   # API (nodemon) + web (concurrently)
-# or, backend only:
-pnpm dev:api
-# or, production build:
-pnpm build && pnpm start   # web server: node build/index.js
+pnpm dev                   # API only (nodemon)
+pnpm build && pnpm start   # production: tsc → node build/index.js
 pnpm worker                # async queue worker: node build/worker.js
 ```
 
-The web app can also be run on its own from `web/` (`pnpm install && pnpm dev`, port 3000);
-it proxies API calls to `OCR_API_URL` (see `web/.env.local.example`).
+```bash
+# --- Frontend apps (run separately) ---
+cd web
+pnpm install
+pnpm dev                   # admin on :3000, tenant on :3001 (both apps)
+pnpm build                 # builds apps/admin + apps/tenant
+```
+
+The apps proxy API calls to `OCR_API_URL` (see each app's `.env.local.example`).
 
 Requires **Node 22+**, **pnpm**, a **Redis** instance (extraction cache + queue + rate
 limiter + sessions), and a **Postgres** database (tenants, admins, usage, plans,
 subscriptions). To enable the LLM/GLM paths, add Azure OpenAI and GLM-OCR credentials.
 The Postgres schema is created idempotently at startup.
 
-> With `docker compose up --build` you get `api` + `worker` + `web` against your
-> configured `REDIS_URL` / `DATABASE_URL`. Add `--profile local-infra` to also start a
-> throwaway Redis + Postgres. See TECHNICAL.md § Operations for the topology.
+> `docker compose up --build` runs only the OCR service (`api` + `worker`) against your
+> configured `REDIS_URL` / `DATABASE_URL`; add `--profile local-infra` for a throwaway
+> Redis + Postgres. The apps have their own stack — `docker compose -f web/docker-compose.yml
+> up --build` (admin :3000, tenant :3001). See TECHNICAL.md § Operations for the topology.
 
 > If `GLM_ENABLED=true`, a `GLM_API_KEY` is required or the service throws at startup.
 > Likewise `AZURE_OPENAI_ENABLED=true` requires `AZURE_OPENAI_API_KEY`. Leave either flag

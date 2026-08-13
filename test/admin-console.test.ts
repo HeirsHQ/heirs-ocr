@@ -91,7 +91,11 @@ vi.mock("../src/db", () => ({
   whenDbReady: async () => {},
   closeDb: async () => {},
 }));
-vi.mock("../src/redis", () => ({ getRedis: () => fakeRedis, whenRedisReady: async () => {} }));
+vi.mock("../src/redis", () => ({
+  getRedis: () => fakeRedis,
+  peekRedis: () => fakeRedis,
+  whenRedisReady: async () => {},
+}));
 
 import { getSettings, putSettings } from "../src/config/settings-store";
 import { listAuditEvents, recordAuditEvent } from "../src/observability/audit";

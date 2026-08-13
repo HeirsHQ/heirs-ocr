@@ -22,8 +22,10 @@ dist-ssr
 *.njsproj
 *.sln
 *.sw?
-/web/.next/*
-/web/.node_modules
+
+# The frontend workspace formats itself (web/ has its own tooling) — keep root
+# prettier off it entirely.
+/web
 
 # Environment variables
 .env

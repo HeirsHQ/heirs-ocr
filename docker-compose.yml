@@ -4,13 +4,14 @@
 # TLS, Prisma Postgres). No secrets or connection strings are hardcoded here; they
 # come from .env via `env_file`, and env.ts fails fast if a required one is missing.
 #
-#   docker compose up --build                      # api + worker + web → your .env services
+#   docker compose up --build                      # api + worker → your .env services
 #   docker compose --profile local-infra up --build  # ...plus a throwaway local redis + postgres
 #   docker compose run --rm api node build/scripts/provision-tenant.js list
 #
-# The web console comes up on http://localhost:3000 and reaches the API in-network at
-# http://api:8080 (never from the browser). Set OCR_API_KEY in .env for a provisioned
-# tenant key, or run the API with AUTH_ENABLED=false and leave it empty.
+# This stack runs only the OCR service (api + worker). The admin console and tenant
+# portal are separate deployables in the web/ workspace — run them on their own with
+# `web/docker-compose.yml` (or `pnpm -C web dev`); they reach the API over the network
+# via their own OCR_API_URL.
 #
 # To run fully local instead of managed: enable the `local-infra` profile AND point
 # REDIS_URL=redis://redis:6379 and DATABASE_URL=postgres://<POSTGRES_USER>:<POSTGRES_PASSWORD>@postgres:5432/<POSTGRES_DB>
@@ -51,25 +52,6 @@ services:
       postgres:
         condition: service_healthy
         required: false
-
-  # --- Web console (Next.js) -----------------------------------------------------
-  # Its own image. The browser only ever talks same-origin to Next; the server-side
-  # proxy routes reach the API over the compose network at http://api:8080, holding
-  # OCR_API_KEY out of the browser. OCR_API_KEY is interpolated from the root .env
-  # (or the shell); leave it empty only when the API runs with AUTH_ENABLED=false.
-  web:
-    build: ./web
-    image: heirs-ocr-web
-    environment:
-      NODE_ENV: production
-      PORT: "3000"
-      OCR_API_URL: "http://api:8080"
-      OCR_API_KEY: "${OCR_API_KEY:-}"
-    ports:
-      - "3000:3000"
-    depends_on:
-      api:
-        condition: service_started
 
   # --- Optional local infra (profile: local-infra) -------------------------------
   # Throwaway Redis + Postgres for a fully-local stack with no managed services.

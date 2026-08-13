@@ -38,10 +38,11 @@ pnpm build && pnpm start    # production build, then node build/index.js
 pnpm worker                 # async queue worker (node build/worker.js)
 ```
 
-The Next.js frontend is its own pnpm project in `web/` — you can also run it directly:
+The frontend is a self-contained pnpm workspace in `web/` (two apps — admin console + tenant
+portal — sharing `packages/*`), run separately from the backend:
 
 ```bash
-cd web && pnpm install && pnpm dev   # http://localhost:3000, proxies to OCR_API_URL
+cd web && pnpm install && pnpm dev   # admin :3000, tenant :3001; both proxy to OCR_API_URL
 ```
 
 The Postgres schema is created idempotently at startup; no migration step is needed. For local
