@@ -1,17 +1,17 @@
 "use client";
 
-import { useState } from "react";
+import { Archive } from "lucide-react";
 import { DatabaseBackup, Loader, RotateCcw } from "lucide-react";
+import { useState } from "react";
 import { toast } from "sonner";
 
-import { Archive } from "lucide-react";
 
+import { useBackups, useCreateBackup, useRestoreBackup } from "@/hooks/api/use-admin-console";
 import { ConfirmDialog, EmptyState, PageLayout, Skeleton } from "@/components/shared";
+import type { BackupManifest } from "@/types/admin-console";
+import { getErrorMessage } from "@heirs/api-client";
 import { Button } from "@heirs/ui";
 import { Input } from "@heirs/ui";
-import { useBackups, useCreateBackup, useRestoreBackup } from "@/hooks/api/use-admin-console";
-import { getErrorMessage } from "@heirs/api-client";
-import type { BackupManifest } from "@/types/admin-console";
 
 const fmt = (iso: string) => new Date(iso).toLocaleString();
 const kb = (n: number) => `${(n / 1024).toFixed(1)} KB`;
@@ -74,7 +74,7 @@ const Page = () => {
         {backups.isPending && <Skeleton skeleton="table" columns={6} rows={5} />}
 
         {backups.isError && (
-          <div className="border-hairline rounded-md border border-destructive/40 bg-destructive/10 px-3 py-2 text-sm text-destructive">
+          <div className="rounded-md border border-destructive/40 bg-destructive/10 px-3 py-2 text-sm text-destructive">
             {getErrorMessage(backups.error)}
           </div>
         )}

@@ -1,13 +1,13 @@
 "use client";
 
-import { useState } from "react";
 import { Terminal } from "lucide-react";
+import { useState } from "react";
 
 import { EmptyState, PageLayout, Skeleton } from "@/components/shared";
 import { useLogs } from "@/hooks/api/use-admin-console";
+import type { LogLevel } from "@/types/admin-console";
 import { getErrorMessage } from "@heirs/api-client";
 import { cn } from "@heirs/ui";
-import type { LogLevel } from "@/types/admin-console";
 
 const LEVELS: { value: LogLevel | "all"; label: string }[] = [
   { value: "all", label: "All" },
@@ -52,7 +52,7 @@ const Page = () => {
         {logs.isPending && <Skeleton skeleton="table" columns={3} rows={10} />}
 
         {logs.isError && (
-          <div className="border-hairline rounded-md border border-destructive/40 bg-destructive/10 px-3 py-2 text-sm text-destructive">
+          <div className="rounded-md border border-destructive/40 bg-destructive/10 px-3 py-2 text-sm text-destructive">
             {getErrorMessage(logs.error)}
           </div>
         )}

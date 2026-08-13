@@ -1,7 +1,7 @@
 "use client";
 
-import { PageLayout, Skeleton, StatTile } from "@/components/shared";
 import { useHealth, useQueueStats } from "@/hooks/api/use-admin-metrics";
+import { PageLayout, Skeleton, StatTile } from "@/components/shared";
 import { getErrorMessage } from "@heirs/api-client";
 import { cn } from "@heirs/ui";
 

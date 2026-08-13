@@ -1,17 +1,17 @@
 "use client";
 
-import { useState } from "react";
 import { Loader, Plus, Trash2 } from "lucide-react";
+import { useState } from "react";
 import { toast } from "sonner";
 
-import { PageLayout, Skeleton } from "@/components/shared";
-import { Button } from "@heirs/ui";
-import { Checkbox } from "@heirs/ui";
-import { Input } from "@heirs/ui";
 import { useNotifications, useSaveNotifications } from "@/hooks/api/use-admin-console";
-import { getErrorMessage } from "@heirs/api-client";
-import { cn } from "@heirs/ui";
 import type { NotificationChannel, NotificationSettings } from "@/types/admin-console";
+import { PageLayout, Skeleton } from "@/components/shared";
+import { getErrorMessage } from "@heirs/api-client";
+import { Checkbox } from "@heirs/ui";
+import { Button } from "@heirs/ui";
+import { Input } from "@heirs/ui";
+import { cn } from "@heirs/ui";
 
 const EVENT_LABELS: Record<keyof NotificationSettings["events"], string> = {
   jobFailed: "Job failed",

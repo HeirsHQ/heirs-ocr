@@ -18,7 +18,7 @@ const Page = () => {
   return (
     <PageLayout title="Analytics" subtitle="Request volume, errors, and token usage across the service.">
       <div className=" space-y-6">
-        {/* Summary tiles */}
+
         {metrics.isPending && <Skeleton skeleton="statistics" numberOfCards={4} />}
         {metrics.isError && (
           <div className="rounded-md border border-destructive/40 bg-destructive/10 px-3 py-2 text-sm text-destructive">
@@ -33,8 +33,6 @@ const Page = () => {
             <StatTile label="Provider fallbacks" value={num(m.providerFallbacks)} />
           </div>
         )}
-
-        {/* Per-function */}
         {m && (
           <section className="space-y-2">
             <p className="text-sm font-medium">By function</p>
@@ -70,8 +68,6 @@ const Page = () => {
             )}
           </section>
         )}
-
-        {/* Per-tenant usage */}
         <section className="space-y-2">
           <p className="text-sm font-medium">By tenant</p>
           {usage.isPending && <Skeleton skeleton="table" columns={4} rows={5} />}

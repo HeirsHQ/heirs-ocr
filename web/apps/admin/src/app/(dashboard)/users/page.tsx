@@ -1,22 +1,22 @@
 "use client";
 
-import { useMemo, useState } from "react";
-import { zodResolver } from "@hookform/resolvers/zod";
-import { useForm } from "react-hook-form";
 import { Loader, UserPlus, Users } from "lucide-react";
+import { zodResolver } from "@hookform/resolvers/zod";
+import { useMemo, useState } from "react";
+import { useForm } from "react-hook-form";
 import { toast } from "sonner";
 import { z } from "zod";
 
-import { ConfirmDialog, DataTable, EmptyState, PageLayout, Skeleton } from "@/components/shared";
-import { Button } from "@heirs/ui";
-import { Dialog, DialogContent } from "@heirs/ui";
-import { Input } from "@heirs/ui";
 import { useAdminUsers, useCreateAdmin, useDeleteAdmin, useUpdateAdmin } from "@/hooks/api/use-admin-users";
-import { useMe } from "@/hooks/api/use-auth";
-import { getErrorMessage } from "@heirs/api-client";
-import { cn } from "@heirs/ui";
+import { ConfirmDialog, DataTable, EmptyState, PageLayout, Skeleton } from "@/components/shared";
 import { createUserColumns } from "@/config/columns/users";
 import type { AdminRole, AdminUser } from "@/types/user";
+import { getErrorMessage } from "@heirs/api-client";
+import { Dialog, DialogContent } from "@heirs/ui";
+import { useMe } from "@/hooks/api/use-auth";
+import { Button } from "@heirs/ui";
+import { Input } from "@heirs/ui";
+import { cn } from "@heirs/ui";
 
 const ROLES: AdminRole[] = ["owner", "manager", "viewer"];
 
@@ -174,7 +174,7 @@ const Page = () => {
 
         {users.data && users.data.admins.length > 0 && (
           <div className="rounded-md border">
-            <DataTable columns={columns} data={users.data.admins} />
+            <DataTable columns={columns} data={users.data.admins} total={users.data.admins.length ||0} />
           </div>
         )}
       </div>

@@ -8,9 +8,9 @@ import Link from "next/link";
 import { ConfirmDialog, DataTable, EmptyState, PageLayout, Skeleton } from "@/components/shared";
 import { useDeletePlan, usePlans } from "@/hooks/api/use-admin-plans";
 import { createPlanColumns } from "@/config/columns/plans";
-import { Button } from "@heirs/ui";
 import { getErrorMessage } from "@heirs/api-client";
 import type { Plan } from "@/types/plan";
+import { Button } from "@heirs/ui";
 
 const Page = () => {
   const plans = usePlans();
@@ -68,7 +68,7 @@ const Page = () => {
 
         {plans.data && plans.data.plans.length > 0 && (
           <div className="rounded-md border">
-            <DataTable columns={columns} data={plans.data.plans} />
+            <DataTable columns={columns} data={plans.data.plans} total={plans.data.plans.length ||0} />
           </div>
         )}
       </div>

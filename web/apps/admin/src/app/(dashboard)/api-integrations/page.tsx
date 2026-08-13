@@ -5,13 +5,13 @@ import { useState } from "react";
 import { toast } from "sonner";
 
 import { useApiIntegrations, useSaveApiIntegrations } from "@/hooks/api/use-admin-console";
-import type { ApiIntegrationSettings } from "@/types/admin-console";
 import { PageLayout, SelectOption, Skeleton } from "@/components/shared";
-import { Checkbox } from "@heirs/ui";
-import { Button } from "@heirs/ui";
+import type { ApiIntegrationSettings } from "@/types/admin-console";
 import { getErrorMessage } from "@heirs/api-client";
-import { Input } from "@heirs/ui";
+import { Checkbox } from "@heirs/ui";
 import { useValues } from "@/hooks";
+import { Button } from "@heirs/ui";
+import { Input } from "@heirs/ui";
 
 const OPTIONS = [
   { label: "Webhook", value: "webhook" },
@@ -79,7 +79,6 @@ const Page = () => {
             No integrations configured.
           </p>
         )}
-
         <ul className="space-y-1.5">
           {draft.integrations.map((it) => (
             <li key={it.id} className="flex items-center gap-3 rounded-md border px-3 py-2 text-sm">
@@ -105,7 +104,6 @@ const Page = () => {
             </li>
           ))}
         </ul>
-
         <div className="flex items-center gap-2">
           <SelectOption
             className="min-w-50"
@@ -119,7 +117,6 @@ const Page = () => {
             <Plus className="size-4" /> Add
           </Button>
         </div>
-
         <Button onClick={onSave} disabled={save.isPending}>
           {save.isPending ? <Loader className="animate-spin" /> : "Save changes"}
         </Button>
