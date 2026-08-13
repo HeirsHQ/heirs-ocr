@@ -183,7 +183,7 @@ The Postgres schema is created idempotently at startup.
 > `docker compose up --build` runs only the OCR service (`api` + `worker`) against your
 > configured `REDIS_URL` / `DATABASE_URL`; add `--profile local-infra` for a throwaway
 > Redis + Postgres. The apps have their own stack — `docker compose -f web/docker-compose.yml
-> up --build` (admin :3000, tenant :3001). See TECHNICAL.md § Operations for the topology.
+up --build` (admin :3000, tenant :3001). See TECHNICAL.md § Operations for the topology.
 
 > If `GLM_ENABLED=true`, a `GLM_API_KEY` is required or the service throws at startup.
 > Likewise `AZURE_OPENAI_ENABLED=true` requires `AZURE_OPENAI_API_KEY`. Leave either flag

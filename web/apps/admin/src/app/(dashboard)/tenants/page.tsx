@@ -7,13 +7,13 @@ import Link from "next/link";
 
 import { ConfirmDialog, DataTable, EmptyState, PageLayout, Skeleton, ToggleList } from "@/components/shared";
 import { useOcrFunctionKeys, usePlans } from "@/hooks/api/use-admin-plans";
-import { Dialog, DialogContent } from "@heirs/ui";
 import { createTenantColumns } from "@/config/columns/tenants";
-import { Textarea } from "@heirs/ui";
+import { getErrorMessage } from "@heirs/api-client";
+import { Dialog, DialogContent } from "@heirs/ui";
 import type { AdminTenant } from "@/types/tenant";
+import { Textarea } from "@heirs/ui";
 import { Button } from "@heirs/ui";
 import { Switch } from "@heirs/ui";
-import { getErrorMessage } from "@heirs/api-client";
 import { Input } from "@heirs/ui";
 import { cn } from "@heirs/ui";
 import {
@@ -324,13 +324,11 @@ const Page = () => {
     >
       <div className=" space-y-6">
         {tenants.isPending && <Skeleton skeleton="table" columns={5} rows={6} />}
-
         {tenants.isError && (
           <div className="rounded-md border border-destructive/40 bg-destructive/10 px-3 py-2 text-sm text-destructive">
             {getErrorMessage(tenants.error)}
           </div>
         )}
-
         {tenants.data && tenants.data.tenants.length === 0 && (
           <EmptyState
             icon={Building2}
@@ -338,20 +336,17 @@ const Page = () => {
             description="Create a tenant above to issue an API key and assign a plan."
           />
         )}
-
         {tenants.data && tenants.data.tenants.length > 0 && (
           <div className="rounded-md border">
-            <DataTable columns={columns} data={tenants.data.tenants} />
+            <DataTable columns={columns} data={tenants.data.tenants} total={tenants.data.tenants.length ||0} />
           </div>
         )}
       </div>
-
       {active?.kind === "edit" && <EditTenantModal row={active.row} onClose={() => setActive(null)} />}
       {active?.kind === "owners" && (
         <OwnersModal tenantId={active.row.tenant.tenantId} onClose={() => setActive(null)} />
       )}
       {active?.kind === "plan" && <PlanModal tenantId={active.row.tenant.tenantId} onClose={() => setActive(null)} />}
-
       <ConfirmDialog
         open={!!pendingDelete}
         title="Revoke tenant"

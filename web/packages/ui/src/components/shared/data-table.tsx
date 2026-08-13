@@ -22,6 +22,7 @@ import type {
 } from "@tanstack/react-table";
 
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "../ui/table";
+import { Pagination } from "./pagination";
 
 /**
  * The feature set this table registers (v9 requires explicit registration). Exported
@@ -47,13 +48,25 @@ interface Props<TData extends RowData> {
   // `createColumnHelper<typeof dataTableFeatures, TData>()` to keep per-column typing.
   columns: ColumnDef<Features, TData, unknown>[];
   data: TData[];
+  total: number;
   onRowSelectionChange?: (selection: RowSelectionState) => void;
+  onPageChange?: (page: number) => void;
+  onPageSizeChange?: (pageSize: number) => void;
+  page?: number;
+  pageSize?: number;
   rowSelection?: RowSelectionState;
+  showPageSizeChange?: boolean;
 }
 
 export const DataTable = <TData extends RowData>({
   columns,
   data,
+  total,
+  onPageChange,
+  onPageSizeChange,
+  page = 1,
+  pageSize = 10,
+  showPageSizeChange = true,
   onRowSelectionChange,
   rowSelection: externalRowSelection,
 }: Props<TData>) => {
@@ -119,6 +132,12 @@ export const DataTable = <TData extends RowData>({
           )}
         </TableBody>
       </Table>
+      {total > pageSize && (
+        <div className="border-t">
+
+          <Pagination page={page} pageSize={pageSize} total={total} onPageChange={onPageChange} onPageSizeChange={onPageSizeChange} showPageSizeChange={showPageSizeChange} />
+        </div>
+      )}
     </div>
   );
 };
