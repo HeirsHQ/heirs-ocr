@@ -1,11 +1,17 @@
-"use client"
+"use client";
 
-import { PageLayout } from "@heirs/ui"
+import { ShieldCheck } from "lucide-react";
+
+import { EmptyState, PageLayout } from "@heirs/ui";
 
 const Page = () => (
   <PageLayout title="Security" subtitle="Manage 2FA, IP whitelisting, and session settings.">
-    <div>Page</div>
+    <EmptyState
+      icon={ShieldCheck}
+      title="No security settings configured"
+      description="2FA, IP whitelisting, and session controls will be available here."
+    />
   </PageLayout>
-)
+);
 
-export default Page
+export default Page;

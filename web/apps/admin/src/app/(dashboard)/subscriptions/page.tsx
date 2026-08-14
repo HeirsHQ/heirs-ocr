@@ -62,7 +62,6 @@ const Page = () => {
             retrying={subscriptions.isFetching}
           />
         )}
-
         {subscriptions.isPending ? (
           <Skeleton skeleton="table" columns={5} rows={6} />
         ) : (
@@ -90,7 +89,6 @@ const Page = () => {
                 }
               />
             </div>
-
             {subs.length === 0 && !subscriptions.isError ? (
               <EmptyState
                 icon={Box}

@@ -2,9 +2,10 @@
 
 import { useRouter } from "next/navigation";
 import { LogOut } from "lucide-react";
+import { useState } from "react";
 
 import { useLogout, useMe } from "@/hooks/api/use-auth";
-import { Badge, Button } from "@heirs/ui";
+import { Badge, Button, ConfirmDialog } from "@heirs/ui";
 
 /**
  * Admin console top bar: current user + sign-out.
@@ -18,6 +19,7 @@ export const Header = () => {
   const router = useRouter();
   const { data: session, isPending } = useMe();
   const logout = useLogout();
+  const [confirming, setConfirming] = useState(false);
 
   return (
     <header className="flex h-14 w-full shrink-0 items-center justify-end gap-3 border-b px-4">
@@ -38,12 +40,21 @@ export const Header = () => {
       <Button
         variant="ghost"
         size="sm"
-        onClick={() => logout.mutate(undefined, { onSuccess: () => router.replace("/admin/login") })}
+        onClick={() => setConfirming(true)}
         disabled={logout.isPending}
         aria-label="Sign out"
       >
         <LogOut className="size-4" />
       </Button>
+      <ConfirmDialog
+        open={confirming}
+        title="Sign out"
+        description="Are you sure you want to sign out?"
+        confirmLabel="Sign out"
+        pending={logout.isPending}
+        onConfirm={() => logout.mutate(undefined, { onSuccess: () => router.replace("/admin/login") })}
+        onOpenChange={(open) => !open && setConfirming(false)}
+      />
     </header>
   );
 };

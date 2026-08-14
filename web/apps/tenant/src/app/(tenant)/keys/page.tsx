@@ -123,9 +123,12 @@ const Page = () => {
   const columns = useMemo(() => createKeyColumns({ onRevoke: (key) => setPendingRevoke(key) }), []);
 
   return (
-    <PageLayout title="API Keys" subtitle="Programmatic access to the OCR API for your organization.">
+    <PageLayout
+      title="API Keys"
+      subtitle="Programmatic access to the OCR API for your organization."
+      actions={[<CreateKeyModal key="create" />]}
+    >
       <div className=" space-y-6">
-        <CreateKeyModal />
         {keys.isPending && <Skeleton skeleton="table" columns={4} rows={5} />}
         {keys.isError && (
           <ErrorState

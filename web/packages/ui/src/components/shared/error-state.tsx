@@ -4,8 +4,8 @@ import { Loader, RotateCw, TriangleAlert } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 import type { ReactNode } from "react";
 
-import { cn } from "../../lib/utils";
 import { Button } from "../ui/button";
+import { cn } from "../../lib/utils";
 
 /**
  * The failed-to-load counterpart to {@link EmptyState}: an icon chip, a title that

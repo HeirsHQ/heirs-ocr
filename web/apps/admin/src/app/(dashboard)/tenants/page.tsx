@@ -85,7 +85,7 @@ const EditTenantModal = ({ row, onClose }: { row: AdminTenant; onClose: () => vo
     <Dialog open onOpenChange={(o) => !o && onClose()}>
       <DialogContent title={`Edit ${tenant.tenantId}`} description="Registry settings for this tenant.">
         <div className="space-y-3">
-        <div className="grid gap-3 sm:grid-cols-2">
+          <div className="grid gap-3 sm:grid-cols-2">
             <div className="space-y-1">
               <Label>Display name</Label>
               <Input value={name} onChange={(e) => setName(e.target.value)} />
@@ -194,8 +194,7 @@ const OwnersModal = ({ tenantId, onClose }: { tenantId: string; onClose: () => v
           )}
           <div className="grid gap-2 grid-cols-2 mt-10">
             <div className="col-span-2">
-            <Input placeholder="Owner name" value={name} onChange={(e) => setName(e.target.value)} />
-
+              <Input placeholder="Owner name" value={name} onChange={(e) => setName(e.target.value)} />
             </div>
             <Input type="email" placeholder="Owner email" value={email} onChange={(e) => setEmail(e.target.value)} />
             <Input

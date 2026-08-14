@@ -9,13 +9,7 @@
 
 import type { Plan } from "./plan";
 
-export type SubscriptionStatus =
-  | "trialing"
-  | "active"
-  | "past_due"
-  | "canceled"
-  | "expired"
-  | "suspended";
+export type SubscriptionStatus = "trialing" | "active" | "past_due" | "canceled" | "expired" | "suspended";
 
 export type PaymentProvider = "paystack" | "flutterwave" | "stripe" | "manual";
 
