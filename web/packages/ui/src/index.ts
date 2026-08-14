@@ -34,6 +34,7 @@ export * from "./components/shared/error-state";
 export * from "./components/shared/field";
 export * from "./components/shared/page-layout";
 export * from "./components/shared/schema-form";
+export * from "./components/shared/scroll-area"
 export * from "./components/shared/searchable-select";
 export * from "./components/shared/secret-callout";
 export * from "./components/shared/select-option";

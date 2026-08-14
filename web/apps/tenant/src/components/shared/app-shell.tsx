@@ -23,7 +23,7 @@ export const AppShell = ({ area, children }: Props) => (
     <div className="flex h-full min-w-0 flex-1 flex-col">
       <Header />
       <main className="min-h-0 flex-1 overflow-y-auto">
-        <div className="mx-auto w-full max-w-360 px-6 py-6">{children}</div>
+        <div className="mx-auto w-full p-4">{children}</div>
       </main>
     </div>
   </div>

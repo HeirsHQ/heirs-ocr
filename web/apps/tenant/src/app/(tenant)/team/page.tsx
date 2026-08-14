@@ -168,12 +168,13 @@ const Page = () => {
   );
 
   return (
-    <PageLayout title="Team" subtitle="Manage who can sign in to your organization's portal.">
+    <PageLayout
+      title="Team"
+      subtitle="Manage who can sign in to your organization's portal."
+      actions={[<InviteMemberModal key="invite" />]}
+    >
       <div className="space-y-6">
-        <InviteMemberModal />
-
         {team.isPending && <Skeleton skeleton="table" columns={4} rows={5} />}
-
         {team.isError && (
           <ErrorState
             title="Couldn't load your team"
@@ -182,7 +183,6 @@ const Page = () => {
             retrying={team.isFetching}
           />
         )}
-
         {team.data && team.data.users.length === 0 && (
           <EmptyState
             icon={UsersRound}
@@ -190,14 +190,12 @@ const Page = () => {
             description="Invite a teammate above to manage this tenant."
           />
         )}
-
         {team.data && team.data.users.length > 0 && (
           <div className="rounded-md border">
             <DataTable columns={columns} data={team.data.users} total={team.data.users.length || 0} />
           </div>
         )}
       </div>
-
       <ConfirmDialog
         open={!!pendingDelete}
         title="Remove member"

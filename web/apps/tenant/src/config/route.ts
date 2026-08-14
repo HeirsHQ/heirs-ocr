@@ -51,12 +51,12 @@ export const TENANT_ROUTES: RouteGroup[] = [
     name: "system",
     routes: [
       { href: "/webhooks", label: "Webhooks", icon: Webhook },
-      { href:"/jobs", label:"Job Queues", icon: ListChecks },
+      { href: "/jobs", label: "Job Queues", icon: ListChecks },
       { href: "/logs", label: "Logs", icon: Logs },
       { href: "/backup", label: "Backup", icon: DatabaseBackup },
       { href: "/security", label: "Security", icon: ShieldCheck },
     ],
-  }
+  },
 ];
 
 export const ADMIN_ROUTES: RouteGroup[] = [

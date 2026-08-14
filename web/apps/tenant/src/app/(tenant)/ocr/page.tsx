@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react";
 
 import { PageLayout, SchemaForm, cleanArgs, defaultArgs, hasArgsForm, type ArgValues } from "@/components/shared";
-import { Field, SelectOption, StatusBadge } from "@heirs/ui";
+import { Field, ScrollArea, SelectOption, StatusBadge } from "@heirs/ui";
 import { Textarea } from "@heirs/ui";
 import { Button } from "@heirs/ui";
 import { Input } from "@heirs/ui";
@@ -176,7 +176,10 @@ const Page = () => {
   const schemaMode = selected ? hasArgsForm(selected.argsSchema) : false;
   const busy = running || jobId !== null;
 
-  const acceptAttr = selected?.accepts.map((group) => ACCEPT_ATTR[group]).filter(Boolean).join(",");
+  const acceptAttr = selected?.accepts
+    .map((group) => ACCEPT_ATTR[group])
+    .filter(Boolean)
+    .join(",");
 
   // Reset the args editor to the selected function's defaults whenever it changes.
   // Adjusting state during render (React's recommended pattern) instead of an effect.
@@ -357,9 +360,11 @@ const Page = () => {
                   Request <span className="font-mono">{result.requestId}</span> — quote this when contacting support.
                 </p>
               )}
-              <pre className="border-hairline bg-muted/40 max-h-[60dvh] overflow-clip rounded-md border p-3 font-mono text-xs whitespace-pre-wrap wrap-break-word">
-                {JSON.stringify(result.result, null, 2)}
-              </pre>
+              <ScrollArea className="min-h-0">
+                <pre className="border-hairline bg-muted/40 max-h-[60dvh] max-w-full overflow-x-hidden overflow-y-auto rounded-md border p-3 font-mono text-xs whitespace-pre-wrap wrap-anywhere">
+                  {JSON.stringify(result.result, null, 2)}
+                </pre>
+              </ScrollArea>
             </>
           )}
           {!error && !result && !jobId && (
