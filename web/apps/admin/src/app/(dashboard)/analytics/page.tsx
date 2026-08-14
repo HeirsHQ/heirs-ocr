@@ -1,7 +1,9 @@
 "use client";
 
+import { Building2, ChartColumn } from "lucide-react";
+
 import { useMetricsSummary, useTenantUsage } from "@/hooks/api/use-admin-metrics";
-import { PageLayout, Skeleton, StatTile } from "@/components/shared";
+import { EmptyState, ErrorState, PageLayout, Skeleton, StatTile } from "@/components/shared";
 import { getErrorMessage } from "@heirs/api-client";
 
 const pct = (ratio: number): string => `${(ratio * 100).toFixed(1)}%`;
@@ -18,12 +20,14 @@ const Page = () => {
   return (
     <PageLayout title="Analytics" subtitle="Request volume, errors, and token usage across the service.">
       <div className=" space-y-6">
-
         {metrics.isPending && <Skeleton skeleton="statistics" numberOfCards={4} />}
         {metrics.isError && (
-          <div className="rounded-md border border-destructive/40 bg-destructive/10 px-3 py-2 text-sm text-destructive">
-            {getErrorMessage(metrics.error)}
-          </div>
+          <ErrorState
+            title="Couldn't load metrics"
+            description={getErrorMessage(metrics.error)}
+            onRetry={() => metrics.refetch()}
+            retrying={metrics.isFetching}
+          />
         )}
         {m && (
           <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
@@ -37,9 +41,11 @@ const Page = () => {
           <section className="space-y-2">
             <p className="text-sm font-medium">By function</p>
             {rows.length === 0 ? (
-              <p className="rounded-md border border-dashed px-3 py-6 text-center text-sm text-muted-foreground">
-                No requests recorded yet.
-              </p>
+              <EmptyState
+                icon={ChartColumn}
+                title="No requests recorded yet"
+                description="Once tenants start running documents through the API, per-function volume and error rates appear here."
+              />
             ) : (
               <div className="overflow-x-auto rounded-md border">
                 <table className="w-full text-sm">
@@ -72,14 +78,19 @@ const Page = () => {
           <p className="text-sm font-medium">By tenant</p>
           {usage.isPending && <Skeleton skeleton="table" columns={4} rows={5} />}
           {usage.isError && (
-            <div className="rounded-md border border-destructive/40 bg-destructive/10 px-3 py-2 text-sm text-destructive">
-              {getErrorMessage(usage.error)}
-            </div>
+            <ErrorState
+              title="Couldn't load tenant usage"
+              description={getErrorMessage(usage.error)}
+              onRetry={() => usage.refetch()}
+              retrying={usage.isFetching}
+            />
           )}
           {usage.data && tenants.length === 0 && (
-            <p className="rounded-md border border-dashed px-3 py-6 text-center text-sm text-muted-foreground">
-              No tenant usage recorded yet.
-            </p>
+            <EmptyState
+              icon={Building2}
+              title="No tenant usage yet"
+              description="Usage is attributed per tenant as they call the API. Provision a tenant and run a document to see it here."
+            />
           )}
           {tenants.length > 0 && (
             <div className="overflow-x-auto rounded-md border">

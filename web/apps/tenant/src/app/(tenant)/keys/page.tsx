@@ -7,7 +7,6 @@ import { useForm } from "react-hook-form";
 import { toast } from "sonner";
 import { z } from "zod";
 
-import { ConfirmDialog, DataTable, EmptyState, PageLayout, SecretCallout, Skeleton } from "@/components/shared";
 import { useCreateTenantKey, useRevokeTenantKey, useTenantKeys } from "@/hooks/api/use-tenant-keys";
 import { createKeyColumns } from "@/config/columns/keys";
 import { getErrorMessage } from "@heirs/api-client";
@@ -15,6 +14,15 @@ import { Dialog, DialogContent } from "@heirs/ui";
 import type { TenantApiKey } from "@/types/user";
 import { Button } from "@heirs/ui";
 import { Input } from "@heirs/ui";
+import {
+  ConfirmDialog,
+  DataTable,
+  EmptyState,
+  ErrorState,
+  PageLayout,
+  SecretCallout,
+  Skeleton,
+} from "@/components/shared";
 
 const schema = z.object({ name: z.string().trim().max(80, "Keep the name under 80 characters").optional() });
 type FormValues = z.infer<typeof schema>;
@@ -118,15 +126,15 @@ const Page = () => {
     <PageLayout title="API Keys" subtitle="Programmatic access to the OCR API for your organization.">
       <div className=" space-y-6">
         <CreateKeyModal />
-
         {keys.isPending && <Skeleton skeleton="table" columns={4} rows={5} />}
-
         {keys.isError && (
-          <div className="rounded-md border border-destructive/40 bg-destructive/10 px-3 py-2 text-sm text-destructive">
-            {getErrorMessage(keys.error)}
-          </div>
+          <ErrorState
+            title="Couldn't load API keys"
+            description={getErrorMessage(keys.error)}
+            onRetry={() => keys.refetch()}
+            retrying={keys.isFetching}
+          />
         )}
-
         {keys.data && keys.data.keys.length === 0 && (
           <EmptyState
             icon={KeyRound}
@@ -134,14 +142,12 @@ const Page = () => {
             description="Generate a key above to start calling the OCR API."
           />
         )}
-
         {keys.data && keys.data.keys.length > 0 && (
           <div className="rounded-md border">
-            <DataTable columns={columns} data={keys.data.keys} total={keys.data.keys.length ||0} />
+            <DataTable columns={columns} data={keys.data.keys} total={keys.data.keys.length || 0} />
           </div>
         )}
       </div>
-
       <ConfirmDialog
         open={!!pendingRevoke}
         title="Revoke API key"

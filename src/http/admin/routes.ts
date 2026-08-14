@@ -11,8 +11,6 @@ import { logger } from "../../observability/logger";
 import { getQueueStats } from "../../jobs/queue";
 import type { User } from "../../types/user";
 import { env } from "../../config/env";
-import { getRedis } from "../../redis";
-import { query } from "../../db";
 import {
   countOwners,
   createAdmin,
@@ -37,10 +35,13 @@ import { deletePlan, getStoredPlan, listPlans, putPlan } from "../../billing/pla
 import {
   assignablePlan,
   createSubscriptionFromPlan,
+  listSubscriptions,
   putSubscription,
   resolveSubscription,
+  SubscriptionStoreUnavailableError,
 } from "../../billing/subscriptions";
 import { listAuditEvents, recordAuditEvent } from "../../observability/audit";
+import { checkDependencies, providerStatus } from "../../observability/health";
 import { recentLogs, type LogLevel } from "../../observability/log-buffer";
 import { getSettings, putSettings, type SettingsNamespace } from "../../config/settings-store";
 import { createBackup, getBackup, listBackups, restoreBackup } from "../../ops/backups";
@@ -490,12 +491,37 @@ adminApiRouter.delete(
 );
 
 adminApiRouter.get(
+  "/api/subscriptions",
+  adminAuth,
+  requireMinRole("viewer"),
+  handler(async (_req, res) => {
+    try {
+      res.json({ subscriptions: await listSubscriptions() });
+    } catch (err) {
+      if (err instanceof SubscriptionStoreUnavailableError) {
+        sendError(res, 503, "PROVIDER_UNAVAILABLE", "Billing store unavailable");
+        return;
+      }
+      throw err;
+    }
+  }),
+);
+
+adminApiRouter.get(
   "/api/tenants/:tenantId/subscription",
   adminAuth,
   requireMinRole("viewer"),
   handler(async (req, res) => {
-    const subscription = await resolveSubscription(String(req.params.tenantId));
-    res.json({ subscription: subscription ?? null });
+    try {
+      const subscription = await resolveSubscription(String(req.params.tenantId));
+      res.json({ subscription: subscription ?? null });
+    } catch (err) {
+      if (err instanceof SubscriptionStoreUnavailableError) {
+        sendError(res, 503, "PROVIDER_UNAVAILABLE", "Billing store unavailable");
+        return;
+      }
+      throw err;
+    }
   }),
 );
 
@@ -571,28 +597,13 @@ adminApiRouter.get(
   adminAuth,
   requireMinRole("viewer"),
   handler(async (_req, res) => {
-    let redisOk = false;
-    try {
-      redisOk = (await getRedis().ping()) === "PONG";
-    } catch {
-      redisOk = false;
-    }
-    let postgresOk = false;
-    try {
-      await query("SELECT 1");
-      postgresOk = true;
-    } catch {
-      postgresOk = false;
-    }
+    // Same check the `/readyz` probe runs, so the console can't show green while
+    // the load balancer is taking this instance out of rotation.
+    const deps = await checkDependencies();
     res.json({
-      status: "ok",
-      redis: redisOk,
-      postgres: postgresOk,
-      providers: {
-        tesseract: true, // always available (bundled)
-        glm: env.GLM_ENABLED === "true",
-        azureOpenAI: env.AZURE_OPENAI_ENABLED === "true",
-      },
+      status: deps.redis && deps.postgres ? "ok" : "degraded",
+      ...deps,
+      providers: providerStatus(),
       version: env.VERSION,
     });
   }),

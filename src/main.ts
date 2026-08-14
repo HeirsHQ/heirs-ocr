@@ -5,6 +5,7 @@ import path from "path";
 import { errorHandler, notFound } from "./http/middleware/error";
 import { metricsAuth, securityHeaders } from "./http/middleware/security-headers";
 import { metricsContentType, renderMetrics } from "./observability/metrics";
+import { checkDependencies } from "./observability/health";
 import { adminApiRouter } from "./http/admin/routes";
 import { tenantApiRouter } from "./http/tenant/routes";
 import { corsMiddleware } from "./config/cors";
@@ -28,9 +29,18 @@ export function main() {
     res.json({ message: "Heirs OCR API" });
   });
 
-  // Liveness / provider reachability.
+  // Liveness: is the process itself up? Deliberately dependency-free — a Redis
+  // outage must not get every pod killed and restarted into the same outage.
   app.get("/healthz", (_req: Request, res: Response) => res.json({ status: "ok" }));
-  app.get("/readyz", (_req: Request, res: Response) => res.json({ status: "ok" }));
+
+  // Readiness: can this instance actually serve? Both stores are hard dependencies,
+  // so an unreachable one takes the pod out of rotation (503) instead of letting it
+  // accept traffic it can only fail.
+  app.get("/readyz", async (_req: Request, res: Response) => {
+    const deps = await checkDependencies();
+    const ready = deps.redis && deps.postgres;
+    res.status(ready ? 200 : 503).json({ status: ready ? "ok" : "unavailable", ...deps });
+  });
 
   // Prometheus scrape endpoint. Guarded by a bearer token when METRICS_AUTH_TOKEN
   // is set (see metricsAuth); otherwise open, which is only safe on a private net.

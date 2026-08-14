@@ -29,27 +29,37 @@ if (env.NODE_ENV === "production" && !env.METRICS_AUTH_TOKEN) {
  * the next attempt once the sockets are up. Waiting here removes that cold-start
  * race entirely.
  *
- * Schema creation + seeding the first console owner and default plan catalog run
- * after the connections are up; they stay best-effort (retried on the next boot),
- * so a transient seed failure doesn't take the whole service down. If the stores
- * can't be reached at all, we exit non-zero so the orchestrator restarts us rather
- * than serving a broken instance.
+ * Schema creation is a **hard** prerequisite — without those tables every auth
+ * lookup and every OCR request fails — so a failure here aborts the boot and exits
+ * non-zero. Seeding the first console owner and the default plan catalog is
+ * best-effort by contrast: the service runs correctly without them (they are just
+ * conveniences, retried on the next boot), so a seed failure is logged and skipped.
+ *
+ * If the stores can't be reached at all, we exit non-zero so the orchestrator
+ * restarts us rather than serving a broken instance.
  */
 const boot = async (): Promise<void> => {
   await Promise.all([whenRedisReady(), whenDbReady()]);
+
+  // Not wrapped: a schema failure must propagate to the `.catch` below and exit.
+  // Swallowing it left the service accepting traffic against missing tables while
+  // /readyz reported ok, so nothing rolled the deploy back.
+  await ensureSchema();
+
   try {
-    await ensureSchema();
     await ensureBootstrapAdmin();
     await seedPlans();
   } catch (err) {
-    logger.error("boot bootstrap failed", { err: err instanceof Error ? err.message : String(err) });
+    logger.error("boot seeding failed (continuing; retried next boot)", {
+      err: err instanceof Error ? err.message : String(err),
+    });
   }
 };
 
 boot()
   .then(() => server.listen(Number(env.PORT), () => logger.info(`service listening on http://localhost:${env.PORT}`)))
   .catch((err) => {
-    logger.error("boot failed: backing stores unavailable", {
+    logger.error("boot failed: backing stores unreachable or schema could not be applied", {
       err: err instanceof Error ? err.message : String(err),
     });
     process.exit(1);

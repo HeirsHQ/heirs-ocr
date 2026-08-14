@@ -17,7 +17,14 @@ import {
   updateTenantUser,
   verifyPassword,
 } from "../../auth/tenant-users";
-import { generateApiKey, hashApiKey, listKeysForTenant, putTenant, revokeByHash } from "../../auth/tenants";
+import {
+  generateApiKey,
+  hashApiKey,
+  listKeysForTenant,
+  putTenant,
+  revokeByHash,
+  type Tenant,
+} from "../../auth/tenants";
 
 /**
  * Tenant portal JSON API, mounted under `/tenant` (paths here start with `/api`).
@@ -158,6 +165,36 @@ const publicUser = (u: TenantUser): TenantUser => ({
 
 const createKeySchema = z.object({ name: z.string().min(1).optional() });
 
+/**
+ * Scope for a tenant-minted key: exactly what the org can already do, never more.
+ *
+ * Not the *narrowest* existing scope — the union. If the org already holds a key
+ * that can call a function, a new key that can also call it grants no new
+ * capability; intersecting instead would break tenants who legitimately hold
+ * several differently-scoped keys. The property being preserved is only that
+ * self-service cannot *escalate* beyond what an admin has already granted.
+ *
+ * `undefined` for either field means "unrestricted" downstream, so it is returned
+ * only when the org genuinely already has an unrestricted key (or no keys at all,
+ * i.e. nothing has been constrained yet).
+ */
+export const inheritedScope = (keys: Tenant[]): Partial<Pick<Tenant, "allowedFunctions" | "rateLimit">> => {
+  if (keys.length === 0) return {};
+
+  const unrestrictedFunctions = keys.some((k) => !k.allowedFunctions || k.allowedFunctions.length === 0);
+  const allowedFunctions = unrestrictedFunctions
+    ? undefined
+    : [...new Set(keys.flatMap((k) => k.allowedFunctions ?? []))];
+
+  // A key with no explicit limit already runs at the env default, so inheriting
+  // "no limit" from it is not an escalation; otherwise take the most permissive.
+  const rateLimit = keys.some((k) => k.rateLimit === undefined)
+    ? undefined
+    : Math.max(...keys.map((k) => k.rateLimit!));
+
+  return { allowedFunctions, rateLimit };
+};
+
 /** Public shape of a key: the hash identifies it; the raw key is never stored. */
 const publicKey = (keyHash: string, tenant: { name?: string; disabled?: boolean; createdAt?: string }) => ({
   keyHash,
@@ -190,7 +227,20 @@ tenantApiRouter.post(
     const tenantId = req.tenantUser!.tenantId;
     const apiKey = generateApiKey();
     const createdAt = new Date().toISOString();
-    await putTenant(apiKey, { tenantId, name: parsed.data.name, createdAt }, { actor: req.tenantUser!.userId });
+
+    // Inherit the org's existing scope rather than minting an unrestricted key.
+    // `allowedFunctions`/`rateLimit` left NULL mean "all functions, env default
+    // rate" (see authorize.ts), so a tenant whose admin-issued key was deliberately
+    // narrowed to, say, RECEIPT_PARSING at 10 rpm could otherwise escape both
+    // constraints in one click from this very endpoint.
+    const existing = await listKeysForTenant(tenantId);
+    const scope = inheritedScope(existing.map(({ tenant }) => tenant));
+
+    await putTenant(
+      apiKey,
+      { tenantId, name: parsed.data.name, createdAt, ...scope },
+      { actor: req.tenantUser!.userId },
+    );
     // The raw key is shown exactly once — it is never stored, only its hash.
     res.status(201).json({ apiKey, ...publicKey(hashApiKey(apiKey), { name: parsed.data.name, createdAt }) });
   }),

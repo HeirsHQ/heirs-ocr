@@ -19,7 +19,7 @@ export const getRedis = (): Redis => {
     client = new Redis(env.REDIS_URL, {
       maxRetriesPerRequest: 2,
       enableOfflineQueue: false,
-      connectTimeout: 2000,
+      connectTimeout: env.REDIS_CONNECT_TIMEOUT_MS,
       lazyConnect: false,
     });
     client.on("error", (err) => logger.warn("redis error", { err: err.message }));
@@ -43,7 +43,7 @@ export const peekRedis = (): Redis | undefined => client;
  * takes longer than the immediate command. The long-running server doesn't need
  * this (it connects during boot). Rejects on timeout so a CLI fails fast.
  */
-export const whenRedisReady = async (timeoutMs = 8000): Promise<void> => {
+export const whenRedisReady = async (timeoutMs = env.REDIS_CONNECT_TIMEOUT_MS): Promise<void> => {
   const client = getRedis();
   if (client.status === "ready") return;
   await new Promise<void>((resolve, reject) => {

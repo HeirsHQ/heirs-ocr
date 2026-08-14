@@ -3,7 +3,7 @@
 import { Terminal } from "lucide-react";
 import { useState } from "react";
 
-import { EmptyState, PageLayout, Skeleton } from "@/components/shared";
+import { EmptyState, ErrorState, PageLayout, Skeleton } from "@/components/shared";
 import { useLogs } from "@/hooks/api/use-admin-console";
 import type { LogLevel } from "@/types/admin-console";
 import { getErrorMessage } from "@heirs/api-client";
@@ -18,8 +18,8 @@ const LEVELS: { value: LogLevel | "all"; label: string }[] = [
 
 const levelClass: Record<LogLevel, string> = {
   debug: "text-muted-foreground",
-  info: "text-sky-600 dark:text-sky-400",
-  warn: "text-amber-600 dark:text-amber-400",
+  info: "text-primary",
+  warn: "text-warning",
   error: "text-destructive",
 };
 
@@ -52,9 +52,12 @@ const Page = () => {
         {logs.isPending && <Skeleton skeleton="table" columns={3} rows={10} />}
 
         {logs.isError && (
-          <div className="rounded-md border border-destructive/40 bg-destructive/10 px-3 py-2 text-sm text-destructive">
-            {getErrorMessage(logs.error)}
-          </div>
+          <ErrorState
+            title="Couldn't load logs"
+            description={getErrorMessage(logs.error)}
+            onRetry={() => logs.refetch()}
+            retrying={logs.isFetching}
+          />
         )}
 
         {logs.data && logs.data.entries.length === 0 && (

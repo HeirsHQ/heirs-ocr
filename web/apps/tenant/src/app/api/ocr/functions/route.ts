@@ -1,6 +1,6 @@
 import { NextRequest } from "next/server";
 
-import { ocrApiUrl, ocrForwardAuth } from "@/lib/ocr";
+import { ocrApiUrl, ocrErrorResponse, ocrForwardAuth, relayUpstream } from "@/lib/ocr";
 
 /**
  * Proxy for the OCR function catalog. The OCR API is server-to-server and
@@ -9,12 +9,12 @@ import { ocrApiUrl, ocrForwardAuth } from "@/lib/ocr";
  * session (see ocrForwardAuth) so the call is scoped to that tenant.
  */
 export async function GET(req: NextRequest) {
+  const auth = ocrForwardAuth(req);
+  if (!auth) return ocrErrorResponse(401, "UNAUTHORIZED", "Sign in to use the OCR API.");
+
   const res = await fetch(`${ocrApiUrl()}/v1/ocr/functions`, {
-    headers: ocrForwardAuth(req),
+    headers: auth,
     cache: "no-store",
   });
-  return new Response(await res.text(), {
-    status: res.status,
-    headers: { "content-type": "application/json" },
-  });
+  return relayUpstream(res);
 }

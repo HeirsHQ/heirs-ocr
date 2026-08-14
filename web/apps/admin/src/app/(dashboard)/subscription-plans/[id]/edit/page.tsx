@@ -2,9 +2,9 @@
 
 import { use } from "react";
 import { useRouter } from "next/navigation";
-import { ArrowLeft } from "lucide-react";
+import { ArrowLeft, SearchX } from "lucide-react";
 
-import { PageLayout, Skeleton } from "@/components/shared";
+import { EmptyState, ErrorState, PageLayout, Skeleton } from "@/components/shared";
 import { Button } from "@heirs/ui";
 import { PlanForm } from "@/components/admin/plan-form";
 import { usePlans } from "@/hooks/api/use-admin-plans";
@@ -19,23 +19,33 @@ const Page = ({ params }: { params: Promise<{ id: string }> }) => {
   return (
     <PageLayout title="Edit plan" subtitle={`Editing “${id}”.`}>
       <div className=" space-y-4">
-        <Button variant="ghost" size="sm" className="-ml-2" onClick={() => router.push("/subscriptions")}>
+        <Button variant="ghost" size="sm" className="-ml-2" onClick={() => router.push("/subscription-plans")}>
           <ArrowLeft className="size-4" />
           Back
         </Button>
 
         {plans.isPending && <Skeleton skeleton="profile" />}
         {plans.isError && (
-          <div className="rounded-md border border-destructive/40 bg-destructive/10 px-3 py-2 text-sm text-destructive">
-            {getErrorMessage(plans.error)}
-          </div>
+          <ErrorState
+            title="Couldn't load the plan catalog"
+            description={getErrorMessage(plans.error)}
+            onRetry={() => plans.refetch()}
+            retrying={plans.isFetching}
+          />
         )}
         {plans.data && !plan && (
-          <div className="rounded-md border border-dashed px-3 py-6 text-center text-sm text-muted-foreground">
-            No plan with id “{id}”.
-          </div>
+          <EmptyState
+            icon={SearchX}
+            title="Plan not found"
+            description={`No plan in the catalog has the id “${id}”. It may have been deleted since this link was opened.`}
+            action={
+              <Button variant="outline" size="sm" onClick={() => router.push("/subscription-plans")}>
+                Back to plans
+              </Button>
+            }
+          />
         )}
-        {plan && <PlanForm initial={plan} onDone={() => router.push("/subscriptions")} />}
+        {plan && <PlanForm initial={plan} onDone={() => router.push("/subscription-plans")} />}
       </div>
     </PageLayout>
   );

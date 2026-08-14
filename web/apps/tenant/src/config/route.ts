@@ -1,13 +1,16 @@
 import {
+  BarChart2,
   Bell,
   Box,
   Building2,
   ChartNetwork,
   DatabaseBackup,
   DollarSign,
-  FileClock,
+  FileStack,
   HeartPulse,
   KeyRound,
+  ListChecks,
+  Logs,
   LucideIcon,
   Plug,
   ScanText,
@@ -15,7 +18,7 @@ import {
   Settings,
   ShieldCheck,
   Users,
-  UsersRound,
+  Webhook,
 } from "lucide-react";
 
 export interface Route {
@@ -37,10 +40,23 @@ export const TENANT_ROUTES: RouteGroup[] = [
     name: "main",
     routes: [
       { href: "/ocr", label: "OCR", icon: ScanText },
+      { href: "/billing", label: "Billing & Usage", icon: DollarSign },
+      { href: "/team", label: "Team", icon: Users },
+      { href: "/documents", label: "Documents", icon: FileStack },
+      { href: "/reports", label: "Reports", icon: BarChart2 },
       { href: "/keys", label: "API Keys", icon: KeyRound },
-      { href: "/team", label: "Team", icon: UsersRound },
     ],
   },
+  {
+    name: "system",
+    routes: [
+      { href: "/webhooks", label: "Webhooks", icon: Webhook },
+      { href:"/jobs", label:"Job Queues", icon: ListChecks },
+      { href: "/logs", label: "Logs", icon: Logs },
+      { href: "/backup", label: "Backup", icon: DatabaseBackup },
+      { href: "/security", label: "Security", icon: ShieldCheck },
+    ],
+  }
 ];
 
 export const ADMIN_ROUTES: RouteGroup[] = [
@@ -63,7 +79,7 @@ export const ADMIN_ROUTES: RouteGroup[] = [
       { href: "/security", label: "Security", icon: ShieldCheck },
       { href: "/audit-trail", label: "Audit Trail", icon: ScrollText },
       { href: "/backup-restore", label: "Backup & Restore", icon: DatabaseBackup },
-      { href: "/logs", label: "Logs", icon: FileClock },
+      { href: "/logs", label: "Logs", icon: Logs },
       { href: "/system-health", label: "System Health", icon: HeartPulse },
     ],
   },

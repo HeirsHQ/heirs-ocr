@@ -12,11 +12,11 @@ const Page = () => {
   return (
     <PageLayout title="New plan" subtitle="Define a catalog plan — billing, entitlements, limits, and trial.">
       <div className=" space-y-4">
-        <Button variant="ghost" size="sm" className="-ml-2" onClick={() => router.push("/subscriptions")}>
+        <Button variant="ghost" size="sm" className="-ml-2" onClick={() => router.push("/subscription-plans")}>
           <ArrowLeft className="size-4" />
           Back
         </Button>
-        <PlanForm onDone={() => router.push("/subscriptions")} />
+        <PlanForm onDone={() => router.push("/subscription-plans")} />
       </div>
     </PageLayout>
   );

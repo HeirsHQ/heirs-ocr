@@ -15,11 +15,12 @@ import { effectiveStatus, quoteDocument, resolveTrialWindow } from "./entitlemen
  * columns for cheap filtering. Mirrors `src/auth/tenants.ts`: a short-TTL positive+
  * negative cache keeps resolution off the Postgres hot path.
  *
- * Availability, not security: unlike the tenant registry (which fails closed),
- * `resolveSubscription` returns `undefined` when the store is unreachable — a
- * billing lookup must never take down request serving. `undefined` is treated as
- * "no plan limits" by the enforcement middleware (backward-compatible: tenants
- * without a subscription row are unlimited).
+ * Fails **closed**, like the tenant registry. `resolveSubscription` returns
+ * `undefined` for exactly one thing — "this tenant has no subscription row" — which
+ * the enforcement middleware treats as unlimited (backward-compatible). A store
+ * error is *not* that: it propagates, and the middleware answers 503. Collapsing the
+ * two would turn a Postgres blip into a fleet-wide billing bypass — every tenant
+ * ungated, unmetered, and served at the default rate ceiling.
  */
 
 type SubscriptionRow = {
@@ -102,37 +103,70 @@ export type PlanAssignment =
 export const assignablePlan = (planId: string, plan: SubscriptionPlan | undefined): PlanAssignment =>
   plan ? { ok: true, plan } : { ok: false, code: "PLAN_NOT_FOUND", reason: `No such plan '${planId}'` };
 
+/**
+ * The billing store could not be read. Distinct from "no subscription row" so the
+ * enforcement middleware can answer 503 instead of silently waiving every limit.
+ * Kept free of any HTTP dependency; `require-subscription` maps it to the wire.
+ */
+export class SubscriptionStoreUnavailableError extends Error {
+  constructor(cause?: unknown) {
+    super("Subscription store unavailable", { cause });
+    this.name = "SubscriptionStoreUnavailableError";
+  }
+}
+
 type CacheEntry = { subscription: Subscription | null; expiresAt: number };
 const cache = new Map<string, CacheEntry>();
 const cacheTtlMs = () => env.API_KEY_CACHE_TTL_SECONDS * 1000;
 const negativeTtlMs = () => Math.min(cacheTtlMs(), 5_000);
 
 /**
- * Resolves a tenant's subscription, or `undefined` if none exists (or the store is
- * briefly unreachable). Short-TTL caching, including negative caching, keeps a
- * tenant with no subscription from hitting Postgres on every request.
+ * Resolves a tenant's subscription, or `undefined` if the tenant has **no
+ * subscription row**. Short-TTL caching, including negative caching, keeps a tenant
+ * with no subscription from hitting Postgres on every request.
+ *
+ * Throws {@link SubscriptionStoreUnavailableError} if the store cannot be read —
+ * callers must not conflate that with `undefined`. See the module note above.
  */
 export const resolveSubscription = async (tenantId: string): Promise<Subscription | undefined> => {
   const hit = cache.get(tenantId);
   if (hit && hit.expiresAt > Date.now()) return hit.subscription ?? undefined;
 
+  let rows: SubscriptionRow[];
   try {
-    const { rows } = await query<SubscriptionRow>(`SELECT * FROM subscriptions WHERE tenant_id = $1`, [tenantId]);
-    const row = rows[0];
-    if (!row) {
-      cache.set(tenantId, { subscription: null, expiresAt: Date.now() + negativeTtlMs() });
-      return undefined;
-    }
-    const subscription = reviveSubscription(row.data as Record<string, unknown>);
-    cache.set(tenantId, { subscription, expiresAt: Date.now() + cacheTtlMs() });
-    return subscription;
+    ({ rows } = await query<SubscriptionRow>(`SELECT * FROM subscriptions WHERE tenant_id = $1`, [tenantId]));
   } catch (err) {
-    // Fail open for availability: a billing-store blip must not block serving.
-    logger.warn("subscription store unavailable", {
+    logger.error("subscription store unavailable", {
       tenantId,
       err: err instanceof Error ? err.message : String(err),
     });
+    throw new SubscriptionStoreUnavailableError(err);
+  }
+
+  const row = rows[0];
+  if (!row) {
+    cache.set(tenantId, { subscription: null, expiresAt: Date.now() + negativeTtlMs() });
     return undefined;
+  }
+  const subscription = reviveSubscription(row.data as Record<string, unknown>);
+  cache.set(tenantId, { subscription, expiresAt: Date.now() + cacheTtlMs() });
+  return subscription;
+};
+
+/**
+ * Every tenant's subscription, most recently updated first. Admin-console read only
+ * — uncached and unbounded, so keep it off the request hot path.
+ */
+export const listSubscriptions = async (): Promise<Subscription[]> => {
+  try {
+    const { rows } = await query<SubscriptionRow>(`SELECT * FROM subscriptions ORDER BY updated_at DESC`);
+    return rows.map((row) => reviveSubscription(row.data as Record<string, unknown>));
+  } catch (err) {
+    logger.error("subscription store unavailable", {
+      op: "listSubscriptions",
+      err: err instanceof Error ? err.message : String(err),
+    });
+    throw new SubscriptionStoreUnavailableError(err);
   }
 };
 

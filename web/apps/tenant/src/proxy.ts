@@ -1,5 +1,5 @@
-import { NextResponse } from "next/server";
 import type { NextRequest } from "next/server";
+import { NextResponse } from "next/server";
 
 /**
  * Optimistic auth gate for the tenant portal (Next 16 Proxy, formerly Middleware).

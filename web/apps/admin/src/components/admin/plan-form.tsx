@@ -1,10 +1,11 @@
 "use client";
 
-import { useState, type ReactNode } from "react";
+import { useState } from "react";
 import { Loader } from "lucide-react";
 import { toast } from "sonner";
 
 import { useCreatePlan, useOcrFunctionKeys, useUpdatePlan } from "@/hooks/api/use-admin-plans";
+import { Field, SelectOption, type Option } from "@heirs/ui";
 import { Checkbox } from "@heirs/ui";
 import { Textarea } from "@heirs/ui";
 import { ToggleList } from "@/components/shared";
@@ -12,7 +13,6 @@ import { Button } from "@heirs/ui";
 import { Switch } from "@heirs/ui";
 import { getErrorMessage } from "@heirs/api-client";
 import { Input } from "@heirs/ui";
-import { cn } from "@heirs/ui";
 import {
   BILLING_KINDS,
   CURRENCIES,
@@ -32,10 +32,21 @@ import {
   type TrialPolicy,
 } from "@/types/plan";
 
-const selectClass = cn(
-  "h-8 w-full rounded-md border border-input bg-transparent px-2.5 text-sm outline-none",
-  "focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50 disabled:opacity-50",
-);
+/** Enum constants are lowercase wire values; give them readable labels in the picker. */
+const toOptions = (values: readonly string[], labels: Record<string, string> = {}): Option[] =>
+  values.map((value) => ({ label: labels[value] ?? value, value }));
+
+const BILLING_LABELS: Record<string, string> = {
+  trial: "Free trial",
+  per_document: "Per document (pay as you go)",
+  monthly: "Monthly subscription",
+};
+
+const SENSITIVITY_LABELS: Record<string, string> = {
+  standard: "Standard",
+  pii: "PII",
+  restricted: "Restricted",
+};
 const MB = 1024 * 1024;
 
 interface FormState {
@@ -260,14 +271,6 @@ const buildPayload = (s: FormState): { ok: true; plan: PlanInput } | { ok: false
   }
 };
 
-const Field = ({ label, hint, children }: { label: string; hint?: string; children: ReactNode }) => (
-  <div className="space-y-1">
-    <label className="text-sm font-medium">{label}</label>
-    {children}
-    {hint && <p className="text-xs text-muted-foreground">{hint}</p>}
-  </div>
-);
-
 const NumberInput = ({
   value,
   onChange,
@@ -323,26 +326,21 @@ export const PlanForm = ({ initial, onDone }: { initial?: Plan; onDone: () => vo
           <Input value={s.name} placeholder="Starter" onChange={(e) => set("name", e.target.value)} />
         </Field>
         <Field label="Tier">
-          <select className={selectClass} value={s.tier} onChange={(e) => set("tier", e.target.value as PlanTier)}>
-            {PLAN_TIERS.map((t) => (
-              <option key={t} value={t}>
-                {t}
-              </option>
-            ))}
-          </select>
+          <SelectOption
+            className="capitalize"
+            options={toOptions(PLAN_TIERS)}
+            value={s.tier}
+            onValueChange={(v) => set("tier", v as PlanTier)}
+            aria-label="Tier"
+          />
         </Field>
         <Field label="Currency">
-          <select
-            className={selectClass}
+          <SelectOption
+            options={toOptions(CURRENCIES)}
             value={s.currency}
-            onChange={(e) => set("currency", e.target.value as CurrencyCode)}
-          >
-            {CURRENCIES.map((c) => (
-              <option key={c} value={c}>
-                {c}
-              </option>
-            ))}
-          </select>
+            onValueChange={(v) => set("currency", v as CurrencyCode)}
+            aria-label="Currency"
+          />
         </Field>
       </div>
       <Field label="Description" hint="Shown in the console and self-serve UI.">
@@ -357,17 +355,12 @@ export const PlanForm = ({ initial, onDone }: { initial?: Plan; onDone: () => vo
       <div className="space-y-3 rounded-md border p-3">
         <p className="text-sm font-medium">Billing</p>
         <Field label="Model">
-          <select
-            className={selectClass}
+          <SelectOption
+            options={toOptions(BILLING_KINDS, BILLING_LABELS)}
             value={s.billingKind}
-            onChange={(e) => set("billingKind", e.target.value as BillingKind)}
-          >
-            {BILLING_KINDS.map((k) => (
-              <option key={k} value={k}>
-                {k}
-              </option>
-            ))}
-          </select>
+            onValueChange={(v) => set("billingKind", v as BillingKind)}
+            aria-label="Billing model"
+          />
         </Field>
 
         {s.billingKind === "per_document" && (
@@ -421,17 +414,13 @@ export const PlanForm = ({ initial, onDone }: { initial?: Plan; onDone: () => vo
       <div className="space-y-3 rounded-md border p-3">
         <p className="text-sm font-medium">Entitlements</p>
         <Field label="Max sensitivity" hint="Gates PII/restricted functions.">
-          <select
-            className={cn(selectClass, "sm:w-48")}
+          <SelectOption
+            className="sm:w-48"
+            options={toOptions(SENSITIVITIES, SENSITIVITY_LABELS)}
             value={s.maxSensitivity}
-            onChange={(e) => set("maxSensitivity", e.target.value as Sensitivity)}
-          >
-            {SENSITIVITIES.map((sv) => (
-              <option key={sv} value={sv}>
-                {sv}
-              </option>
-            ))}
-          </select>
+            onValueChange={(v) => set("maxSensitivity", v as Sensitivity)}
+            aria-label="Max sensitivity"
+          />
         </Field>
         <Field label="Features">
           <ToggleList options={FEATURES} selected={s.features} onToggle={(v) => toggle("features", v)} />

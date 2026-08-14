@@ -8,6 +8,7 @@ import { Suspense } from "react";
 import { toast } from "sonner";
 import { z } from "zod";
 
+import { Field } from "@heirs/ui";
 import { Button } from "@heirs/ui";
 import { useLogin } from "@/hooks/api/use-auth";
 import { getErrorMessage } from "@heirs/api-client";
@@ -39,23 +40,16 @@ const LoginForm = () => {
   });
 
   return (
-    <div className="space-y-6 p-8 lg:min-w-125">
-      <div className="space-y-1 text-center">
-        <p className="font-medium">Admin Console</p>
-        <p className="text-sm text-muted-foreground">Sign in to the Heirs OCR admin console.</p>
+    <div className="space-y-6">
+      <div className="space-y-1">
+        <p className="text-2xl font-semibold tracking-tight">Admin console</p>
+        <p className="text-muted-foreground text-sm">Sign in to manage tenants, plans, and the service.</p>
       </div>
       <form className="space-y-4" onSubmit={onSubmit} noValidate>
-        <div className="space-y-1.5">
-          <label htmlFor="email" className="text-sm font-medium">
-            Email
-          </label>
+        <Field label="Email" htmlFor="email" error={errors.email?.message}>
           <Input id="email" type="email" autoComplete="email" aria-invalid={!!errors.email} {...register("email")} />
-          {errors.email && <p className="text-xs text-destructive">{errors.email.message}</p>}
-        </div>
-        <div className="space-y-1.5">
-          <label htmlFor="password" className="text-sm font-medium">
-            Password
-          </label>
+        </Field>
+        <Field label="Password" htmlFor="password" error={errors.password?.message}>
           <Input
             id="password"
             type="password"
@@ -63,8 +57,7 @@ const LoginForm = () => {
             aria-invalid={!!errors.password}
             {...register("password")}
           />
-          {errors.password && <p className="text-xs text-destructive">{errors.password.message}</p>}
-        </div>
+        </Field>
         <Button type="submit" className="w-full" disabled={login.isPending}>
           {login.isPending ? <Loader className="animate-spin" /> : "Sign in"}
         </Button>

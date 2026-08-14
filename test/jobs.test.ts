@@ -48,7 +48,8 @@ vi.mock("bullmq", () => {
     }
     async close() {}
   }
-  return { Queue, Worker };
+  class UnrecoverableError extends Error {}
+  return { Queue, Worker, UnrecoverableError };
 });
 
 // createQueueConnection() news up an IORedis; keep it from touching a real socket.
@@ -82,6 +83,19 @@ vi.mock("../src/http/deps", () => ({ getPipelineDeps: () => testDeps }));
 // the assertion is on the call the worker makes, not on Postgres.
 const { recordDocumentUsage } = vi.hoisted(() => ({ recordDocumentUsage: vi.fn() }));
 vi.mock("../src/billing/subscriptions", () => ({ recordDocumentUsage }));
+
+// Metering is deduped with a Redis `SET NX` on the job id. Model just those
+// semantics so the once-per-job guarantee is asserted rather than the client.
+const { meterMarkers } = vi.hoisted(() => ({ meterMarkers: new Map<string, string>() }));
+vi.mock("../src/redis", () => ({
+  getRedis: () => ({
+    set: async (key: string, value: string, _ex: string, _ttl: number, nx?: string) => {
+      if (nx === "NX" && meterMarkers.has(key)) return null;
+      meterMarkers.set(key, value);
+      return "OK";
+    },
+  }),
+}));
 
 import { ocrQueue, encodeJobError, type OcrJobData } from "../src/jobs/queue";
 import { processJob } from "../src/jobs/worker";
@@ -122,14 +136,19 @@ describe("ocrQueue — enqueue + status", () => {
     expect((await ocrQueue.getStatus(id))?.status).toBe("active");
   });
 
-  it("returns the result payload on a completed job", async () => {
+  it("flattens a completed job's outcome into the sync success shape", async () => {
     const id = await ocrQueue.enqueue(jobData());
     const job = jobs.get(id)!;
     job.state = "completed";
     job.returnvalue = { result: { text: "done" }, meta: { provider: "plain-text" } };
     const record = await ocrQueue.getStatus(id);
+
     expect(record?.status).toBe("completed");
-    expect(record?.result).toEqual({ result: { text: "done" }, meta: { provider: "plain-text" } });
+    // `result`/`meta` sit at the top level, matching POST /v1/ocr/:function — not
+    // nested as `result.result`, which forced clients to fork on the two paths.
+    expect(record?.result).toEqual({ text: "done" });
+    expect(record?.meta).toEqual({ provider: "plain-text" });
+    expect(record?.function).toBe(jobData().function);
   });
 
   it("decodes the typed OcrError code from a failed job's reason", async () => {
@@ -190,5 +209,18 @@ describe("worker.processJob — runs the same pipeline off-request", () => {
   it("does not meter when the job fails before the pipeline runs", async () => {
     await expect(processJob(jobData({}, "NOPE_FUNCTION"))).rejects.toBeTruthy();
     expect(recordDocumentUsage).not.toHaveBeenCalled();
+  });
+
+  it("meters a redelivered job only once", async () => {
+    // BullMQ hands a stalled job to another worker; both can reach the meter.
+    await processJob(jobData(), "job-dup");
+    await processJob(jobData(), "job-dup");
+    expect(recordDocumentUsage).toHaveBeenCalledTimes(1);
+  });
+
+  it("meters distinct jobs independently", async () => {
+    await processJob(jobData(), "job-a");
+    await processJob(jobData(), "job-b");
+    expect(recordDocumentUsage).toHaveBeenCalledTimes(2);
   });
 });

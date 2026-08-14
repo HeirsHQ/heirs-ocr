@@ -23,6 +23,19 @@ const schema = z
       .positive()
       .default(8 * 60 * 60),
     API_KEY_CACHE_TTL_SECONDS: z.coerce.number().int().positive().default(30),
+    /**
+     * Ceilings for the initial connection to each backing store.
+     *
+     * These are *boot* budgets, not per-request latency: nothing waits on them once
+     * a connection is up, so headroom is free and being tight is expensive. Both
+     * were previously hardcoded at 2000, which is right for a Postgres/Redis on
+     * localhost and far too short for managed remote instances — measured against
+     * this deployment, Postgres needs ~2.1s and Valkey 4–5.7s to hand-shake, with
+     * enough variance that even a 10s ceiling flaps. A slow handshake should delay
+     * the boot, never fail it.
+     */
+    DB_CONNECT_TIMEOUT_MS: z.coerce.number().int().positive().default(30_000),
+    REDIS_CONNECT_TIMEOUT_MS: z.coerce.number().int().positive().default(30_000),
     ASYNC_PAGE_THRESHOLD: z.coerce.number().int().positive().default(5),
     ASYNC_SIZE_THRESHOLD_BYTES: z.coerce
       .number()
