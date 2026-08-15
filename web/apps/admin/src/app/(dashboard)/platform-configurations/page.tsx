@@ -5,8 +5,8 @@ import { useState } from "react";
 import { toast } from "sonner";
 
 import { usePlatformSettings, useSavePlatformSettings } from "@/hooks/api/use-admin-console";
-import type { PlatformSettings } from "@/types/admin-console";
 import { EmptyState, ErrorState, Field, PageLayout, Skeleton } from "@/components/shared";
+import type { PlatformSettings } from "@/types/admin-console";
 import { getErrorMessage } from "@heirs/api-client";
 import { Checkbox } from "@heirs/ui";
 import { Button } from "@heirs/ui";

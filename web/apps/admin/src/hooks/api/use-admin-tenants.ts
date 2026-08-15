@@ -1,7 +1,7 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 
+import type { AdminTenant, AdminTenantDetail, SubscriptionView, TenantRecord } from "@/types/tenant";
 import { http, unwrap } from "@heirs/api-client";
-import type { AdminTenant, SubscriptionView, TenantRecord } from "@/types/tenant";
 import type { TenantUser } from "@/types/user";
 
 /**
@@ -20,6 +20,15 @@ export function useTenants() {
   return useQuery({
     queryKey: TENANTS,
     queryFn: () => http.get<{ tenants: AdminTenant[] }>("/api/admin/tenants").then(unwrap),
+    retry: false,
+  });
+}
+
+export function useTenant(id: string) {
+  return useQuery({
+    queryKey: [...TENANTS, id],
+    queryFn: () => http.get<AdminTenantDetail>(`/api/admin/tenants/${id}`).then(unwrap),
+    enabled: !!id,
     retry: false,
   });
 }

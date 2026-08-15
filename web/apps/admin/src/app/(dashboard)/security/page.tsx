@@ -4,9 +4,9 @@ import { Globe, Loader, Plus, Trash2 } from "lucide-react";
 import { useState } from "react";
 import { toast } from "sonner";
 
+import { EmptyState, ErrorState, PageLayout, Skeleton, StatusBadge } from "@/components/shared";
 import type { SecurityPosture, SecuritySettings } from "@/types/admin-console";
 import { useSaveSecurity, useSecurity } from "@/hooks/api/use-admin-console";
-import { EmptyState, ErrorState, PageLayout, Skeleton, StatusBadge } from "@/components/shared";
 import { getErrorMessage } from "@heirs/api-client";
 import { Checkbox } from "@heirs/ui";
 import { Label } from "@heirs/ui";
@@ -83,7 +83,7 @@ const Page = () => {
     <PageLayout title="Security" subtitle="Effective posture (read-only) and editable security policy.">
       <div className=" space-y-6">
         <section className="space-y-2">
-          <p className="text-sm font-medium">Effective posture</p>
+          <p className="text-sm font-medium">Effective Posture</p>
           <PostureView p={query.data.posture} />
         </section>
 
@@ -153,7 +153,6 @@ const Page = () => {
             </div>
           </div>
         </section>
-
         <Button onClick={onSave} disabled={save.isPending}>
           {save.isPending ? <Loader className="animate-spin" /> : "Save changes"}
         </Button>

@@ -1,7 +1,7 @@
 import { describe, expect, it, vi } from "vitest";
 import type { Request, Response } from "express";
 
-import { generateApiKey, hashApiKey } from "../src/auth/tenants";
+import { generateApiKey, hashApiKey, isTenantKeyExpired } from "../src/auth/tenants";
 import { auth } from "../src/http/middleware/auth";
 import { OcrError } from "../src/http/errors";
 
@@ -18,8 +18,24 @@ describe("tenant key helpers", () => {
     const k1 = generateApiKey();
     const k2 = generateApiKey();
     expect(k1).not.toBe(k2);
-    // 32 random bytes as base64url → 43 chars.
-    expect(k1).toHaveLength(43);
+    expect(k1).toMatch(/^hok_test_[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/);
+  });
+
+  it("generateApiKey can mint explicit test and live keys", () => {
+    expect(generateApiKey("test")).toMatch(/^hok_test_/);
+    expect(generateApiKey("live")).toMatch(/^hok_live_/);
+  });
+
+  it("isTenantKeyExpired treats missing and future expiry as active", () => {
+    const now = new Date("2026-08-15T12:00:00.000Z");
+    expect(isTenantKeyExpired({}, now)).toBe(false);
+    expect(isTenantKeyExpired({ expiresAt: "2026-08-15T12:00:01.000Z" }, now)).toBe(false);
+  });
+
+  it("isTenantKeyExpired treats the exact expiry instant as expired", () => {
+    const now = new Date("2026-08-15T12:00:00.000Z");
+    expect(isTenantKeyExpired({ expiresAt: "2026-08-15T12:00:00.000Z" }, now)).toBe(true);
+    expect(isTenantKeyExpired({ expiresAt: "2026-08-15T11:59:59.000Z" }, now)).toBe(true);
   });
 });
 

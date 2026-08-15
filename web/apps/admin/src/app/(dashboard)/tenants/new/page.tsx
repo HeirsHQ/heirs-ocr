@@ -263,9 +263,17 @@ const Page = () => {
                 onValueChange={(v) => set("planId", v === NO_PLAN ? "" : v)}
                 options={[
                   { label: "No subscription (unlimited defaults)", value: NO_PLAN },
-                  ...(plans.data?.plans ?? []).map((p) => ({ label: `${p.name} (${p.tier})`, value: p.id })),
+                  ...(plans.data?.plans ?? []).map((p) => ({
+                    label: p.hidden ? `${p.name} (${p.tier}) · admin-only` : `${p.name} (${p.tier})`,
+                    value: p.id,
+                  })),
                 ]}
               />
+              {s.planId && (plans.data?.plans ?? []).find((p) => p.id === s.planId)?.hidden && (
+                <p className="text-xs text-muted-foreground">
+                  Enterprise plan — custom pricing, not visible to tenants in self-serve.
+                </p>
+              )}
             </Field>
           )}
         </section>

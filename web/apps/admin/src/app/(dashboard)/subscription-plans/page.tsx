@@ -70,9 +70,7 @@ const Page = () => {
         )}
 
         {plans.data && plans.data.plans.length > 0 && (
-          <div className="rounded-md border">
-            <DataTable columns={columns} data={plans.data.plans} total={plans.data.plans.length || 0} />
-          </div>
+          <DataTable columns={columns} data={plans.data.plans} total={plans.data.plans.length || 0} />
         )}
       </div>
 

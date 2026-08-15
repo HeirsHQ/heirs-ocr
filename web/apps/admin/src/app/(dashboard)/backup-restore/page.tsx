@@ -1,24 +1,20 @@
 "use client";
 
+import { DatabaseBackup, Loader } from "lucide-react";
 import { Archive } from "lucide-react";
-import { DatabaseBackup, Loader, RotateCcw } from "lucide-react";
 import { useState } from "react";
 import { toast } from "sonner";
 
 import { useBackups, useCreateBackup, useRestoreBackup } from "@/hooks/api/use-admin-console";
 import { ConfirmDialog, EmptyState, ErrorState, PageLayout, Skeleton } from "@/components/shared";
+import { createBackupColumns } from "@/config/columns/backup";
 import type { BackupManifest } from "@/types/admin-console";
 import { getErrorMessage } from "@heirs/api-client";
-import { Label } from "@heirs/ui";
+import { DataTable, Label } from "@heirs/ui";
 import { Button } from "@heirs/ui";
 import { Input } from "@heirs/ui";
 
 const fmt = (iso: string) => new Date(iso).toLocaleString();
-const kb = (n: number) => `${(n / 1024).toFixed(1)} KB`;
-const summarize = (counts: Record<string, number>) =>
-  Object.entries(counts)
-    .map(([k, v]) => `${k}: ${v}`)
-    .join(" · ");
 
 const Page = () => {
   const backups = useBackups();
@@ -48,6 +44,11 @@ const Page = () => {
       onError: (e) => toast.error(getErrorMessage(e)),
     });
   };
+
+  const columns = createBackupColumns({
+    onRestore: (backup) => setPendingRestore(backup),
+    onView: () => {},
+  });
 
   return (
     <PageLayout
@@ -82,47 +83,14 @@ const Page = () => {
           />
         )}
 
-        {backups.data && backups.data.backups.length === 0 && (
+        {backups.data && backups.data.backups.length === 0 ? (
           <EmptyState
             icon={Archive}
             title="No backups yet"
             description="Create a snapshot before risky changes. Each backup captures the current plans, subscriptions, and settings."
           />
-        )}
-
-        {backups.data && backups.data.backups.length > 0 && (
-          <div className="border-hairline bg-card overflow-x-auto rounded-md border">
-            <table className="w-full text-sm">
-              <thead className="bg-(--surface-strong)/40 text-left text-xs text-muted-foreground">
-                <tr className="border-hairline border-b">
-                  <th className="px-3 py-2.5 font-medium">Created</th>
-                  <th className="px-3 py-2.5 font-medium">By</th>
-                  <th className="px-3 py-2.5 font-medium">Contents</th>
-                  <th className="px-3 py-2.5 text-right font-medium">Size</th>
-                  <th className="px-3 py-2.5 font-medium">Note</th>
-                  <th className="px-3 py-2.5" />
-                </tr>
-              </thead>
-              <tbody>
-                {backups.data.backups.map((b) => (
-                  <tr key={b.id} className="border-hairline hover:bg-accent/40 border-b last:border-0">
-                    <td className="whitespace-nowrap px-3 py-2.5 tabular-nums text-muted-foreground">
-                      {fmt(b.createdAt)}
-                    </td>
-                    <td className="px-3 py-2.5 font-mono text-xs">{b.createdBy}</td>
-                    <td className="px-3 py-2.5 text-xs text-muted-foreground">{summarize(b.counts)}</td>
-                    <td className="whitespace-nowrap px-3 py-2.5 text-right tabular-nums">{kb(b.sizeBytes)}</td>
-                    <td className="px-3 py-2.5 text-muted-foreground">{b.note ?? "—"}</td>
-                    <td className="px-3 py-2.5 text-right">
-                      <Button variant="outline" size="sm" onClick={() => setPendingRestore(b)}>
-                        <RotateCcw className="size-3.5" /> Restore
-                      </Button>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
+        ) : (
+          <DataTable columns={columns} data={backups.data?.backups || []} total={backups.data?.backups.length || 0} />
         )}
       </div>
 

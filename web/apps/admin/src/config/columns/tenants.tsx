@@ -1,16 +1,15 @@
-import { KeyRound, Settings2, Trash2, Users } from "lucide-react";
+import { Eye, KeyRound, Trash2, Users } from "lucide-react";
 
 import type { AdminTenant } from "@/types/tenant";
 import { createColumns, DateCell, TextCell } from "./core";
 
 interface TenantColumnHandlers {
-  onEdit: (row: AdminTenant) => void;
   onOwners: (row: AdminTenant) => void;
   onPlan: (row: AdminTenant) => void;
   onDelete: (row: AdminTenant) => void;
 }
 
-export function createTenantColumns({ onEdit, onOwners, onPlan, onDelete }: TenantColumnHandlers) {
+export function createTenantColumns({ onOwners, onPlan, onDelete }: TenantColumnHandlers) {
   return createColumns<AdminTenant>({
     columns: [
       {
@@ -55,7 +54,7 @@ export function createTenantColumns({ onEdit, onOwners, onPlan, onDelete }: Tena
       },
     ],
     actions: (row) => [
-      { label: "Edit", icon: Settings2, variant: "info", onClick: () => onEdit(row) },
+      { label: "View", icon: Eye, href: `/tenants/${row.tenant.tenantId}` },
       { label: "Owners", icon: Users, onClick: () => onOwners(row) },
       { label: "Plan", icon: KeyRound, onClick: () => onPlan(row) },
       { label: "Revoke", icon: Trash2, variant: "destructive", onClick: () => onDelete(row) },

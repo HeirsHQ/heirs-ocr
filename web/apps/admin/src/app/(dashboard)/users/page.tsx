@@ -2,19 +2,19 @@
 
 import { Loader, UserPlus, Users } from "lucide-react";
 import { zodResolver } from "@hookform/resolvers/zod";
-import { useMemo, useState } from "react";
 import { Controller, useForm } from "react-hook-form";
+import { useMemo, useState } from "react";
 import { toast } from "sonner";
 import { z } from "zod";
 
-import { useAdminUsers, useCreateAdmin, useDeleteAdmin, useUpdateAdmin } from "@/hooks/api/use-admin-users";
 import { ConfirmDialog, DataTable, EmptyState, ErrorState, PageLayout, Skeleton } from "@/components/shared";
+import { useAdminUsers, useCreateAdmin, useDeleteAdmin, useUpdateAdmin } from "@/hooks/api/use-admin-users";
 import { createUserColumns } from "@/config/columns/users";
 import type { AdminRole, AdminUser } from "@/types/user";
+import { SelectOption, type Option } from "@heirs/ui";
 import { getErrorMessage } from "@heirs/api-client";
 import { Dialog, DialogContent } from "@heirs/ui";
 import { useMe } from "@/hooks/api/use-auth";
-import { SelectOption, type Option } from "@heirs/ui";
 import { Button } from "@heirs/ui";
 import { Input } from "@heirs/ui";
 
@@ -184,12 +184,9 @@ const Page = () => {
         )}
 
         {users.data && users.data.admins.length > 0 && (
-          <div className="rounded-md border">
-            <DataTable columns={columns} data={users.data.admins} total={users.data.admins.length || 0} />
-          </div>
+          <DataTable columns={columns} data={users.data.admins} total={users.data.admins.length || 0} />
         )}
       </div>
-
       <ConfirmDialog
         open={!!pendingDelete}
         title="Remove user"

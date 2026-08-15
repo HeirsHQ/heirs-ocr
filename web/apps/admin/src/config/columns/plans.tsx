@@ -1,8 +1,8 @@
 import { Pencil, Trash2 } from "lucide-react";
 
 import type { BillingModel, Money, Plan } from "@/types/plan";
-import { Badge } from "@heirs/ui";
 import { createColumns } from "./core";
+import { Badge } from "@heirs/ui";
 
 const money = (m: Money): string => `${m.currency} ${(m.amountMinor / 100).toLocaleString()}`;
 

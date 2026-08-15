@@ -1,4 +1,4 @@
-import { Queue, type JobState } from "bullmq";
+import { Queue, type Job, type JobState } from "bullmq";
 import IORedis from "ioredis";
 
 import { OcrErrorCode, type OcrErrorCode as OcrErrorCodeType } from "../http/errors";
@@ -38,6 +38,7 @@ export type JobRecord = {
 export interface OcrQueue {
   enqueue(data: OcrJobData): Promise<string>;
   getStatus(jobId: string): Promise<JobRecord | undefined>;
+  getRecentForTenant(tenantId: string, limit?: number): Promise<JobRecord[]>;
 }
 
 /** BullMQ queue name; the worker binds to the same name. */
@@ -89,6 +90,23 @@ const toStatus = (state: JobState | "unknown"): JobStatus => {
       // waiting / delayed / prioritized / waiting-children / unknown
       return "queued";
   }
+};
+
+const toJobRecord = async (job: Job<OcrJobData>, jobId: string = job.id ?? "unknown"): Promise<JobRecord> => {
+  const status = toStatus(await job.getState());
+  const record: JobRecord = {
+    jobId,
+    status,
+    tenantId: job.data.request.tenantId,
+    function: job.data.function,
+  };
+  if (status === "completed") {
+    const outcome = job.returnvalue as { result?: unknown; meta?: OcrResponseMeta } | undefined;
+    record.result = outcome?.result;
+    record.meta = outcome?.meta;
+  }
+  if (status === "failed") record.error = decodeJobError(job.failedReason);
+  return record;
 };
 
 /** Aggregate queue state + a recent-jobs sample, for the admin console. */
@@ -153,21 +171,17 @@ export const ocrQueue: OcrQueue = {
     const job = await getQueue().getJob(jobId);
     if (!job) return undefined;
 
-    const status = toStatus(await job.getState());
-    const record: JobRecord = {
-      jobId,
-      status,
-      tenantId: job.data.request.tenantId,
-      function: job.data.function,
-    };
-    if (status === "completed") {
-      // `job.returnvalue` is the pipeline outcome (`{result, meta}`); flatten it so
-      // the payload mirrors the sync success envelope.
-      const outcome = job.returnvalue as { result?: unknown; meta?: OcrResponseMeta } | undefined;
-      record.result = outcome?.result;
-      record.meta = outcome?.meta;
-    }
-    if (status === "failed") record.error = decodeJobError(job.failedReason);
-    return record;
+    return toJobRecord(job, jobId);
+  },
+
+  async getRecentForTenant(tenantId, limit = 20) {
+    const jobs = await getQueue().getJobs(["waiting", "active", "delayed", "completed", "failed"], 0, 99);
+    const records = await Promise.all(
+      jobs
+        .filter((job): job is Job<OcrJobData> => !!job && job.data.request.tenantId === tenantId)
+        .slice(0, limit)
+        .map((job) => toJobRecord(job)),
+    );
+    return records;
   },
 };

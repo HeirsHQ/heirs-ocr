@@ -1,6 +1,7 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 
 import { http, unwrap } from "@heirs/api-client";
+import { PaginatedParams } from "@/types";
 import type {
   ApiIntegrationSettings,
   AuditEvent,
@@ -12,6 +13,7 @@ import type {
   SecurityPosture,
   SecuritySettings,
 } from "@/types/admin-console";
+import { removeNullOrUndefined } from "@heirs/ui";
 
 /**
  * Admin-console feature reads/writes (audit trail, logs, platform settings,
@@ -32,10 +34,16 @@ export function useAuditEvents(filter: { action?: string; actor?: string } = {})
 
 // ── Logs ──────────────────────────────────────────────────────────────────────
 
-export function useLogs(level?: LogLevel) {
+interface LogParams extends PaginatedParams {
+  level?: LogLevel | "all";
+}
+
+export function useLogs(params?: LogParams) {
+  const _params = removeNullOrUndefined(params);
+
   return useQuery({
-    queryKey: ["admin", "logs", level ?? "all"],
-    queryFn: () => http.get<{ entries: LogEntry[] }>("/api/admin/logs", level ? { level } : undefined).then(unwrap),
+    queryKey: ["admin", "logs", _params],
+    queryFn: () => http.get<{ entries: LogEntry[] }>("/api/admin/logs", _params).then(unwrap),
     retry: false,
     refetchInterval: 10_000,
   });

@@ -113,13 +113,13 @@ export const DataTable = <TData extends RowData>({
   });
 
   return (
-    <div className="w-full">
+    <div className="w-full border rounded-lg">
       <Table>
-        <TableHeader>
+        <TableHeader className="bg-muted rounded-t-lg">
           {table.getHeaderGroups().map((headerGroup) => (
-            <TableRow key={headerGroup.id}>
+            <TableRow className="h-11" key={headerGroup.id}>
               {headerGroup.headers.map((header) => (
-                <TableHead key={header.id} className="text-primary text-sm font-medium">
+                <TableHead key={header.id} className="text-primary text-sm font-medium first:rounded-tl-lg last:rounded-tr-lg">
                   {header.isPlaceholder ? null : <table.FlexRender header={header} />}
                 </TableHead>
               ))}

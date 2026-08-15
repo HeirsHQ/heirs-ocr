@@ -2,8 +2,9 @@
 
 import { Building2, ChartColumn } from "lucide-react";
 
+import { DataTable, EmptyState, ErrorState, PageLayout, Skeleton, StatTile } from "@/components/shared";
 import { useMetricsSummary, useTenantUsage } from "@/hooks/api/use-admin-metrics";
-import { EmptyState, ErrorState, PageLayout, Skeleton, StatTile } from "@/components/shared";
+import { usageColumns } from "@/config/columns/analytics";
 import { getErrorMessage } from "@heirs/api-client";
 
 const pct = (ratio: number): string => `${(ratio * 100).toFixed(1)}%`;
@@ -85,36 +86,14 @@ const Page = () => {
               retrying={usage.isFetching}
             />
           )}
-          {usage.data && tenants.length === 0 && (
+          {usage.data && tenants.length === 0 ? (
             <EmptyState
               icon={Building2}
               title="No tenant usage yet"
               description="Usage is attributed per tenant as they call the API. Provision a tenant and run a document to see it here."
             />
-          )}
-          {tenants.length > 0 && (
-            <div className="overflow-x-auto rounded-md border">
-              <table className="w-full text-sm">
-                <thead className="text-left text-xs text-muted-foreground">
-                  <tr className="border-b">
-                    <th className="px-3 py-2 font-medium">Tenant</th>
-                    <th className="px-3 py-2 text-right font-medium">Requests</th>
-                    <th className="px-3 py-2 text-right font-medium">Errors</th>
-                    <th className="px-3 py-2 text-right font-medium">Tokens</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {tenants.map((t) => (
-                    <tr key={t.tenantId} className="border-b last:border-0">
-                      <td className="px-3 py-2 font-mono text-xs">{t.tenantId}</td>
-                      <td className="px-3 py-2 text-right tabular-nums">{num(t.requests)}</td>
-                      <td className="px-3 py-2 text-right tabular-nums">{num(t.errors)}</td>
-                      <td className="px-3 py-2 text-right tabular-nums">{num(t.tokens)}</td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
+          ) : (
+            <DataTable columns={usageColumns} data={usage.data?.usage || []} total={usage.data?.usage.length || 0} />
           )}
         </section>
       </div>

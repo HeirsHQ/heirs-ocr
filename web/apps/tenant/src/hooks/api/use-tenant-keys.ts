@@ -19,7 +19,7 @@ export function useCreateTenantKey() {
   const qc = useQueryClient();
   return useMutation({
     mutationKey: ["tenant", "keys", "create"],
-    mutationFn: (payload: { name?: string }) =>
+    mutationFn: (payload: { name?: string; expiresAt?: string }) =>
       http.post<TenantApiKey & { apiKey: string }>("/api/tenant/keys", payload).then(unwrap),
     onSuccess: () => qc.invalidateQueries({ queryKey: KEYS }),
   });

@@ -24,6 +24,7 @@ const { query, ensureSchema, resetDb, fakeRedis, strings } = vi.hoisted(() => {
       rate_limit integer,
       allowed_origins jsonb,
       allowed_functions jsonb,
+      expires_at timestamptz,
       created_at timestamptz NOT NULL DEFAULT now()
     );
     CREATE TABLE IF NOT EXISTS admins (
@@ -89,7 +90,14 @@ import {
 import { getTenantByHash, hashApiKey, putTenant, revokeByHash, updateTenantByHash } from "../src/auth/tenants";
 import { adminAuth, parseCookies, requireMinRole } from "../src/http/middleware/admin-auth";
 import { createSession, destroySession, resolveSession } from "../src/auth/admin-session";
-import { getAllTenantUsage, recordTenantUsage } from "../src/observability/usage";
+import { getAllTenantUsage, getTenantUsage, recordTenantUsage } from "../src/observability/usage";
+import { runPipeline, type OcrRequest, type PipelineDeps } from "../src/pipeline";
+import { textExtraction } from "../src/functions/text-extraction";
+import { PlainTextProvider } from "../src/providers/plain-text";
+import { MockLlmClient } from "../src/llm/azure";
+import { defaultProviderPolicy } from "../src/config/providers";
+import { noopCache } from "../src/cache";
+import { logger } from "../src/observability/logger";
 
 const reset = async () => {
   await resetDb();
@@ -290,11 +298,34 @@ describe("per-tenant usage", () => {
     expect(t1).toMatchObject({ requests: 2, errors: 1, tokens: 150 });
     const t2 = usage.find((u) => u.tenantId === "t2")!;
     expect(t2).toMatchObject({ requests: 1, errors: 0, tokens: 0 });
+    await expect(getTenantUsage("t1")).resolves.toMatchObject({ requests: 2, errors: 1, tokens: 150 });
+    await expect(getTenantUsage("missing")).resolves.toMatchObject({ requests: 0, errors: 0, tokens: 0 });
   });
 
   it("never throws when the database rejects", async () => {
     query.mockRejectedValueOnce(new Error("postgres down"));
     expect(() => recordTenantUsage("t3", { outcome: "success" })).not.toThrow();
     await new Promise((r) => setTimeout(r, 0));
+  });
+
+  it("records OCR pipeline usage under the request tenant id used by in-app sessions", async () => {
+    const deps: PipelineDeps = {
+      llm: new MockLlmClient(),
+      logger,
+      providers: [new PlainTextProvider()],
+      cache: noopCache,
+      policy: defaultProviderPolicy,
+    };
+    const request: OcrRequest = {
+      file: { buffer: Buffer.from("portal document"), originalName: "doc.txt" },
+      args: {},
+      requestId: "req_portal_usage",
+      tenantId: "tenant_portal",
+    };
+
+    await runPipeline(textExtraction, request, deps);
+    await new Promise((r) => setTimeout(r, 0));
+
+    await expect(getTenantUsage("tenant_portal")).resolves.toMatchObject({ requests: 1, errors: 0 });
   });
 });

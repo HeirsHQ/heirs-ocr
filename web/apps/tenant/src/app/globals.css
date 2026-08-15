@@ -191,15 +191,9 @@
   }
 
   /*
-   * The desktop shell is a fixed-height app frame that manages its own inner
-   * scrolling. Below `lg` the document scrolls instead, so the mobile URL bar
-   * can auto-hide and horizontal overflow stays reachable rather than clipped.
+   * overflow:hidden is applied directly on the app-shell div, not body,
+   * so public/marketing pages can scroll normally.
    */
-  @media (width >= 64rem) {
-    body {
-      overflow: hidden;
-    }
-  }
 
   input:not([type="checkbox"]):not([type="radio"]):not([type="range"]):not([type="button"]):not([type="submit"]):not(
       [type="reset"]
