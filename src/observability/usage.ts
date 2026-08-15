@@ -66,3 +66,20 @@ export const getAllTenantUsage = async (): Promise<TenantUsage[]> => {
     }))
     .sort((a, b) => b.requests - a.requests);
 };
+
+/** One tenant's lifetime operational counters. Missing row = no activity yet. */
+export const getTenantUsage = async (tenantId: string): Promise<TenantUsage> => {
+  const { rows } = await query<UsageRow>(
+    `SELECT tenant_id, requests, errors, tokens FROM tenant_usage WHERE tenant_id = $1`,
+    [tenantId],
+  );
+  const row = rows[0];
+  return row
+    ? {
+        tenantId: row.tenant_id,
+        requests: Number(row.requests),
+        errors: Number(row.errors),
+        tokens: Number(row.tokens),
+      }
+    : { tenantId, requests: 0, errors: 0, tokens: 0 };
+};

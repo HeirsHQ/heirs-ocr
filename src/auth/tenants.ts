@@ -1,4 +1,4 @@
-import { createHash, randomBytes } from "crypto";
+import { createHash, randomUUID } from "crypto";
 
 import { logger } from "../observability/logger";
 import { env } from "../config/env";
@@ -36,14 +36,19 @@ export type Tenant = {
    * shouldn't touch PII.
    */
   allowedFunctions?: string[];
+  /** Optional expiry time. Expired keys are rejected by auth but remain listable. */
+  expiresAt?: string;
   createdAt?: string;
 };
 
 /** sha256 hex of an API key — the row's primary key and the cache key. */
 export const hashApiKey = (apiKey: string): string => createHash("sha256").update(apiKey).digest("hex");
 
-/** Generates a new random API key (43-char base64url, 256 bits of entropy). */
-export const generateApiKey = (): string => randomBytes(32).toString("base64url");
+export type ApiKeyMode = "test" | "live";
+
+/** Generates a new random API key with an environment-readable prefix. */
+export const generateApiKey = (mode: ApiKeyMode = env.NODE_ENV === "production" ? "live" : "test"): string =>
+  `hok_${mode}_${randomUUID()}`;
 
 /** The stored row shape (snake_case columns), mapped to/from the {@link Tenant} API. */
 type TenantRow = {
@@ -54,6 +59,7 @@ type TenantRow = {
   rate_limit: number | null;
   allowed_origins: string[] | null;
   allowed_functions: string[] | null;
+  expires_at?: Date | null;
   created_at: Date;
 };
 
@@ -64,8 +70,12 @@ const rowToTenant = (row: TenantRow): Tenant => ({
   rateLimit: row.rate_limit ?? undefined,
   allowedOrigins: row.allowed_origins ?? undefined,
   allowedFunctions: row.allowed_functions ?? undefined,
+  expiresAt: row.expires_at?.toISOString(),
   createdAt: row.created_at.toISOString(),
 });
+
+export const isTenantKeyExpired = (tenant: Pick<Tenant, "expiresAt">, now: Date = new Date()): boolean =>
+  tenant.expiresAt ? new Date(tenant.expiresAt).getTime() <= now.getTime() : false;
 
 /** jsonb columns take a JSON string (or NULL); a bare JS array would bind as a Postgres array. */
 const toJsonb = (v: unknown): string | null => (v == null ? null : JSON.stringify(v));
@@ -94,7 +104,7 @@ export const resolveTenant = async (apiKey: string): Promise<Tenant | undefined>
   const hit = cache.get(keyHash);
   if (hit && hit.expiresAt > Date.now()) {
     if (!hit.tenant) return undefined; // cached negative
-    return hit.tenant.disabled ? undefined : hit.tenant;
+    return hit.tenant.disabled || isTenantKeyExpired(hit.tenant) ? undefined : hit.tenant;
   }
 
   const tenant = await getTenantByHash(keyHash);
@@ -105,7 +115,7 @@ export const resolveTenant = async (apiKey: string): Promise<Tenant | undefined>
   }
 
   cache.set(keyHash, { tenant, expiresAt: Date.now() + cacheTtlMs() });
-  return tenant.disabled ? undefined : tenant;
+  return tenant.disabled || isTenantKeyExpired(tenant) ? undefined : tenant;
 };
 
 // Org-level state, cached separately from the per-key cache above (different key
@@ -160,8 +170,8 @@ export const putTenant = async (apiKey: string, tenant: Tenant, audit: AuditCont
   const keyHash = hashApiKey(apiKey);
   await query(
     `INSERT INTO tenants
-       (key_hash, tenant_id, name, disabled, rate_limit, allowed_origins, allowed_functions, created_at)
-     VALUES ($1, $2, $3, $4, $5, $6::jsonb, $7::jsonb, COALESCE($8::timestamptz, now()))
+       (key_hash, tenant_id, name, disabled, rate_limit, allowed_origins, allowed_functions, expires_at, created_at)
+     VALUES ($1, $2, $3, $4, $5, $6::jsonb, $7::jsonb, $8::timestamptz, COALESCE($9::timestamptz, now()))
      ON CONFLICT (key_hash) DO UPDATE SET
        tenant_id = excluded.tenant_id,
        name = excluded.name,
@@ -169,6 +179,7 @@ export const putTenant = async (apiKey: string, tenant: Tenant, audit: AuditCont
        rate_limit = excluded.rate_limit,
        allowed_origins = excluded.allowed_origins,
        allowed_functions = excluded.allowed_functions,
+       expires_at = excluded.expires_at,
        created_at = excluded.created_at`,
     [
       keyHash,
@@ -178,6 +189,7 @@ export const putTenant = async (apiKey: string, tenant: Tenant, audit: AuditCont
       tenant.rateLimit ?? null,
       toJsonb(tenant.allowedOrigins),
       toJsonb(tenant.allowedFunctions),
+      tenant.expiresAt ?? null,
       tenant.createdAt ?? null,
     ],
   );

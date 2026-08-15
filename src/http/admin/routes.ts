@@ -1,11 +1,19 @@
 import { Router, type Request, type RequestHandler, type Response } from "express";
 import { z } from "zod";
 
-import { SESSION_COOKIE, createSession, destroySession } from "../../auth/admin-session";
 import { clearLoginFailures, loginAllowed, recordLoginFailure } from "../../auth/login-throttle";
+import { getSettings, putSettings, type SettingsNamespace } from "../../config/settings-store";
+import { SESSION_COOKIE, createSession, destroySession } from "../../auth/admin-session";
+import { deletePlan, getStoredPlan, listPlans, putPlan } from "../../billing/plan-store";
+import { createBackup, getBackup, listBackups, restoreBackup } from "../../ops/backups";
 import { adminAuth, parseCookies, requireMinRole } from "../middleware/admin-auth";
+import { checkDependencies, providerStatus } from "../../observability/health";
+import { listAuditEvents, recordAuditEvent } from "../../observability/audit";
+import { createTenantUser, listTenantUsers } from "../../auth/tenant-users";
+import { recentLogs, type LogLevel } from "../../observability/log-buffer";
 import { getMetricsSummary } from "../../observability/metrics";
 import { getAllTenantUsage } from "../../observability/usage";
+import { parsePlanInput } from "../../billing/plan-schema";
 import { listFunctions } from "../../functions/registry";
 import { logger } from "../../observability/logger";
 import { getQueueStats } from "../../jobs/queue";
@@ -23,15 +31,13 @@ import {
 } from "../../auth/admins";
 import {
   generateApiKey,
+  listKeysForTenant,
   listTenants,
   putTenant,
   revokeByHash,
   updateTenantByHash,
   type Tenant,
 } from "../../auth/tenants";
-import { createTenantUser, listTenantUsers } from "../../auth/tenant-users";
-import { parsePlanInput } from "../../billing/plan-schema";
-import { deletePlan, getStoredPlan, listPlans, putPlan } from "../../billing/plan-store";
 import {
   assignablePlan,
   createSubscriptionFromPlan,
@@ -40,11 +46,6 @@ import {
   resolveSubscription,
   SubscriptionStoreUnavailableError,
 } from "../../billing/subscriptions";
-import { listAuditEvents, recordAuditEvent } from "../../observability/audit";
-import { checkDependencies, providerStatus } from "../../observability/health";
-import { recentLogs, type LogLevel } from "../../observability/log-buffer";
-import { getSettings, putSettings, type SettingsNamespace } from "../../config/settings-store";
-import { createBackup, getBackup, listBackups, restoreBackup } from "../../ops/backups";
 
 /**
  * Admin console JSON API, mounted under `/admin` (paths here start with `/api`).
@@ -319,6 +320,31 @@ adminApiRouter.get(
   requireMinRole("viewer"),
   handler(async (_req, res) => {
     res.json({ tenants: await listTenants() });
+  }),
+);
+
+adminApiRouter.get(
+  "/api/tenants/:id",
+  adminAuth,
+  requireMinRole("viewer"),
+  handler(async (req, res) => {
+    const tenantId = String(req.params.id);
+    const keys = await listKeysForTenant(tenantId);
+    if (!keys.length) {
+      sendError(res, 404, "NOT_FOUND", "No such tenant");
+      return;
+    }
+    const [users, subscription] = await Promise.all([
+      listTenantUsers(tenantId),
+      resolveSubscription(tenantId).catch(() => undefined),
+    ]);
+    res.json({
+      tenant: keys[0]!.tenant,
+      keys: keys.map((k) => k.keyHash),
+      users,
+      subscription: subscription ?? null,
+      plan: subscription?.plan ?? null,
+    });
   }),
 );
 

@@ -54,8 +54,11 @@ export const ensureSchema = async (): Promise<void> => {
       rate_limit         integer,
       allowed_origins    jsonb,
       allowed_functions  jsonb,
+      expires_at         timestamptz,
       created_at         timestamptz NOT NULL DEFAULT now()
     );
+
+    ALTER TABLE tenants ADD COLUMN IF NOT EXISTS expires_at timestamptz;
 
     CREATE TABLE IF NOT EXISTS admins (
       id             uuid PRIMARY KEY,

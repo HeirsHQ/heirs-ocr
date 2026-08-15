@@ -27,3 +27,23 @@ export interface SubscriptionView {
   status: string;
   plan: { id: string; name: string; tier: string };
 }
+
+export interface TenantUserView {
+  id: string;
+  tenantId: string;
+  email: string;
+  name: string;
+  role: "owner" | "member";
+  disabled: boolean;
+  createdAt: string | Date;
+  updatedAt: string | Date;
+}
+
+/** Response shape of `GET /api/admin/tenants/:id`. */
+export interface AdminTenantDetail {
+  tenant: TenantRecord;
+  keys: string[];
+  users: TenantUserView[];
+  subscription: SubscriptionView | null;
+  plan: SubscriptionView["plan"] | null;
+}

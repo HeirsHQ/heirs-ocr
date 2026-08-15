@@ -2,8 +2,8 @@
 
 import { Loader, UserPlus, UsersRound } from "lucide-react";
 import { zodResolver } from "@hookform/resolvers/zod";
-import { useMemo, useState } from "react";
 import { Controller, useForm } from "react-hook-form";
+import { useMemo, useState } from "react";
 import { toast } from "sonner";
 import { z } from "zod";
 
@@ -191,9 +191,7 @@ const Page = () => {
           />
         )}
         {team.data && team.data.users.length > 0 && (
-          <div className="rounded-md border">
-            <DataTable columns={columns} data={team.data.users} total={team.data.users.length || 0} />
-          </div>
+          <DataTable columns={columns} data={team.data.users} total={team.data.users.length || 0} />
         )}
       </div>
       <ConfirmDialog

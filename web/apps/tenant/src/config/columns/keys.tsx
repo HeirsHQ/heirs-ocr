@@ -23,7 +23,18 @@ export function createKeyColumns({ onRevoke }: KeyColumnHandlers) {
       {
         accessorKey: "disabled",
         header: "Status",
-        cell: ({ row }) => <StatusCell status={row.original.disabled ? "revoked" : "active"} default="neutral" />,
+        cell: ({ row }) => (
+          <StatusCell
+            status={row.original.disabled ? "revoked" : row.original.expired ? "expired" : "active"}
+            config={{ expired: "warning" }}
+            default="neutral"
+          />
+        ),
+      },
+      {
+        accessorKey: "expiresAt",
+        header: "Expires",
+        cell: ({ row }) => <DateCell date={row.original.expiresAt ?? null} />,
       },
       {
         accessorKey: "createdAt",

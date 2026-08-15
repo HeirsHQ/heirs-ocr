@@ -20,7 +20,7 @@ vi.mock("../src/db", () => ({
 }));
 
 import { inheritedScope } from "../src/http/tenant/routes";
-import { isTenantOrgDisabled } from "../src/auth/tenants";
+import { hashApiKey, isTenantOrgDisabled, resolveTenant } from "../src/auth/tenants";
 import type { Tenant } from "../src/auth/tenants";
 
 const key = (over: Partial<Tenant> = {}): Tenant => ({ tenantId: "tenant_a", ...over });
@@ -77,5 +77,33 @@ describe("isTenantOrgDisabled — session callers respect an org-wide disable", 
   it("is not disabled for a portal-only org that has never issued a key", async () => {
     setRows(0, 0);
     await expect(isTenantOrgDisabled("tenant_no_keys")).resolves.toBe(false);
+  });
+});
+
+describe("resolveTenant — expired API keys are rejected", () => {
+  const tenantRow = (apiKey: string, expiresAt: Date | null) => ({
+    key_hash: hashApiKey(apiKey),
+    tenant_id: `tenant_${apiKey}`,
+    name: null,
+    disabled: false,
+    rate_limit: null,
+    allowed_origins: null,
+    allowed_functions: null,
+    expires_at: expiresAt,
+    created_at: new Date("2026-08-15T00:00:00.000Z"),
+  });
+
+  it("returns undefined for an expired key", async () => {
+    rows.length = 0;
+    rows.push(tenantRow("expired-key", new Date("2000-01-01T00:00:00.000Z")));
+
+    await expect(resolveTenant("expired-key")).resolves.toBeUndefined();
+  });
+
+  it("resolves a key whose expiry is still in the future", async () => {
+    rows.length = 0;
+    rows.push(tenantRow("future-key", new Date("2999-01-01T00:00:00.000Z")));
+
+    await expect(resolveTenant("future-key")).resolves.toMatchObject({ tenantId: "tenant_future-key" });
   });
 });

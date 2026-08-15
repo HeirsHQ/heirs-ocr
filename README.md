@@ -119,9 +119,12 @@ secret API key — never from browser JavaScript (which would expose the key).
 Authorization: Bearer <api-key>        # or:  X-API-Key: <api-key>
 ```
 
-Keys map to **tenants** held in Postgres. Only the sha256 of each key is stored, so a
-database dump can't be replayed as credentials. Provision and revoke at runtime with no
-redeploy (or from the admin console / tenant portal):
+Keys map to **tenants** held in Postgres. New keys use a readable
+`hok_test_<uuid>` / `hok_live_<uuid>` prefix so operators can distinguish
+environments, tenant-minted keys may carry an expiry date, and only the sha256 of
+each key is stored, so a database dump can't be replayed as credentials.
+Provision and revoke at runtime with no redeploy (or from the admin console /
+tenant portal):
 
 ```bash
 pnpm provision:tenant create acme --rate 120 --functions RECEIPT_PARSING,TEXT_EXTRACTION

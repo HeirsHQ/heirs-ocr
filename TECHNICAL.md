@@ -420,8 +420,11 @@ Durable identity lives in Postgres (`src/db.ts`, `src/auth/`); ephemeral session
 lives in Redis.
 
 - **Tenants & API keys** (`src/auth/tenants.ts`) — a tenant is keyed by the sha256 of its API
-  key; a record carries `allowedFunctions`, `rateLimit`, `allowedOrigins`, and a `disabled`
-  flag. Keys are provisioned/revoked at runtime (CLI, admin console, or tenant portal).
+  key; newly minted keys are prefixed `hok_test_` or `hok_live_` for environment
+  clarity, while auth still accepts legacy opaque keys. A record carries
+  `allowedFunctions`, `rateLimit`, `allowedOrigins`, optional `expiresAt`, and a
+  `disabled` flag. Keys are provisioned/revoked at runtime (CLI, admin console, or
+  tenant portal); expired keys remain listable but cannot authenticate.
 - **Admin users** (`src/auth/admins.ts`) — platform operators with roles `owner` > `manager` >
   `viewer`, passwords hashed with argon2id, sessions in Redis (`admin-session.ts`). The first
   owner is seeded from `ADMIN_BOOTSTRAP_EMAIL`/`_PASSWORD` at startup (idempotent — never

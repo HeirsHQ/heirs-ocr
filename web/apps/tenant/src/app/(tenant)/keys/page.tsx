@@ -24,8 +24,13 @@ import {
   Skeleton,
 } from "@/components/shared";
 
-const schema = z.object({ name: z.string().trim().max(80, "Keep the name under 80 characters").optional() });
+const schema = z.object({
+  name: z.string().trim().max(80, "Keep the name under 80 characters").optional(),
+  expiresOn: z.string().optional(),
+});
 type FormValues = z.infer<typeof schema>;
+
+const endOfUtcDay = (date: string): string => `${date}T23:59:59.999Z`;
 
 const CreateKeyModal = () => {
   const [open, setOpen] = useState(false);
@@ -44,13 +49,13 @@ const CreateKeyModal = () => {
     reset({ name: "" });
   };
 
-  const onCreate = handleSubmit(({ name }) => {
+  const onCreate = handleSubmit(({ name, expiresOn }) => {
     createKey.mutate(
-      { name: name || undefined },
+      { name: name || undefined, expiresAt: expiresOn ? endOfUtcDay(expiresOn) : undefined },
       {
         onSuccess: (created) => {
           setNewKey(created.apiKey);
-          reset({ name: "" });
+          reset({ name: "", expiresOn: "" });
         },
         onError: (error) => toast.error(getErrorMessage(error)),
       },
@@ -87,6 +92,18 @@ const CreateKeyModal = () => {
                 </label>
                 <Input id="key-name" placeholder="e.g. CI pipeline" {...register("name")} />
                 {errors.name && <p className="text-xs text-destructive">{errors.name.message}</p>}
+              </div>
+              <div className="space-y-1">
+                <label htmlFor="key-expiry" className="text-sm font-medium">
+                  Expiry date (optional)
+                </label>
+                <Input
+                  id="key-expiry"
+                  type="date"
+                  min={new Date().toISOString().slice(0, 10)}
+                  {...register("expiresOn")}
+                />
+                {errors.expiresOn && <p className="text-xs text-destructive">{errors.expiresOn.message}</p>}
               </div>
               <div className="flex justify-end gap-2">
                 <Button type="button" variant="ghost" onClick={close} disabled={createKey.isPending}>
@@ -146,9 +163,7 @@ const Page = () => {
           />
         )}
         {keys.data && keys.data.keys.length > 0 && (
-          <div className="rounded-md border">
-            <DataTable columns={columns} data={keys.data.keys} total={keys.data.keys.length || 0} />
-          </div>
+          <DataTable columns={columns} data={keys.data.keys} total={keys.data.keys.length || 0} />
         )}
       </div>
       <ConfirmDialog

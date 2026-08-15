@@ -42,5 +42,7 @@ export interface TenantApiKey {
   prefix: string;
   name?: string;
   disabled: boolean;
+  expired?: boolean;
+  expiresAt?: string;
   createdAt?: string;
 }

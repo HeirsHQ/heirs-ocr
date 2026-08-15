@@ -280,8 +280,9 @@ beyond request handling (or the extraction cache TTL, for standard functions onl
   the OCR auth middleware accepts when no API key is present.
 - **Storage:** keys are never stored in plaintext. The tenant registry lives in **Postgres**,
   keyed by the **SHA-256 of the API key**, so a database dump cannot be replayed as
-  credentials. Keys are high-entropy random tokens for which SHA-256 — not bcrypt/argon2 — is
-  the correct, fast choice.
+  credentials. Newly minted keys use `hok_test_<uuid>` outside production and
+  `hok_live_<uuid>` in production; legacy opaque keys remain valid because the
+  server treats the submitted key as an opaque secret before hashing it.
 - **Resolution:** a valid key resolves to a tenant, setting `req.tenantId` which scopes rate
   limiting, authorization, subscription, and caching. Resolution uses a short-TTL positive
   cache (`API_KEY_CACHE_TTL_SECONDS`) to stay off the Postgres hot path and ride out brief blips.
@@ -413,18 +414,19 @@ except login require a **tenant session cookie**; management routes require the 
 Every route is scoped to the caller's own tenant org — a tenant can never read or mutate
 another org's keys or users. Errors use a `{ error: { code, message } }` shape.
 
-| Method + path            | Role   | Purpose                                                         |
-| ------------------------ | ------ | --------------------------------------------------------------- |
-| `POST /api/login`        | open   | Authenticate; sets the session cookie. Login-throttled.         |
-| `POST /api/logout`       | member | Destroy the session.                                            |
-| `GET  /api/me`           | member | Current user + tenant + role.                                   |
-| `GET  /api/keys`         | owner  | List the org's API keys (hash + prefix only; never the secret). |
-| `POST /api/keys`         | owner  | Mint a new API key — the raw key is returned **once**.          |
-| `DELETE /api/keys/:hash` | owner  | Revoke one of the org's keys.                                   |
-| `GET  /api/users`        | owner  | List team members.                                              |
-| `POST /api/users`        | owner  | Create a team member (`owner`/`member`).                        |
-| `PATCH /api/users/:id`   | owner  | Update a member (guards against removing the last owner).       |
-| `DELETE /api/users/:id`  | owner  | Delete a member (guards against deleting the last owner).       |
+| Method + path            | Role   | Purpose                                                                          |
+| ------------------------ | ------ | -------------------------------------------------------------------------------- |
+| `POST /api/login`        | open   | Authenticate; sets the session cookie. Login-throttled.                          |
+| `POST /api/logout`       | member | Destroy the session.                                                             |
+| `GET  /api/me`           | member | Current user + tenant + role.                                                    |
+| `GET  /api/billing`      | member | Current subscription plus lifetime OCR usage counters.                           |
+| `GET  /api/keys`         | owner  | List the org's API keys (hash + prefix, expiry, status; never the secret).       |
+| `POST /api/keys`         | owner  | Mint a new API key with optional `expiresAt` — the raw key is returned **once**. |
+| `DELETE /api/keys/:hash` | owner  | Revoke one of the org's keys.                                                    |
+| `GET  /api/users`        | owner  | List team members.                                                               |
+| `POST /api/users`        | owner  | Create a team member (`owner`/`member`).                                         |
+| `PATCH /api/users/:id`   | owner  | Update a member (guards against removing the last owner).                        |
+| `DELETE /api/users/:id`  | owner  | Delete a member (guards against deleting the last owner).                        |
 
 ## Appendix B — Admin API (`/admin/api`)
 

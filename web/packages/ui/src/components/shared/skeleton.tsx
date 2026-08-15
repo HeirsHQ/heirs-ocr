@@ -6,7 +6,7 @@ import { cn } from "../../lib/utils";
 const Shimmer = ({ className, style }: { className?: string; style?: CSSProperties }) => (
   <div
     className={cn(
-      "relative overflow-hidden rounded-xs bg-muted",
+      "relative overflow-hidden rounded-md bg-muted",
       // The sweep band is the ::before layer. It needs an explicit content and is
       // positioned/animated with `transform` only (the @keyframes animates transform),
       // so it never conflicts with Tailwind v4's `translate`-property utilities.
@@ -20,7 +20,7 @@ const Shimmer = ({ className, style }: { className?: string; style?: CSSProperti
 );
 
 const StatCardSkeleton = () => (
-  <div className="bg-card border-border space-y-3 rounded-xs border p-4">
+  <div className="bg-card border-border space-y-3 rounded-md border p-4">
     <div className="flex items-center justify-between">
       <Shimmer className="h-3 w-20" />
       <Shimmer className="size-4 rounded-full" />
@@ -45,7 +45,7 @@ const TableSkeleton = ({ columns = 6, rows = 8 }: { columns?: number; rows?: num
   const colWidths = ["w-8", "w-32", "w-24", "w-20", "w-28", "w-16"];
 
   return (
-    <div className="bg-card border-border w-full overflow-hidden rounded-xs border">
+    <div className="bg-card border-border w-full overflow-hidden rounded-md border">
       <div className="border-border flex h-11 items-center gap-4 border-b bg-muted px-4">
         {Array.from({ length: columns }, (_, i) => (
           <Shimmer key={i} className={cn("h-3", colWidths[i % colWidths.length])} />
@@ -70,19 +70,19 @@ const TableSkeleton = ({ columns = 6, rows = 8 }: { columns?: number; rows?: num
 };
 
 const WidgetSkeleton = ({ hasChart = false }: { hasChart?: boolean }) => (
-  <div className="bg-card ring-foreground/10 flex flex-col gap-4 overflow-hidden rounded-xs p-4 ring-1">
+  <div className="bg-card ring-foreground/10 flex flex-col gap-4 overflow-hidden rounded-md p-4 ring-1">
     <div className="flex items-center justify-between">
       <Shimmer className="h-4 w-32" />
       <div className="flex gap-1">
-        <Shimmer className="size-7 rounded-xs" />
-        <Shimmer className="size-7 rounded-xs" />
+        <Shimmer className="size-7 rounded-md" />
+        <Shimmer className="size-7 rounded-md" />
       </div>
     </div>
     {hasChart ? (
       <div className="space-y-2">
         <div className="flex h-40 items-end gap-1.5">
           {Array.from({ length: 7 }, (_, i) => (
-            <Shimmer key={i} className="flex-1 rounded-xs" style={{ height: `${30 + Math.sin(i) * 25 + 40}%` }} />
+            <Shimmer key={i} className="flex-1 rounded-md" style={{ height: `${30 + Math.sin(i) * 25 + 40}%` }} />
           ))}
         </div>
         <div className="flex justify-between">
@@ -111,7 +111,7 @@ const WidgetSkeleton = ({ hasChart = false }: { hasChart?: boolean }) => (
 );
 
 const CourseCardSkeleton = () => (
-  <div className="border-border bg-card space-y-3 rounded-xs border p-5">
+  <div className="border-border bg-card space-y-3 rounded-md border p-5">
     <Shimmer className="h-2.5 w-16" />
     <Shimmer className="h-4 w-3/4" />
     <Shimmer className="h-3 w-1/2" />
@@ -134,7 +134,7 @@ const DashboardSkeleton = () => (
     <div className="space-y-3">
       <div className="flex items-center justify-between">
         <Shimmer className="h-5 w-36" />
-        <Shimmer className="h-8 w-24 rounded-xs" />
+        <Shimmer className="h-8 w-24 rounded-md" />
       </div>
       <div className="grid gap-4 lg:grid-cols-3">
         <CourseCardSkeleton />
@@ -152,13 +152,13 @@ const PageSkeleton = () => (
         <Shimmer className="h-6 w-48" />
         <Shimmer className="h-3.5 w-72" />
       </div>
-      <Shimmer className="h-8 w-28 rounded-xs" />
+      <Shimmer className="h-8 w-28 rounded-md" />
     </div>
-    <div className="border-border bg-card space-y-4 rounded-xs border p-4">
+    <div className="border-border bg-card space-y-4 rounded-md border p-4">
       <div className="flex items-center gap-3">
-        <Shimmer className="h-8 w-24 rounded-xs" />
-        <Shimmer className="h-8 w-24 rounded-xs" />
-        <Shimmer className="h-8 w-24 rounded-xs" />
+        <Shimmer className="h-8 w-24 rounded-md" />
+        <Shimmer className="h-8 w-24 rounded-md" />
+        <Shimmer className="h-8 w-24 rounded-md" />
       </div>
       <TableSkeleton columns={5} rows={8} />
     </div>
@@ -170,15 +170,15 @@ const ListSkeleton = ({ count = 6 }: { count?: number }) => (
     <div className="flex items-center justify-between">
       <Shimmer className="h-6 w-40" />
       <div className="flex gap-2">
-        <Shimmer className="h-8 w-32 rounded-xs" />
-        <Shimmer className="h-8 w-8 rounded-xs" />
+        <Shimmer className="h-8 w-32 rounded-md" />
+        <Shimmer className="h-8 w-8 rounded-md" />
       </div>
     </div>
     <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
       {Array.from({ length: count }, (_, i) => (
         <div
           key={i}
-          className="bg-card border-border overflow-hidden rounded-xs border"
+          className="bg-card border-border overflow-hidden rounded-md border"
           style={{ animationDelay: `${i * 80}ms` }}
         >
           <Shimmer className="h-36 w-full rounded-none" />
@@ -206,21 +206,21 @@ const ListSkeleton = ({ count = 6 }: { count?: number }) => (
 
 const ProfileSkeleton = () => (
   <div className="space-y-6">
-    <div className="bg-card border-border flex items-center gap-5 rounded-xs border p-6">
+    <div className="bg-card border-border flex items-center gap-5 rounded-md border p-6">
       <Shimmer className="size-16 rounded-full" />
       <div className="space-y-2">
         <Shimmer className="h-5 w-36" />
         <Shimmer className="h-3.5 w-48" />
       </div>
     </div>
-    <div className="bg-card border-border space-y-5 rounded-xs border p-6">
+    <div className="bg-card border-border space-y-5 rounded-md border p-6">
       {Array.from({ length: 4 }, (_, i) => (
         <div key={i} className="space-y-1.5">
           <Shimmer className="h-3 w-24" />
-          <Shimmer className="h-8 w-full rounded-xs" />
+          <Shimmer className="h-8 w-full rounded-md" />
         </div>
       ))}
-      <Shimmer className="h-8 w-28 rounded-xs" />
+      <Shimmer className="h-8 w-28 rounded-md" />
     </div>
   </div>
 );

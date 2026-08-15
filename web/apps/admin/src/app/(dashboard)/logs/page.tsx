@@ -4,10 +4,13 @@ import { Terminal } from "lucide-react";
 import { useState } from "react";
 
 import { EmptyState, ErrorState, PageLayout, Skeleton } from "@/components/shared";
+import type { LogEntry, LogLevel } from "@/types/admin-console";
 import { useLogs } from "@/hooks/api/use-admin-console";
-import type { LogLevel } from "@/types/admin-console";
+import { createLogColumns } from "@/config/columns/log";
+import { ViewLog } from "@/components/admin/view-log";
 import { getErrorMessage } from "@heirs/api-client";
-import { cn } from "@heirs/ui";
+import { cn, DataTable } from "@heirs/ui";
+import { useValues } from "@/hooks";
 
 const LEVELS: { value: LogLevel | "all"; label: string }[] = [
   { value: "all", label: "All" },
@@ -16,18 +19,14 @@ const LEVELS: { value: LogLevel | "all"; label: string }[] = [
   { value: "error", label: "Errors" },
 ];
 
-const levelClass: Record<LogLevel, string> = {
-  debug: "text-muted-foreground",
-  info: "text-primary",
-  warn: "text-warning",
-  error: "text-destructive",
-};
-
-const fmt = (iso: string) => new Date(iso).toLocaleTimeString();
-
 const Page = () => {
-  const [level, setLevel] = useState<LogLevel | "all">("all");
-  const logs = useLogs(level === "all" ? undefined : level);
+  const { onValueChange, values } = useValues({ level: "all" as LogLevel | "all", page: 1, size: 10 });
+  const [selected, setSelected] = useState<LogEntry | null>(null);
+  const logs = useLogs(values);
+
+  const columns = createLogColumns({
+    onView: (log) => setSelected(log),
+  });
 
   return (
     <PageLayout title="Logs" subtitle="Live tail of recent structured log entries (bounded, newest first).">
@@ -36,10 +35,10 @@ const Page = () => {
           {LEVELS.map((l) => (
             <button
               key={l.value}
-              onClick={() => setLevel(l.value)}
+              onClick={() => onValueChange("level", l.value)}
               className={cn(
                 "rounded-md border px-2.5 py-1 text-sm transition-colors",
-                level === l.value
+                values.level === l.value
                   ? "border-ring bg-accent font-medium"
                   : "border-hairline text-muted-foreground hover:bg-accent/50",
               )}
@@ -48,9 +47,7 @@ const Page = () => {
             </button>
           ))}
         </div>
-
         {logs.isPending && <Skeleton skeleton="table" columns={3} rows={10} />}
-
         {logs.isError && (
           <ErrorState
             title="Couldn't load logs"
@@ -59,33 +56,16 @@ const Page = () => {
             retrying={logs.isFetching}
           />
         )}
-
-        {logs.data && logs.data.entries.length === 0 && (
+        {logs.data && logs.data.entries.length === 0 ? (
           <EmptyState
             icon={Terminal}
             title="No log entries"
             description="Recent structured log lines from the running service will stream in here."
           />
+        ) : (
+          <DataTable columns={columns} data={logs.data?.entries || []} total={logs.data?.entries.length || 0} />
         )}
-
-        {logs.data && logs.data.entries.length > 0 && (
-          <div className="border-hairline bg-(--canvas-soft) overflow-x-auto rounded-md border font-mono text-xs">
-            <ul className="divide-y divide-(--hairline)">
-              {logs.data.entries.map((e, i) => (
-                <li key={i} className="hover:bg-accent/40 flex gap-3 px-3 py-1.5 transition-colors">
-                  <span className="whitespace-nowrap tabular-nums text-muted-foreground">{fmt(e.time)}</span>
-                  <span className={cn("w-12 shrink-0 font-semibold uppercase", levelClass[e.level])}>{e.level}</span>
-                  <span className="flex-1 break-all">
-                    {e.msg}
-                    {Object.keys(e.fields).length > 0 && (
-                      <span className="ml-2 text-muted-foreground">{JSON.stringify(e.fields)}</span>
-                    )}
-                  </span>
-                </li>
-              ))}
-            </ul>
-          </div>
-        )}
+        {selected && <ViewLog log={selected} onOpenChange={() => setSelected(null)} open={selected !== null} />}
       </div>
     </PageLayout>
   );

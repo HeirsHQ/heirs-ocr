@@ -1,12 +1,15 @@
 import { Router, type Request, type RequestHandler, type Response } from "express";
 import { z } from "zod";
 
-import { SESSION_COOKIE, createSession, destroySession } from "../../auth/tenant-session";
+import { resolveSubscription, SubscriptionStoreUnavailableError } from "../../billing/subscriptions";
 import { clearLoginFailures, loginAllowed, recordLoginFailure } from "../../auth/login-throttle";
-import { parseCookies } from "../middleware/admin-auth";
+import { SESSION_COOKIE, createSession, destroySession } from "../../auth/tenant-session";
 import { requireTenantRole, tenantAuth } from "../middleware/tenant-auth";
+import { getTenantUsage } from "../../observability/usage";
+import { parseCookies } from "../middleware/admin-auth";
 import { logger } from "../../observability/logger";
 import type { TenantUser } from "../../types/user";
+import { ocrQueue } from "../../jobs/queue";
 import {
   countOwners,
   createTenantUser,
@@ -147,6 +150,33 @@ tenantApiRouter.get(
   }),
 );
 
+tenantApiRouter.get(
+  "/api/billing",
+  tenantAuth,
+  handler(async (req, res) => {
+    const tenantId = req.tenantUser!.tenantId;
+    try {
+      const [subscription, usage] = await Promise.all([resolveSubscription(tenantId), getTenantUsage(tenantId)]);
+      res.json({ subscription: subscription ?? null, usage });
+    } catch (err) {
+      if (err instanceof SubscriptionStoreUnavailableError) {
+        sendError(res, 503, "PROVIDER_UNAVAILABLE", "Billing store unavailable");
+        return;
+      }
+      throw err;
+    }
+  }),
+);
+
+tenantApiRouter.get(
+  "/api/jobs",
+  tenantAuth,
+  handler(async (req, res) => {
+    const jobs = await ocrQueue.getRecentForTenant(req.tenantUser!.tenantId);
+    res.json({ jobs });
+  }),
+);
+
 /** Trims a stored user down to the public view — never leak the password hash. */
 const publicUser = (u: TenantUser): TenantUser => ({
   id: u.id,
@@ -163,7 +193,10 @@ const publicUser = (u: TenantUser): TenantUser => ({
 // The tenant's own keys for direct API access. The raw key is unrecoverable, so the
 // list surfaces only the key-hash (and a short display prefix), never the secret.
 
-const createKeySchema = z.object({ name: z.string().min(1).optional() });
+const createKeySchema = z.object({
+  name: z.string().min(1).optional(),
+  expiresAt: z.string().datetime().optional(),
+});
 
 /**
  * Scope for a tenant-minted key: exactly what the org can already do, never more.
@@ -196,11 +229,16 @@ export const inheritedScope = (keys: Tenant[]): Partial<Pick<Tenant, "allowedFun
 };
 
 /** Public shape of a key: the hash identifies it; the raw key is never stored. */
-const publicKey = (keyHash: string, tenant: { name?: string; disabled?: boolean; createdAt?: string }) => ({
+const publicKey = (
+  keyHash: string,
+  tenant: { name?: string; disabled?: boolean; expiresAt?: string; createdAt?: string },
+) => ({
   keyHash,
   prefix: keyHash.slice(0, 12),
   name: tenant.name,
   disabled: tenant.disabled ?? false,
+  expiresAt: tenant.expiresAt,
+  expired: tenant.expiresAt ? new Date(tenant.expiresAt).getTime() <= Date.now() : false,
   createdAt: tenant.createdAt,
 });
 
@@ -224,6 +262,10 @@ tenantApiRouter.post(
       sendError(res, 400, "INVALID_ARGS", parsed.error.issues[0]?.message ?? "Invalid key");
       return;
     }
+    if (parsed.data.expiresAt && new Date(parsed.data.expiresAt).getTime() <= Date.now()) {
+      sendError(res, 400, "INVALID_ARGS", "Expiry must be in the future");
+      return;
+    }
     const tenantId = req.tenantUser!.tenantId;
     const apiKey = generateApiKey();
     const createdAt = new Date().toISOString();
@@ -238,11 +280,14 @@ tenantApiRouter.post(
 
     await putTenant(
       apiKey,
-      { tenantId, name: parsed.data.name, createdAt, ...scope },
+      { tenantId, name: parsed.data.name, expiresAt: parsed.data.expiresAt, createdAt, ...scope },
       { actor: req.tenantUser!.userId },
     );
     // The raw key is shown exactly once — it is never stored, only its hash.
-    res.status(201).json({ apiKey, ...publicKey(hashApiKey(apiKey), { name: parsed.data.name, createdAt }) });
+    res.status(201).json({
+      apiKey,
+      ...publicKey(hashApiKey(apiKey), { name: parsed.data.name, expiresAt: parsed.data.expiresAt, createdAt }),
+    });
   }),
 );
 

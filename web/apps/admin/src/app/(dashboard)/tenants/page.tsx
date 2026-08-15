@@ -5,26 +5,13 @@ import { useMemo, useState } from "react";
 import { toast } from "sonner";
 import Link from "next/link";
 
-import { useOcrFunctionKeys, usePlans } from "@/hooks/api/use-admin-plans";
 import { createTenantColumns } from "@/config/columns/tenants";
+import { Button, Input, SelectOption } from "@heirs/ui";
+import { usePlans } from "@/hooks/api/use-admin-plans";
 import { getErrorMessage } from "@heirs/api-client";
 import { Dialog, DialogContent } from "@heirs/ui";
 import type { AdminTenant } from "@/types/tenant";
-import { SelectOption } from "@heirs/ui";
-import { Textarea } from "@heirs/ui";
-import { Label } from "@heirs/ui";
-import { Button } from "@heirs/ui";
-import { Switch } from "@heirs/ui";
-import { Input } from "@heirs/ui";
-import {
-  ConfirmDialog,
-  DataTable,
-  EmptyState,
-  ErrorState,
-  PageLayout,
-  Skeleton,
-  ToggleList,
-} from "@/components/shared";
+import { ConfirmDialog, DataTable, EmptyState, ErrorState, PageLayout, Skeleton } from "@/components/shared";
 import {
   useAssignSubscription,
   useDeleteTenant,
@@ -32,112 +19,9 @@ import {
   useTenantLoginUsers,
   useTenantSubscription,
   useTenants,
-  useUpdateTenant,
 } from "@/hooks/api/use-admin-tenants";
 
 type ModalKind = "edit" | "owners" | "plan";
-
-// ── Edit tenant modal ──────────────────────────────────────────────────────────
-
-const EditTenantModal = ({ row, onClose }: { row: AdminTenant; onClose: () => void }) => {
-  const { keyHash, tenant } = row;
-  const update = useUpdateTenant();
-  const functions = useOcrFunctionKeys();
-  const [name, setName] = useState(tenant.name ?? "");
-  const [rateLimit, setRateLimit] = useState(tenant.rateLimit?.toString() ?? "");
-  const [disabled, setDisabled] = useState(!!tenant.disabled);
-  const [allowedFunctions, setAllowedFunctions] = useState<string[]>(tenant.allowedFunctions ?? []);
-  const [origins, setOrigins] = useState((tenant.allowedOrigins ?? []).join("\n"));
-
-  const toggleFn = (fn: string) =>
-    setAllowedFunctions((a) => (a.includes(fn) ? a.filter((f) => f !== fn) : [...a, fn]));
-
-  const save = () => {
-    if (rateLimit.trim() && !/^[1-9]\d*$/.test(rateLimit.trim())) {
-      toast.error("Rate limit must be a positive whole number");
-      return;
-    }
-    update.mutate(
-      {
-        keyHash,
-        patch: {
-          name: name.trim() || undefined,
-          rateLimit: rateLimit.trim() ? Number(rateLimit.trim()) : undefined,
-          disabled,
-          allowedFunctions,
-          allowedOrigins: origins
-            .split(/[\n,]/)
-            .map((o) => o.trim())
-            .filter(Boolean),
-        },
-      },
-      {
-        onSuccess: () => {
-          toast.success("Tenant updated");
-          onClose();
-        },
-        onError: (e) => toast.error(getErrorMessage(e)),
-      },
-    );
-  };
-
-  return (
-    <Dialog open onOpenChange={(o) => !o && onClose()}>
-      <DialogContent title={`Edit ${tenant.tenantId}`} description="Registry settings for this tenant.">
-        <div className="space-y-3">
-          <div className="grid gap-3 sm:grid-cols-2">
-            <div className="space-y-1">
-              <Label>Display name</Label>
-              <Input value={name} onChange={(e) => setName(e.target.value)} />
-            </div>
-            <div className="space-y-1">
-              <Label>Rate limit /min</Label>
-              <Input inputMode="numeric" value={rateLimit} onChange={(e) => setRateLimit(e.target.value)} />
-            </div>
-          </div>
-          <div className="space-y-1">
-            <Label>
-              Allowed functions <span className="text-xs font-normal text-muted-foreground">(none = all)</span>
-            </Label>
-            {functions.isPending ? (
-              <p className="text-xs text-muted-foreground">Loading…</p>
-            ) : (
-              <ToggleList
-                options={functions.data?.functions ?? []}
-                selected={allowedFunctions}
-                onToggle={toggleFn}
-                columns={2}
-              />
-            )}
-          </div>
-          <div className="space-y-1">
-            <Label>Allowed origins</Label>
-            <Textarea
-              value={origins}
-              rows={2}
-              placeholder="https://app.acme.com"
-              onChange={(e) => setOrigins(e.target.value)}
-            />
-          </div>
-          <Label className="flex items-center gap-2 text-sm font-normal">
-            <Switch checked={disabled} onCheckedChange={setDisabled} />
-            Disabled (key rejected without deleting)
-          </Label>
-          <div className="flex justify-end gap-2 pt-1">
-            <Button variant="ghost" onClick={onClose} disabled={update.isPending}>
-              Cancel
-            </Button>
-            <Button onClick={save} disabled={update.isPending}>
-              {update.isPending ? <Loader className="animate-spin" /> : "Save"}
-            </Button>
-          </div>
-        </div>
-      </DialogContent>
-    </Dialog>
-  );
-};
-
-// ── Portal owners modal ─────────────────────────────────────────────────────────
 
 const OwnersModal = ({ tenantId, onClose }: { tenantId: string; onClose: () => void }) => {
   const users = useTenantLoginUsers(tenantId);
@@ -266,17 +150,27 @@ const PlanModal = ({ tenantId, onClose }: { tenantId: string; onClose: () => voi
               No plans in the catalog yet — create one under Subscription Plans.
             </p>
           ) : (
-            <div className="flex items-center gap-2">
-              <SelectOption
-                aria-label="Plan"
-                placeholder="Select a plan…"
-                value={planId || undefined}
-                onValueChange={setPlanId}
-                options={available.map((p) => ({ label: `${p.name} (${p.tier})`, value: p.id }))}
-              />
-              <Button onClick={onAssign} disabled={!planId || assign.isPending}>
-                {assign.isPending ? <Loader className="size-4 animate-spin" /> : current ? "Change" : "Assign"}
-              </Button>
+            <div className="space-y-2">
+              <div className="flex items-center gap-2">
+                <SelectOption
+                  aria-label="Plan"
+                  placeholder="Select a plan…"
+                  value={planId || undefined}
+                  onValueChange={setPlanId}
+                  options={available.map((p) => ({
+                    label: p.hidden ? `${p.name} (${p.tier}) · admin-only` : `${p.name} (${p.tier})`,
+                    value: p.id,
+                  }))}
+                />
+                <Button onClick={onAssign} disabled={!planId || assign.isPending}>
+                  {assign.isPending ? <Loader className="size-4 animate-spin" /> : current ? "Change" : "Assign"}
+                </Button>
+              </div>
+              {planId && available.find((p) => p.id === planId)?.hidden && (
+                <p className="text-xs text-muted-foreground">
+                  Enterprise plan — custom pricing, not visible to tenants in self-serve.
+                </p>
+              )}
             </div>
           )}
         </div>
@@ -308,7 +202,6 @@ const Page = () => {
   const columns = useMemo(
     () =>
       createTenantColumns({
-        onEdit: (row) => setActive({ kind: "edit", row }),
         onOwners: (row) => setActive({ kind: "owners", row }),
         onPlan: (row) => setActive({ kind: "plan", row }),
         onDelete: (row) => setPendingDelete(row),
@@ -345,12 +238,9 @@ const Page = () => {
           />
         )}
         {tenants.data && tenants.data.tenants.length > 0 && (
-          <div className="rounded-md border">
-            <DataTable columns={columns} data={tenants.data.tenants} total={tenants.data.tenants.length || 0} />
-          </div>
+          <DataTable columns={columns} data={tenants.data.tenants} total={tenants.data.tenants.length || 0} />
         )}
       </div>
-      {active?.kind === "edit" && <EditTenantModal row={active.row} onClose={() => setActive(null)} />}
       {active?.kind === "owners" && (
         <OwnersModal tenantId={active.row.tenant.tenantId} onClose={() => setActive(null)} />
       )}

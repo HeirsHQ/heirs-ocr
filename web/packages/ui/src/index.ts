@@ -1,5 +1,6 @@
 // Public surface of @heirs/ui — presentational primitives shared by both apps.
 export * from "./lib/utils";
+export * from "./lib/string";
 export * from "./types";
 
 // shadcn / base-ui primitives
@@ -42,4 +43,5 @@ export * from "./components/shared/skeleton";
 export * from "./components/shared/stat-tile";
 export * from "./components/shared/status-badge";
 export * from "./components/shared/tab-panel";
+export * from "./components/shared/text-label"
 export * from "./components/shared/toggle-list";
