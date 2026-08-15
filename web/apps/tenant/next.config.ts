@@ -11,6 +11,9 @@ const nextConfig: NextConfig = {
   // The shared packages ship TypeScript/JSX source, so Next must transpile them.
   transpilePackages: ["@heirs/ui", "@heirs/api-client"],
   allowedDevOrigins: ["192.168.100.3"],
+  images: {
+    remotePatterns: []
+  }
 };
 
 export default nextConfig;
