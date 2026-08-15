@@ -1,6 +1,6 @@
 import { OcrFunction, type OcrFunctionDefinition, type OcrFunctionKey } from "./define";
-import { bankStatementAnalysis } from "./bank-statement-analysis";
 import { documentClassification } from "./document-classification";
+import { bankStatementAnalysis } from "./bank-statement-analysis";
 import { documentAuthenticity } from "./document-authenticity";
 import { formDataExtraction } from "./form-data-extraction";
 import { autoExtraction } from "./auto-extraction";

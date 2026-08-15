@@ -13,9 +13,9 @@ const cols = [
   {
     heading: "Developers",
     links: [
-      { href: "/v1/ocr/functions", label: "API Reference" },
-      { href: "#", label: "SDKs" },
-      { href: "#", label: "Changelog" },
+      { href: "/api-reference", label: "API Reference" },
+      { href: "/sdks", label: "SDKs" },
+      { href: "/changelog", label: "Changelog" },
     ],
   },
   {
@@ -41,7 +41,6 @@ export const Footer = () => (
             Turn any document into structured, validated data through one uniform API.
           </p>
         </div>
-
         {cols.map((col) => (
           <div key={col.heading} className="flex flex-col gap-3">
             <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">{col.heading}</p>
@@ -59,7 +58,7 @@ export const Footer = () => (
       </div>
 
       <div className="mt-10 border-t pt-6 text-center text-xs text-muted-foreground">
-        © {new Date().getFullYear()} Heirs. All rights reserved.
+        © {new Date().getFullYear()} Heirs Technologies. All rights reserved.
       </div>
     </div>
   </footer>

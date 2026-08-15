@@ -1,7 +1,7 @@
+import type { DocumentAuthenticityResult } from "./result";
+import type { DocumentAuthenticityArgs } from "./args";
 import { analyzeTamper } from "../../authenticity";
 import type { OcrContext } from "../define";
-import type { DocumentAuthenticityArgs } from "./args";
-import type { DocumentAuthenticityResult } from "./result";
 
 /**
  * Runs the deterministic tamper-detection tier over the raw uploaded bytes

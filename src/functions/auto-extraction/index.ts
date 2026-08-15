@@ -1,6 +1,6 @@
 import { defineOcrFunction, OcrFunction } from "../define";
-import { autoExtractionArgsSchema } from "./args";
 import { autoExtractionResultSchema } from "./result";
+import { autoExtractionArgsSchema } from "./args";
 import { executeAutoExtraction } from "./execute";
 
 export const autoExtraction = defineOcrFunction({

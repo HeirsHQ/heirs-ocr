@@ -5,7 +5,7 @@ import { FileText } from "lucide-react";
 import { EmptyState, PageLayout } from "@heirs/ui";
 
 const Page = () => (
-  <PageLayout title="Documents" subtitle="Manage and organize your processed documents.">
+  <PageLayout title="Documents" subtitle="Manage and organize your processed documents. PIIs are never saved">
     <EmptyState
       icon={FileText}
       title="No documents yet"

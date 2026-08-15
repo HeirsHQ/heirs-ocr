@@ -1,10 +1,10 @@
 import Ajv from "ajv";
 
 import { buildFormDataExtractionPrompt } from "./prompt";
-import { buildFormResultSchema } from "./result";
-import type { FormDataExtractionArgs } from "./args";
 import type { FormDataExtractionResult } from "./result";
+import type { FormDataExtractionArgs } from "./args";
 import type { JsonSchema } from "../../llm/schema";
+import { buildFormResultSchema } from "./result";
 import { OcrError } from "../../http/errors";
 import type { OcrContext } from "../define";
 

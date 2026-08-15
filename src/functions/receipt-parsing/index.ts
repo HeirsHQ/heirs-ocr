@@ -1,6 +1,6 @@
 import { defineOcrFunction, OcrFunction } from "../define";
-import { receiptParsingArgsSchema } from "./args";
 import { receiptParsingResultSchema } from "./result";
+import { receiptParsingArgsSchema } from "./args";
 import { executeReceiptParsing } from "./execute";
 
 export const receiptParsing = defineOcrFunction({

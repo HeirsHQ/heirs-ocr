@@ -47,16 +47,16 @@ const Page = () => {
             </button>
           ))}
         </div>
-        {logs.isPending && <Skeleton skeleton="table" columns={3} rows={10} />}
-        {logs.isError && (
+        {logs.isPending ? (
+          <Skeleton skeleton="table" columns={3} rows={10} />
+        ) : logs && logs.isError ? (
           <ErrorState
             title="Couldn't load logs"
             description={getErrorMessage(logs.error)}
             onRetry={() => logs.refetch()}
             retrying={logs.isFetching}
           />
-        )}
-        {logs.data && logs.data.entries.length === 0 ? (
+        ) : logs.data && logs.data.entries.length === 0 ? (
           <EmptyState
             icon={Terminal}
             title="No log entries"

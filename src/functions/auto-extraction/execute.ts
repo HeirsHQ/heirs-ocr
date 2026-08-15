@@ -1,3 +1,18 @@
+import { receiptParsingArgsSchema, receiptParsingResultSchema } from "../receipt-parsing";
+import { resumeParsingArgsSchema, resumeParsingResultSchema } from "../resume-parsing";
+import { executeDocumentClassification } from "../document-classification/execute";
+import { executeFormDataExtraction } from "../form-data-extraction/execute";
+import { formDataExtractionArgsSchema } from "../form-data-extraction/args";
+import { idVerificationResultSchema } from "../id-verification/result";
+import { buildFormResultSchema } from "../form-data-extraction/result";
+import { executeIdVerification } from "../id-verification/execute";
+import { idVerificationArgsSchema } from "../id-verification/args";
+import { executeReceiptParsing } from "../receipt-parsing/execute";
+import { executeResumeParsing } from "../resume-parsing/execute";
+import type { AutoExtractionResult } from "./result";
+import type { AutoExtractionArgs } from "./args";
+import { reconcilePayslip } from "./payslip";
+import type { OcrContext } from "../define";
 import {
   AutoDocumentType,
   DOCUMENT_LABELS,
@@ -6,22 +21,6 @@ import {
   type AutoDocumentLabel,
   type Handler,
 } from "./labels";
-import { reconcilePayslip } from "./payslip";
-import type { AutoExtractionArgs } from "./args";
-import type { AutoExtractionResult } from "./result";
-import type { OcrContext } from "../define";
-
-import { executeDocumentClassification } from "../document-classification/execute";
-import { executeResumeParsing } from "../resume-parsing/execute";
-import { resumeParsingArgsSchema, resumeParsingResultSchema } from "../resume-parsing";
-import { executeIdVerification } from "../id-verification/execute";
-import { idVerificationArgsSchema } from "../id-verification/args";
-import { idVerificationResultSchema } from "../id-verification/result";
-import { executeReceiptParsing } from "../receipt-parsing/execute";
-import { receiptParsingArgsSchema, receiptParsingResultSchema } from "../receipt-parsing";
-import { executeFormDataExtraction } from "../form-data-extraction/execute";
-import { buildFormResultSchema } from "../form-data-extraction/result";
-import { formDataExtractionArgsSchema } from "../form-data-extraction/args";
 
 /**
  * Identify-on-upload. Classifies the (already-extracted) document against the

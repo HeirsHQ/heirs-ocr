@@ -1,5 +1,5 @@
-import { peekRedis } from "../redis";
 import type { LogFields } from "./logger";
+import { peekRedis } from "../redis";
 
 /**
  * A bounded ring buffer of recent structured log entries in Redis, so the admin

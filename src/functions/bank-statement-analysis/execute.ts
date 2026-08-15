@@ -1,7 +1,7 @@
+import type { BankStatementAnalysisResult } from "./result";
 import { buildBankStatementAnalysisPrompt } from "./prompt";
 import { bankStatementExtractionSchema } from "./result";
 import type { BankStatementAnalysisArgs } from "./args";
-import type { BankStatementAnalysisResult } from "./result";
 import type { OcrContext } from "../define";
 
 const EPSILON = 0.02;

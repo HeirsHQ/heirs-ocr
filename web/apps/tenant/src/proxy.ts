@@ -12,7 +12,9 @@ import { NextResponse } from "next/server";
 const TENANT_SESSION = "tenant_session";
 const LOGIN = "/login";
 const DASHBOARD = "/ocr";
-const HOME = "/";
+
+/** Routes that are always public — no session required. */
+const PUBLIC_PATHS = new Set(["/", "/login", "/api-reference", "/sdks", "/changelog"]);
 
 export function proxy(request: NextRequest) {
   const { pathname, search } = request.nextUrl;
@@ -25,8 +27,12 @@ export function proxy(request: NextRequest) {
     return NextResponse.redirect(url);
   };
 
-  if (pathname === LOGIN) return authed ? redirect(DASHBOARD) : NextResponse.next();
-  if (pathname === HOME) return authed ? redirect(DASHBOARD) : NextResponse.next();
+  if (PUBLIC_PATHS.has(pathname)) {
+    // Authenticated users visiting login or home go straight to the dashboard.
+    if (authed && pathname === LOGIN) return redirect(DASHBOARD);
+    return NextResponse.next();
+  }
+
   if (!authed) return redirect(LOGIN, `?next=${encodeURIComponent(pathname + search)}`);
 
   return NextResponse.next();

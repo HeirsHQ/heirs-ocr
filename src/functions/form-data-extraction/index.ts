@@ -1,7 +1,7 @@
 import { defineOcrFunction, OcrFunction } from "../define";
+import { executeFormDataExtraction } from "./execute";
 import { formDataExtractionArgsSchema } from "./args";
 import { buildFormResultSchema } from "./result";
-import { executeFormDataExtraction } from "./execute";
 
 export const formDataExtraction = defineOcrFunction({
   key: OcrFunction.FORM_DATA_EXTRACTION,

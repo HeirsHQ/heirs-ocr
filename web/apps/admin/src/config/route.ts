@@ -9,7 +9,6 @@ import {
   HeartPulse,
   KeyRound,
   LucideIcon,
-  Plug,
   ScanText,
   ScrollText,
   Settings,
@@ -58,7 +57,6 @@ export const ADMIN_ROUTES: RouteGroup[] = [
     routes: [
       { href: "/platform-configurations", label: "Platform Configurations", icon: Settings },
       { href: "/subscription-plans", label: "Subscription Plans", icon: DollarSign },
-      { href: "/api-integrations", label: "API Integrations", icon: Plug },
       { href: "/notifications", label: "Notifications", icon: Bell },
       { href: "/security", label: "Security", icon: ShieldCheck },
       { href: "/audit-trail", label: "Audit Trail", icon: ScrollText },

@@ -1,6 +1,6 @@
-import type { OcrContext } from "../define";
-import type { TextExtractionArgs } from "./args";
 import type { TextExtractionResult } from "./result";
+import type { TextExtractionArgs } from "./args";
+import type { OcrContext } from "../define";
 
 /**
  * No LLM step. Returns the canonical document more or less

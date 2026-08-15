@@ -1,11 +1,11 @@
-import { z } from "zod";
 import sharp from "sharp";
+import { z } from "zod";
 
 import type { LayoutBlock } from "../../providers/types";
+import { buildSigningJudgmentPrompt } from "./prompt";
+import type { SigningResult } from "./result";
 import type { OcrContext } from "../define";
 import type { SigningArgs } from "./args";
-import type { SigningResult } from "./result";
-import { buildSigningJudgmentPrompt } from "./prompt";
 
 type SignatureBlock = SigningResult["blocks"][number];
 type Bbox = [number, number, number, number];

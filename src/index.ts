@@ -2,11 +2,11 @@ import "dotenv/config";
 import http from "http";
 
 import { initTracing, shutdownTracing } from "./observability/otel";
+import { closeDb, ensureSchema, whenDbReady } from "./db";
+import { closeRedis, whenRedisReady } from "./redis";
 import { ensureBootstrapAdmin } from "./auth/admins";
 import { seedPlans } from "./billing/plan-store";
-import { closeDb, ensureSchema, whenDbReady } from "./db";
 import { logger } from "./observability/logger";
-import { closeRedis, whenRedisReady } from "./redis";
 import { env } from "./config/env";
 import { main } from "./main";
 

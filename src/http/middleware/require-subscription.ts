@@ -1,16 +1,16 @@
 import type { NextFunction, Request, Response } from "express";
 
-import type { OcrFunctionKey, Sensitivity } from "../../functions/define";
+import { resolveSubscription, SubscriptionStoreUnavailableError } from "../../billing/subscriptions";
 import type { EntitlementDenialCode, Subscription } from "../../types/subscription";
+import type { OcrFunctionKey, Sensitivity } from "../../functions/define";
+import { OcrError, type OcrErrorCode } from "../errors";
+import { getFunction } from "../../functions/registry";
 import {
   canUseFunction,
   checkDocumentQuota,
   effectiveRateLimitPerMinute,
   requireActive,
 } from "../../billing/entitlements";
-import { resolveSubscription, SubscriptionStoreUnavailableError } from "../../billing/subscriptions";
-import { getFunction } from "../../functions/registry";
-import { OcrError, type OcrErrorCode } from "../errors";
 
 /**
  * Subscription enforcement (runs after `authorizeFunction`, before `rateLimit`).

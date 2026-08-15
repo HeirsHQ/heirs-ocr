@@ -1,9 +1,9 @@
-import { randomUUID } from "crypto";
 import { hash as argonHash, verify as argonVerify } from "@node-rs/argon2";
+import { randomUUID } from "crypto";
 
 import type { TenantRole, TenantUser } from "../types/user";
-import { query } from "../db";
 import { logger } from "../observability/logger";
+import { query } from "../db";
 
 /**
  * Tenant-user registry — the tenant-side twin of the admin registry

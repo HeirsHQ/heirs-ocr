@@ -1,5 +1,5 @@
-import type { ExpenseClaimArgs } from "./args";
 import { buildSystem, wrapUntrusted } from "../../llm/prompt";
+import type { ExpenseClaimArgs } from "./args";
 
 export type Prompt = { system: string; user: string };
 

@@ -1,5 +1,5 @@
-import type { FormDataExtractionArgs } from "./args";
 import { buildSystem, wrapUntrusted } from "../../llm/prompt";
+import type { FormDataExtractionArgs } from "./args";
 
 export type Prompt = { system: string; user: string };
 
