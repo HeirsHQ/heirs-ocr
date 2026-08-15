@@ -1,12 +1,12 @@
 import "dotenv/config";
+import type { Worker } from "bullmq";
 
 import { initTracing, shutdownTracing } from "./observability/otel";
-import { seedPlans } from "./billing/plan-store";
 import { closeDb, ensureSchema, whenDbReady } from "./db";
-import { logger } from "./observability/logger";
 import { closeRedis, whenRedisReady } from "./redis";
+import { seedPlans } from "./billing/plan-store";
+import { logger } from "./observability/logger";
 import { startWorker } from "./jobs/worker";
-import type { Worker } from "bullmq";
 
 /**
  * Dedicated worker entrypoint. Runs the BullMQ loop in its own process so async

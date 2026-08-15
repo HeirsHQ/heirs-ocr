@@ -1,7 +1,7 @@
 import { defineOcrFunction, OcrFunction } from "../define";
-import { signingArgsSchema } from "./args";
 import { signingResultSchema } from "./result";
 import { executeSigning } from "./execute";
+import { signingArgsSchema } from "./args";
 
 export const signing = defineOcrFunction({
   key: OcrFunction.SIGNING,

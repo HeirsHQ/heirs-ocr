@@ -1,7 +1,7 @@
-import { buildDocumentClassificationPrompt } from "./prompt";
 import { documentClassificationResultSchema } from "./result";
-import type { DocumentClassificationArgs } from "./args";
+import { buildDocumentClassificationPrompt } from "./prompt";
 import type { DocumentClassificationResult } from "./result";
+import type { DocumentClassificationArgs } from "./args";
 import type { OcrContext } from "../define";
 
 /**

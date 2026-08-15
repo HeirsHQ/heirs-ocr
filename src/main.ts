@@ -2,12 +2,12 @@ import express, { type Request, type Response } from "express";
 import morgan from "morgan";
 import path from "path";
 
-import { errorHandler, notFound } from "./http/middleware/error";
 import { metricsAuth, securityHeaders } from "./http/middleware/security-headers";
 import { metricsContentType, renderMetrics } from "./observability/metrics";
+import { errorHandler, notFound } from "./http/middleware/error";
 import { checkDependencies } from "./observability/health";
-import { adminApiRouter } from "./http/admin/routes";
 import { tenantApiRouter } from "./http/tenant/routes";
+import { adminApiRouter } from "./http/admin/routes";
 import { corsMiddleware } from "./config/cors";
 import { ocrRouter } from "./http/routes";
 import { env } from "./config/env";

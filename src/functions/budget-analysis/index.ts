@@ -1,6 +1,6 @@
 import { defineOcrFunction, OcrFunction } from "../define";
-import { budgetAnalysisArgsSchema } from "./args";
 import { budgetAnalysisResultSchema } from "./result";
+import { budgetAnalysisArgsSchema } from "./args";
 import { executeBudgetAnalysis } from "./execute";
 
 export const budgetAnalysis = defineOcrFunction({

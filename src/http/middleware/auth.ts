@@ -1,9 +1,9 @@
 import type { NextFunction, Request, Response } from "express";
 import { randomBytes } from "crypto";
 
-import { logger } from "../../observability/logger";
-import { isTenantOrgDisabled, resolveTenant } from "../../auth/tenants";
 import { SESSION_COOKIE as TENANT_SESSION_COOKIE, resolveSession } from "../../auth/tenant-session";
+import { isTenantOrgDisabled, resolveTenant } from "../../auth/tenants";
+import { logger } from "../../observability/logger";
 import { parseCookies } from "./admin-auth";
 import { env } from "../../config/env";
 import { OcrError } from "../errors";

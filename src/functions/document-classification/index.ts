@@ -1,6 +1,6 @@
+import { documentClassificationResultSchema } from "./result";
 import { defineOcrFunction, OcrFunction } from "../define";
 import { documentClassificationArgsSchema } from "./args";
-import { documentClassificationResultSchema } from "./result";
 import { executeDocumentClassification } from "./execute";
 
 export const documentClassification = defineOcrFunction({

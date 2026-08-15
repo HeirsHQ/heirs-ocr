@@ -1,7 +1,7 @@
 import { randomBytes } from "crypto";
 
-import type { TenantRole } from "../types/user";
 import { getTenantUserById } from "./tenant-users";
+import type { TenantRole } from "../types/user";
 import { env } from "../config/env";
 import { getRedis } from "../redis";
 

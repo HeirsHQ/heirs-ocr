@@ -1,6 +1,7 @@
 "use client";
 
 import { CSSProperties } from "react";
+
 import { cn } from "../../lib/utils";
 
 const Shimmer = ({ className, style }: { className?: string; style?: CSSProperties }) => (
@@ -41,7 +42,7 @@ const StatisticsSkeleton = ({ numberOfCards = 4 }: { numberOfCards?: number }) =
   </div>
 );
 
-const TableSkeleton = ({ columns = 6, rows = 8 }: { columns?: number; rows?: number }) => {
+const TableSkeleton = ({ columns = 6, rows = 10 }: { columns?: number; rows?: number }) => {
   const colWidths = ["w-8", "w-32", "w-24", "w-20", "w-28", "w-16"];
 
   return (

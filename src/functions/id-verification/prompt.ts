@@ -1,5 +1,5 @@
-import type { IdVerificationArgs } from "./args";
 import { buildSystem, wrapUntrusted } from "../../llm/prompt";
+import type { IdVerificationArgs } from "./args";
 
 export type Prompt = { system: string; user: string };
 

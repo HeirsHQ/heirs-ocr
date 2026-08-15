@@ -1,5 +1,5 @@
-import { query } from "../db";
 import { logger } from "./logger";
+import { query } from "../db";
 
 /**
  * Per-tenant usage counters for the admin console's "usage" panel.

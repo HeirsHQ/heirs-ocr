@@ -5,8 +5,8 @@ import { Archive } from "lucide-react";
 import { useState } from "react";
 import { toast } from "sonner";
 
-import { useBackups, useCreateBackup, useRestoreBackup } from "@/hooks/api/use-admin-console";
 import { ConfirmDialog, EmptyState, ErrorState, PageLayout, Skeleton } from "@/components/shared";
+import { useBackups, useCreateBackup, useRestoreBackup } from "@/hooks/api/use-admin-console";
 import { createBackupColumns } from "@/config/columns/backup";
 import type { BackupManifest } from "@/types/admin-console";
 import { getErrorMessage } from "@heirs/api-client";
@@ -71,19 +71,16 @@ const Page = () => {
             Create backup
           </Button>
         </div>
-
-        {backups.isPending && <Skeleton skeleton="table" columns={6} rows={5} />}
-
-        {backups.isError && (
+        {backups.isPending ? (
+          <Skeleton skeleton="table" columns={6} rows={5} />
+        ) : backups && backups.isError ? (
           <ErrorState
             title="Couldn't load backups"
             description={getErrorMessage(backups.error)}
             onRetry={() => backups.refetch()}
             retrying={backups.isFetching}
           />
-        )}
-
-        {backups.data && backups.data.backups.length === 0 ? (
+        ) : backups.data && backups.data.backups.length === 0 ? (
           <EmptyState
             icon={Archive}
             title="No backups yet"

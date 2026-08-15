@@ -1,7 +1,7 @@
 import { defineOcrFunction, OcrFunction } from "../define";
-import { expenseClaimArgsSchema } from "./args";
 import { expenseClaimResultSchema } from "./result";
 import { executeExpenseClaim } from "./execute";
+import { expenseClaimArgsSchema } from "./args";
 
 export const expenseClaim = defineOcrFunction({
   key: OcrFunction.EXPENSE_CLAIM,

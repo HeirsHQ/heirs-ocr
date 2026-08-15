@@ -1,6 +1,6 @@
+import { bankStatementAnalysisResultSchema } from "./result";
 import { defineOcrFunction, OcrFunction } from "../define";
 import { bankStatementAnalysisArgsSchema } from "./args";
-import { bankStatementAnalysisResultSchema } from "./result";
 import { executeBankStatementAnalysis } from "./execute";
 
 export const bankStatementAnalysis = defineOcrFunction({

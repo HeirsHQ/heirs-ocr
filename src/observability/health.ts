@@ -1,6 +1,6 @@
+import { env } from "../config/env";
 import { getRedis } from "../redis";
 import { query } from "../db";
-import { env } from "../config/env";
 
 /**
  * Backing-store reachability, shared by the Kubernetes readiness probe (`/readyz`)

@@ -1,5 +1,5 @@
-import type { ResumeParsingArgs } from "./args";
 import { buildSystem, wrapUntrusted } from "../../llm/prompt";
+import type { ResumeParsingArgs } from "./args";
 
 export type Prompt = { system: string; user: string };
 

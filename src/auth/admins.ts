@@ -1,9 +1,9 @@
-import { randomUUID } from "crypto";
 import { hash as argonHash, verify as argonVerify } from "@node-rs/argon2";
+import { randomUUID } from "crypto";
 
 import type { AdminRole, User } from "../types/user";
-import { query, whenDbReady } from "../db";
 import { logger } from "../observability/logger";
+import { query, whenDbReady } from "../db";
 import { env } from "../config/env";
 
 /**

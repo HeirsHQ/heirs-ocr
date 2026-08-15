@@ -224,9 +224,9 @@ const SECTIONS = [
 
 const Page = () => (
   <PageLayout title="Security" subtitle="Manage 2FA, password, active sessions, and IP restrictions.">
-    <div className="space-y-0 divide-y rounded-lg border">
+    <div className="space-y-6">
       {SECTIONS.map(({ icon: Icon, label, component: Section }) => (
-        <div key={label} className="space-y-4 p-5">
+        <div key={label} className="space-y-2">
           <div className="flex items-center gap-2 text-sm font-semibold text-muted-foreground">
             <Icon className="size-4" />
             {label}

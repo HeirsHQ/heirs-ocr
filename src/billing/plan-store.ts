@@ -1,8 +1,8 @@
+import type { PlanTier, SubscriptionPlan } from "../types/subscription";
 import { logger } from "../observability/logger";
+import { DEFAULT_PLANS } from "./plans";
 import { env } from "../config/env";
 import { query } from "../db";
-import type { PlanTier, SubscriptionPlan } from "../types/subscription";
-import { DEFAULT_PLANS } from "./plans";
 
 /**
  * Durable, admin-managed plan catalog, backed by the `plans` table (src/db.ts).

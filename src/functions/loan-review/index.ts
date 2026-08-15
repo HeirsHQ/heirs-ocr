@@ -1,7 +1,7 @@
 import { defineOcrFunction, OcrFunction } from "../define";
-import { loanReviewArgsSchema } from "./args";
 import { loanReviewResultSchema } from "./result";
 import { executeLoanReview } from "./execute";
+import { loanReviewArgsSchema } from "./args";
 
 export const loanReview = defineOcrFunction({
   key: OcrFunction.LOAN_REVIEW,

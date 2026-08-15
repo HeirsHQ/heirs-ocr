@@ -1,10 +1,10 @@
 import { randomUUID } from "crypto";
 
+import type { Subscription, SubscriptionPlan, TrialWindow } from "../types/subscription";
+import { effectiveStatus, quoteDocument, resolveTrialWindow } from "./entitlements";
 import { logger } from "../observability/logger";
 import { env } from "../config/env";
 import { query } from "../db";
-import type { Subscription, SubscriptionPlan, TrialWindow } from "../types/subscription";
-import { effectiveStatus, quoteDocument, resolveTrialWindow } from "./entitlements";
 
 /**
  * Per-tenant subscription store, backed by the `subscriptions` table (src/db.ts).

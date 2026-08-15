@@ -1,5 +1,5 @@
-import type { BudgetAnalysisArgs } from "./args";
 import { buildSystem, wrapUntrusted } from "../../llm/prompt";
+import type { BudgetAnalysisArgs } from "./args";
 
 export type Prompt = { system: string; user: string };
 

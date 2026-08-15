@@ -1,13 +1,13 @@
 import { UnrecoverableError, Worker } from "bullmq";
 
 import { OCR_QUEUE_NAME, createQueueConnection, encodeJobError, type OcrJobData } from "./queue";
+import { recordDocumentUsage } from "../billing/subscriptions";
 import { runPipeline, type OcrRequest } from "../pipeline";
 import { getFunction } from "../functions/registry";
 import { logger } from "../observability/logger";
 import { getPipelineDeps } from "../http/deps";
-import { recordDocumentUsage } from "../billing/subscriptions";
-import { getRedis } from "../redis";
 import { OcrError } from "../http/errors";
+import { getRedis } from "../redis";
 
 /** Off-request jobs are less latency-sensitive; a modest fixed concurrency. */
 const WORKER_CONCURRENCY = 4;

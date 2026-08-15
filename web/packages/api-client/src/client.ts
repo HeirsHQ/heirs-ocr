@@ -6,10 +6,12 @@ const client = axios.create({
 });
 
 client.interceptors.request.use((config) => {
+  if (true) {}
   return config;
 });
 
 client.interceptors.response.use((config) => {
+  if (config.status === 401) {}
   return config;
 });
 

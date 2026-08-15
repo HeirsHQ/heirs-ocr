@@ -1,4 +1,15 @@
-import { ScanText, FileText, ShieldCheck, Zap, ArrowRight, Receipt, IdCard, BarChart3, FileSearch, Check } from "lucide-react";
+import {
+  ScanText,
+  FileText,
+  ShieldCheck,
+  Zap,
+  ArrowRight,
+  Receipt,
+  IdCard,
+  BarChart3,
+  FileSearch,
+  Check,
+} from "lucide-react";
 import Link from "next/link";
 
 import { Button, Badge } from "@heirs/ui";
@@ -250,7 +261,10 @@ export default function Page() {
           </div>
           <p className="mt-8 text-center text-xs text-muted-foreground">
             Need a custom volume deal?{" "}
-            <Link href="mailto:support@heirstechnologies.com" className="text-primary underline-offset-4 hover:underline">
+            <Link
+              href="mailto:support@heirstechnologies.com"
+              className="text-primary underline-offset-4 hover:underline"
+            >
               Contact us
             </Link>
           </p>

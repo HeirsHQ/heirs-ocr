@@ -1,7 +1,7 @@
 import { buildLoanReviewPrompt } from "./prompt";
+import type { LoanReviewResult } from "./result";
 import { loanExtractionSchema } from "./result";
 import type { LoanReviewArgs } from "./args";
-import type { LoanReviewResult } from "./result";
 import type { OcrContext } from "../define";
 
 /**

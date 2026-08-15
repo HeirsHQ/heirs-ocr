@@ -1,11 +1,11 @@
 import { Router, type Request, type Response, type NextFunction } from "express";
 
-import { buildCatalog, getFunction } from "../functions/registry";
-import { authorizeFunction } from "./middleware/authorize";
 import { requireSubscription } from "./middleware/require-subscription";
-import { effectiveLimits } from "../billing/entitlements";
+import { buildCatalog, getFunction } from "../functions/registry";
 import { recordDocumentUsage } from "../billing/subscriptions";
+import { authorizeFunction } from "./middleware/authorize";
 import { runPipeline, type OcrRequest } from "../pipeline";
+import { effectiveLimits } from "../billing/entitlements";
 import { ocrQueue, type JobRecord } from "../jobs/queue";
 import { sensitivity } from "./middleware/sensitivity";
 import { FILE_FIELD, upload } from "../ingest/upload";

@@ -1,6 +1,6 @@
 import { defineOcrFunction, OcrFunction } from "../define";
-import { idVerificationArgsSchema } from "./args";
 import { idVerificationResultSchema } from "./result";
+import { idVerificationArgsSchema } from "./args";
 import { executeIdVerification } from "./execute";
 
 export const idVerification = defineOcrFunction({

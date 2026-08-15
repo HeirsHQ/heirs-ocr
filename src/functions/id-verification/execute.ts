@@ -1,11 +1,11 @@
 import { z } from "zod";
 
-import { buildIdVerificationPrompt } from "./prompt";
 import { idVerificationResultSchema } from "./result";
-import { idDocumentTypeSchema } from "./args";
+import type { IdVerificationResult } from "./result";
+import { buildIdVerificationPrompt } from "./prompt";
 import { parseMrz, type MrzFields } from "./mrz";
 import type { IdVerificationArgs } from "./args";
-import type { IdVerificationResult } from "./result";
+import { idDocumentTypeSchema } from "./args";
 import type { OcrContext } from "../define";
 
 /**

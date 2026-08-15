@@ -1,8 +1,8 @@
-import { buildResumeParsingPrompt } from "./prompt";
-import { resumeParsingResultSchema } from "./result";
 import type { LayoutBlock } from "../../providers/types";
-import type { ResumeParsingArgs } from "./args";
+import { resumeParsingResultSchema } from "./result";
+import { buildResumeParsingPrompt } from "./prompt";
 import type { ResumeParsingResult } from "./result";
+import type { ResumeParsingArgs } from "./args";
 import type { OcrContext } from "../define";
 
 /**
