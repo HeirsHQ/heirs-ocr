@@ -11,7 +11,8 @@ import { NextResponse } from "next/server";
 
 const TENANT_SESSION = "tenant_session";
 const LOGIN = "/login";
-const HOME = "/ocr";
+const DASHBOARD = "/ocr";
+const HOME = "/";
 
 export function proxy(request: NextRequest) {
   const { pathname, search } = request.nextUrl;
@@ -24,8 +25,8 @@ export function proxy(request: NextRequest) {
     return NextResponse.redirect(url);
   };
 
-  if (pathname === LOGIN) return authed ? redirect(HOME) : NextResponse.next();
-  if (pathname === "/") return redirect(authed ? HOME : LOGIN);
+  if (pathname === LOGIN) return authed ? redirect(DASHBOARD) : NextResponse.next();
+  if (pathname === HOME) return authed ? redirect(DASHBOARD) : NextResponse.next();
   if (!authed) return redirect(LOGIN, `?next=${encodeURIComponent(pathname + search)}`);
 
   return NextResponse.next();
