@@ -35,10 +35,22 @@ async function proxy(req: NextRequest, slug: string[]): Promise<Response> {
     redirect: "manual",
   });
 
+  const upstreamType = upstream.headers.get("content-type") ?? "application/json";
   const resHeaders = new Headers();
-  resHeaders.set("content-type", upstream.headers.get("content-type") ?? "application/json");
+  resHeaders.set("content-type", upstreamType);
   for (const cookie of upstream.headers.getSetCookie()) {
     resHeaders.append("set-cookie", cookie);
+  }
+
+  // Server-sent events are passed straight through as a stream. `await
+  // upstream.text()` below waits for the body to end, and an event stream never
+  // ends — buffering it would hang the request until the connection died and then
+  // deliver every event at once, which is strictly worse than the polling it
+  // replaces. Everything else is small and JSON, so it stays buffered.
+  if (upstream.body && upstreamType.includes("text/event-stream")) {
+    resHeaders.set("cache-control", "no-cache, no-transform");
+    resHeaders.set("connection", "keep-alive");
+    return new Response(upstream.body, { status: upstream.status, headers: resHeaders });
   }
 
   return new Response(await upstream.text(), { status: upstream.status, headers: resHeaders });

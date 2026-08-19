@@ -55,6 +55,7 @@ import { parseCookies } from "../middleware/admin-auth";
 import { logger } from "../../observability/logger";
 import type { TenantUser } from "../../types/user";
 import { ocrQueue } from "../../jobs/queue";
+import { subscribeToJobEvents } from "../../jobs/events";
 import {
   countOwners,
   createTenantUser,
@@ -966,6 +967,54 @@ tenantApiRouter.get(
     res.json(paginate(jobs, pageParams(req.query)));
   }),
 );
+
+/**
+ * Server-sent stream of this tenant's job transitions.
+ *
+ * Replaces the jobs page's poll. A job that starts promptly is `queued` for around a
+ * second, so a 5s interval reported it only once it had already settled — the queue
+ * appeared to go straight from empty to failed. Events land as they happen.
+ *
+ * The list endpoint above stays, and stays authoritative: this carries *that
+ * something changed*, and the console refetches. That keeps one shape of the job
+ * record rather than two that can drift, and means a dropped connection costs
+ * freshness rather than correctness — the client still polls, just slowly.
+ *
+ * SSE rather than a websocket: the traffic is one-directional and an `EventSource`
+ * reconnects by itself, which matters because the consoles sit behind a proxy that
+ * will cut an idle connection eventually no matter what we do here.
+ */
+tenantApiRouter.get("/api/jobs/stream", tenantAuth, (req, res) => {
+  const { tenantId } = req.tenantUser!;
+
+  res.writeHead(200, {
+    "Content-Type": "text/event-stream",
+    // `no-transform` is the load-bearing half: a proxy that gzips this buffers it,
+    // and a buffered stream arrives all at once at the end, which is worse than
+    // polling was.
+    "Cache-Control": "no-cache, no-transform",
+    Connection: "keep-alive",
+    // Nginx honours this to disable its own response buffering.
+    "X-Accel-Buffering": "no",
+  });
+  res.flushHeaders();
+
+  // An idle stream is indistinguishable from a dead one to every intermediary in the
+  // path. A comment line every 25s keeps it open and costs 3 bytes.
+  const heartbeat = setInterval(() => res.write(": ping\n\n"), 25_000);
+
+  const unsubscribe = subscribeToJobEvents(tenantId, (event) => {
+    res.write(`event: job\ndata: ${JSON.stringify(event)}\n\n`);
+  });
+
+  // `close` fires on a client disconnect and on a proxy timeout alike. Without this
+  // the listener set grows by one on every page reload and every reconnect.
+  req.on("close", () => {
+    clearInterval(heartbeat);
+    unsubscribe();
+    res.end();
+  });
+});
 
 /** Trims a stored user down to the public view — never leak the password hash. */
 const publicUser = (u: TenantUser): TenantUser => ({

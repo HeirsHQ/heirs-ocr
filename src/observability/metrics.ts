@@ -163,6 +163,8 @@ export type MetricsSummary = {
     errors: number;
     tokens: number;
     lowConfidenceRatio: number;
+    /** The ratio's numerator, kept as a count so it can be plotted beside `requests`. */
+    lowConfidence: number;
   }>;
 };
 
@@ -212,6 +214,7 @@ export const getMetricsSummary = async (): Promise<MetricsSummary> => {
       errors: u.errors,
       tokens: u.tokens,
       lowConfidenceRatio: u.confidenceObservations ? u.lowConfidence / u.confidenceObservations : 0,
+      lowConfidence: u.lowConfidence,
     })),
   };
 };

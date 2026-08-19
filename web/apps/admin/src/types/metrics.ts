@@ -34,6 +34,13 @@ export interface FunctionMetric {
   errors: number;
   tokens: number;
   lowConfidenceRatio: number;
+  /**
+   * The ratio's numerator as a count. Its denominator is `confidenceObservations`,
+   * not `requests` — only functions that expose a confidence signal record one — so
+   * this is a count of requests, comparable to `requests` and `errors`, while the
+   * ratio is not.
+   */
+  lowConfidence: number;
 }
 
 /** `GET /api/admin/metrics/summary`. */
@@ -50,6 +57,33 @@ export interface MetricsSummary {
    */
   functionRequests: number;
   byFunction: FunctionMetric[];
+}
+
+/** One time bucket of `GET /api/admin/metrics/timeseries`. */
+export interface TimeseriesPoint {
+  /** ISO-8601 bucket start, UTC. */
+  ts: string;
+  requests: number;
+  errors: number;
+  /** 0-1. Zero on an empty bucket, so the series has no gap. */
+  errorRate: number;
+  /** Null when no timed request landed in the bucket — not zero. */
+  p50Ms: number | null;
+  p95Ms: number | null;
+}
+
+/**
+ * `GET /api/admin/metrics/timeseries`.
+ *
+ * The only admin read with a time dimension. Sourced from the request log, so it is a
+ * rolling window that ages out with retention and counts refused calls — it will not
+ * tie out against the lifetime totals in {@link MetricsSummary}.
+ */
+export interface MetricsTimeseries {
+  bucket: "hour" | "day";
+  since: string;
+  until: string;
+  points: TimeseriesPoint[];
 }
 
 /** One row of `GET /api/admin/usage`. */

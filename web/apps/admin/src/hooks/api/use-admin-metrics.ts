@@ -2,7 +2,14 @@ import { useQuery } from "@tanstack/react-query";
 
 import { http, unwrap, type Paginated, type PaginatedParams } from "@heirs/api-client";
 import { adminKeys } from "./query-keys";
-import type { HealthStatus, MetricsSummary, QueueStats, TenantFunctionUsage, TenantUsage } from "@/types/metrics";
+import type {
+  HealthStatus,
+  MetricsSummary,
+  MetricsTimeseries,
+  QueueStats,
+  TenantFunctionUsage,
+  TenantUsage,
+} from "@/types/metrics";
 
 /** Admin observability reads (viewer+ on the backend), via the admin BFF proxy. */
 
@@ -30,6 +37,22 @@ export function useMetricsSummary() {
   return useQuery({
     queryKey: [...adminKeys.metrics, "summary"],
     queryFn: () => http.get<MetricsSummary>("/api/admin/metrics/summary").then(unwrap),
+    retry: false,
+    refetchInterval: 30_000,
+  });
+}
+
+/**
+ * Request volume, error rate and latency bucketed over `hours`.
+ *
+ * Backed by the request log rather than the usage rollups, so it does not agree with
+ * the headline tiles and is not meant to: it is a rolling window and it includes calls
+ * that were refused before reaching the pipeline.
+ */
+export function useMetricsTimeseries(hours: number) {
+  return useQuery({
+    queryKey: adminKeys.metricsTimeseries(hours),
+    queryFn: () => http.get<MetricsTimeseries>("/api/admin/metrics/timeseries", { hours }).then(unwrap),
     retry: false,
     refetchInterval: 30_000,
   });
