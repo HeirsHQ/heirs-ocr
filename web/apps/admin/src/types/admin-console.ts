@@ -3,9 +3,16 @@
 /** `GET /api/admin/audit`. */
 export interface AuditEvent {
   id: string;
+  /** Stable machine key (`tenant.revoked`) — what the filter box matches on. */
   action: string;
+  /** The same action as a sentence, resolved server-side from a label map. */
+  actionLabel: string;
   actor: string;
+  /** Who acted, by name. Snapshotted when the event was recorded; may be absent on older rows. */
+  actorLabel: string | null;
   target: string | null;
+  /** What was acted on, by name. Snapshotted, so it outlives the target itself. */
+  targetLabel: string | null;
   metadata: Record<string, unknown>;
   createdAt: string;
 }

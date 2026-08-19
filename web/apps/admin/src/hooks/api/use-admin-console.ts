@@ -1,6 +1,7 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 
-import { http, unwrap } from "@heirs/api-client";
+import { http, unwrap, type Paginated, type RetentionSettings } from "@heirs/api-client";
+import { adminInvalidations, adminKeys, invalidate } from "./query-keys";
 import { PaginatedParams } from "@/types";
 import type {
   ApiIntegrationSettings,
@@ -23,10 +24,10 @@ import { removeNullOrUndefined } from "@heirs/ui";
 
 // ── Audit trail ───────────────────────────────────────────────────────────────
 
-export function useAuditEvents(filter: { action?: string; actor?: string } = {}) {
+export function useAuditEvents(filter: { action?: string; actor?: string } & PaginatedParams = {}) {
   return useQuery({
-    queryKey: ["admin", "audit", filter],
-    queryFn: () => http.get<{ events: AuditEvent[] }>("/api/admin/audit", filter).then(unwrap),
+    queryKey: adminKeys.auditList(filter),
+    queryFn: () => http.get<Paginated<AuditEvent>>("/api/admin/audit", filter).then(unwrap),
     retry: false,
     refetchInterval: 30_000,
   });
@@ -34,16 +35,16 @@ export function useAuditEvents(filter: { action?: string; actor?: string } = {})
 
 // ── Logs ──────────────────────────────────────────────────────────────────────
 
-interface LogParams extends PaginatedParams {
+type LogParams = PaginatedParams & {
   level?: LogLevel | "all";
-}
+};
 
 export function useLogs(params?: LogParams) {
   const _params = removeNullOrUndefined(params);
 
   return useQuery({
-    queryKey: ["admin", "logs", _params],
-    queryFn: () => http.get<{ entries: LogEntry[] }>("/api/admin/logs", _params).then(unwrap),
+    queryKey: adminKeys.logList(_params),
+    queryFn: () => http.get<Paginated<LogEntry>>("/api/admin/logs", _params).then(unwrap),
     retry: false,
     refetchInterval: 10_000,
   });
@@ -53,7 +54,7 @@ export function useLogs(params?: LogParams) {
 
 function useSettings<T>(path: string, key: string) {
   return useQuery({
-    queryKey: ["admin", "settings", key],
+    queryKey: adminKeys.settingsNamespace(key),
     queryFn: () => http.get<{ settings: T }>(`/api/admin/settings/${path}`).then(unwrap),
     retry: false,
   });
@@ -64,7 +65,7 @@ function useSaveSettings<T>(path: string, key: string) {
   return useMutation({
     mutationKey: ["admin", "settings", key, "save"],
     mutationFn: (settings: T) => http.put<{ settings: T }>(`/api/admin/settings/${path}`, settings).then(unwrap),
-    onSuccess: () => qc.invalidateQueries({ queryKey: ["admin", "settings", key] }),
+    onSuccess: () => invalidate(qc, [adminKeys.settingsNamespace(key), ...adminInvalidations.settings]),
   });
 }
 
@@ -78,11 +79,31 @@ export const useSaveApiIntegrations = () =>
 export const usePlatformSettings = () => useSettings<PlatformSettings>("platform", "platform");
 export const useSavePlatformSettings = () => useSaveSettings<PlatformSettings>("platform", "platform");
 
+export const useRetention = () => useSettings<RetentionSettings>("retention", "retention");
+export const useSaveRetention = () => useSaveSettings<RetentionSettings>("retention", "retention");
+
+/**
+ * Runs the retention sweep now rather than waiting for the worker's hourly tick.
+ * Reached from the settings panel right after a window is shortened, which is when
+ * an operator wants to see the backlog actually go.
+ */
+export function useRunRetentionSweep() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationKey: ["admin", "retention", "sweep"],
+    mutationFn: () =>
+      http
+        .post<{ documents: number; auditEvents: number; skipped?: string }>("/api/admin/retention/sweep", {})
+        .then(unwrap),
+    onSuccess: () => invalidate(qc, adminInvalidations.retention),
+  });
+}
+
 // ── Security (dedicated endpoint: settings + live posture) ────────────────────
 
 export function useSecurity() {
   return useQuery({
-    queryKey: ["admin", "security"],
+    queryKey: adminKeys.security,
     queryFn: () =>
       http.get<{ settings: SecuritySettings; posture: SecurityPosture }>("/api/admin/security").then(unwrap),
     retry: false,
@@ -95,18 +116,16 @@ export function useSaveSecurity() {
     mutationKey: ["admin", "security", "save"],
     mutationFn: (settings: SecuritySettings) =>
       http.put<{ settings: SecuritySettings }>("/api/admin/security", settings).then(unwrap),
-    onSuccess: () => qc.invalidateQueries({ queryKey: ["admin", "security"] }),
+    onSuccess: () => invalidate(qc, adminInvalidations.security),
   });
 }
 
 // ── Backups ───────────────────────────────────────────────────────────────────
 
-const BACKUPS = ["admin", "backups"];
-
-export function useBackups() {
+export function useBackups(params?: PaginatedParams) {
   return useQuery({
-    queryKey: BACKUPS,
-    queryFn: () => http.get<{ backups: BackupManifest[] }>("/api/admin/backups").then(unwrap),
+    queryKey: adminKeys.backupList(params),
+    queryFn: () => http.get<Paginated<BackupManifest>>("/api/admin/backups", params).then(unwrap),
     retry: false,
   });
 }
@@ -116,7 +135,7 @@ export function useCreateBackup() {
   return useMutation({
     mutationKey: ["admin", "backups", "create"],
     mutationFn: (note?: string) => http.post<{ backup: BackupManifest }>("/api/admin/backups", { note }).then(unwrap),
-    onSuccess: () => qc.invalidateQueries({ queryKey: BACKUPS }),
+    onSuccess: () => invalidate(qc, adminInvalidations.backups),
   });
 }
 
@@ -126,6 +145,9 @@ export function useRestoreBackup() {
     mutationKey: ["admin", "backups", "restore"],
     mutationFn: (id: string) =>
       http.post<{ applied: Record<string, number> }>(`/api/admin/backups/${id}/restore`, {}).then(unwrap),
-    onSuccess: () => qc.invalidateQueries({ queryKey: ["admin"] }),
+    // A restore rewrites plans, subscriptions and every settings namespace at once,
+    // so nothing in the console can be assumed current — drop the whole root rather
+    // than trying to enumerate what moved.
+    onSuccess: () => qc.invalidateQueries({ queryKey: adminKeys.all }),
   });
 }

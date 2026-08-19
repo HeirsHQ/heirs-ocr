@@ -11,6 +11,7 @@ import { sensitivity } from "./middleware/sensitivity";
 import { FILE_FIELD, upload } from "../ingest/upload";
 import { sendAccepted, sendSuccess } from "./respond";
 import { rateLimit } from "./middleware/rate-limit";
+import { requestLog } from "./middleware/request-log";
 import { getPipelineDeps } from "./deps";
 import { auth } from "./middleware/auth";
 import { OcrError } from "./errors";
@@ -38,6 +39,10 @@ const parseArgsField = (raw: unknown): unknown => {
  *   GET  /v1/ocr/jobs/:id     → async job status + result
  */
 export const ocrRouter = Router();
+
+// Per-tenant request history. First in the chain so it also records the calls that
+// the guards below refuse — see src/http/middleware/request-log.ts.
+ocrRouter.use(requestLog);
 
 ocrRouter.get("/functions", (_req: Request, res: Response) => {
   res.json({ functions: buildCatalog() });

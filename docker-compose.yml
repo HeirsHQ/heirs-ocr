@@ -1,58 +1,38 @@
-# Local stack: the same image runs the API and the worker (12-factor X — dev/prod
-# parity). By default both point at whatever REDIS_URL / DATABASE_URL your .env
-# holds — which in this project are managed, external services (Aiven Valkey over
-# TLS, Prisma Postgres). No secrets or connection strings are hardcoded here; they
-# come from .env via `env_file`, and env.ts fails fast if a required one is missing.
+# OCR service: `api` + `worker`, one image, config from .env.
 #
-#   docker compose up --build                 # the whole local stack: postgres + redis + api + worker
-#   docker compose up --build api worker      # only the app, against managed services in .env
-#   docker compose run --rm api node build/scripts/provision-tenant.js list
+#   docker compose up --build                        # api + worker
+#   docker compose --profile local-infra up --build  # + postgres, redis, minio
 #
-# This stack runs only the OCR service (api + worker). The admin console and tenant
-# portal are separate deployables in the web/ workspace — run them on their own with
-# `web/docker-compose.yml` (or `pnpm -C web dev`); they reach the API over the network
-# via their own OCR_API_URL.
-#
-# .env must point at the in-network service names for the local stack:
-#   REDIS_URL=redis://redis:6379
-#   DATABASE_URL=postgres://<POSTGRES_USER>:<POSTGRES_PASSWORD>@postgres:5432/<POSTGRES_DB>
-# To use managed services instead, put their URLs back in .env and start only the
-# app services (`docker compose up api worker`) so the local containers stay down.
+# The admin console and tenant portal live in web/docker-compose.yml.
 
 services:
-  # --- Application (always on) ---------------------------------------------------
-  # env_file injects the whole .env into the container; `environment` then overrides
-  # only what must differ from a dev .env (NODE_ENV) or is fixed by the topology (PORT).
   api:
     build: .
     image: heirs-ocr
+    restart: unless-stopped
     env_file: .env
     environment:
       NODE_ENV: production
       PORT: "8080"
+      # The `worker` service runs the background work; keep it off the request path
+      # here. Unset (the default) means a lone container does everything itself.
+      RUN_BACKGROUND_WORKERS: "false"
     ports:
       - "8080:8080"
-    depends_on:
-      redis:
-        condition: service_healthy
-      postgres:
-        condition: service_healthy
 
   worker:
     build: .
     image: heirs-ocr
     command: ["node", "build/worker.js"]
+    restart: unless-stopped
     env_file: .env
     environment:
       NODE_ENV: production
-    depends_on:
-      redis:
-        condition: service_healthy
-      postgres:
-        condition: service_healthy
 
   redis:
+    profiles: ["local-infra"]
     image: redis:7-alpine
+    restart: unless-stopped
     ports:
       - "${REDIS_HOST_PORT:-6379}:6379"
     healthcheck:
@@ -62,7 +42,9 @@ services:
       retries: 5
 
   postgres:
+    profiles: ["local-infra"]
     image: postgres:16-alpine
+    restart: unless-stopped
     ports:
       - "${POSTGRES_HOST_PORT:-5432}:5432"
     environment:
@@ -77,5 +59,44 @@ services:
       timeout: 3s
       retries: 5
 
+  minio:
+    profiles: ["local-infra"]
+    image: minio/minio:latest
+    restart: unless-stopped
+    command: ["server", "/data", "--console-address", ":9001"]
+    environment:
+      MINIO_ROOT_USER: ${S3_ACCESS_KEY_ID:-minioadmin}
+      MINIO_ROOT_PASSWORD: ${S3_SECRET_ACCESS_KEY:-minioadmin}
+    ports:
+      - "${MINIO_HOST_PORT:-9000}:9000"
+      - "${MINIO_CONSOLE_PORT:-9001}:9001"
+    volumes:
+      - miniodata:/data
+    healthcheck:
+      test: ["CMD", "mc", "ready", "local"]
+      interval: 10s
+      timeout: 3s
+      retries: 5
+
+  # One-shot: creates the bucket, then exits. The API never creates it on demand.
+  minio-init:
+    profiles: ["local-infra"]
+    image: minio/mc:latest
+    depends_on:
+      minio:
+        condition: service_healthy
+    environment:
+      S3_BUCKET: ${S3_BUCKET:-heirs-ocr-documents}
+      S3_ACCESS_KEY_ID: ${S3_ACCESS_KEY_ID:-minioadmin}
+      S3_SECRET_ACCESS_KEY: ${S3_SECRET_ACCESS_KEY:-minioadmin}
+    entrypoint:
+      - sh
+      - -c
+      - |
+        mc alias set local http://minio:9000 "$$S3_ACCESS_KEY_ID" "$$S3_SECRET_ACCESS_KEY" &&
+        mc mb --ignore-existing "local/$$S3_BUCKET" &&
+        echo "bucket $$S3_BUCKET ready"
+
 volumes:
   pgdata:
+  miniodata:

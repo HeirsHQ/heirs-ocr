@@ -5,6 +5,13 @@
 #   web    → node build/index.js    (default CMD)
 #   worker → node build/worker.js    (override the command; see docker-compose.yml)
 #
+# Running the default command ALONE is a complete service: the web process also runs
+# the OCR queue, the retention sweep and webhook delivery unless
+# RUN_BACKGROUND_WORKERS=false. That default exists so a bare `docker run` — or any
+# platform that only ever runs the image's default command — is not silently missing
+# every background feature. Split the two processes by deploying a second container
+# with the worker command and setting RUN_BACKGROUND_WORKERS=false on the web one.
+#
 # Config is supplied at runtime via the environment (12-factor III). No .env is
 # baked in — see .env.example for the full set validated by src/config/env.ts.
 
@@ -55,6 +62,8 @@ EXPOSE 8080
 HEALTHCHECK --interval=30s --timeout=3s --start-period=10s --retries=3 \
   CMD node -e "require('http').get('http://127.0.0.1:'+(process.env.PORT||8080)+'/healthz',r=>process.exit(r.statusCode===200?0:1)).on('error',()=>process.exit(1))"
 
-# Default process type is the API server. Run the worker by overriding the command:
+# Default process type is the API server — which, unless RUN_BACKGROUND_WORKERS=false,
+# also carries the background work so a single container is self-sufficient. Run a
+# dedicated worker by overriding the command:
 #   docker run --rm heirs-ocr node build/worker.js
 CMD ["node", "build/index.js"]

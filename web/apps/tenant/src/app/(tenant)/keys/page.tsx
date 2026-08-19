@@ -14,6 +14,7 @@ import { Dialog, DialogContent } from "@heirs/ui";
 import type { TenantApiKey } from "@/types/user";
 import { Button } from "@heirs/ui";
 import { Input } from "@heirs/ui";
+import { usePagination } from "@heirs/ui";
 import {
   ConfirmDialog,
   DataTable,
@@ -122,7 +123,8 @@ const CreateKeyModal = () => {
 };
 
 const Page = () => {
-  const keys = useTenantKeys();
+  const { params, tableProps } = usePagination();
+  const keys = useTenantKeys(params);
   const revokeKey = useRevokeTenantKey();
   const [pendingRevoke, setPendingRevoke] = useState<TenantApiKey | null>(null);
 
@@ -155,15 +157,15 @@ const Page = () => {
             retrying={keys.isFetching}
           />
         )}
-        {keys.data && keys.data.keys.length === 0 && (
+        {keys.data && keys.data.items.length === 0 && (
           <EmptyState
             icon={KeyRound}
             title="No API keys"
             description="Generate a key above to start calling the OCR API."
           />
         )}
-        {keys.data && keys.data.keys.length > 0 && (
-          <DataTable columns={columns} data={keys.data.keys} total={keys.data.keys.length || 0} />
+        {keys.data && keys.data.items.length > 0 && (
+          <DataTable columns={columns} data={keys.data.items} total={keys.data.total} {...tableProps} />
         )}
       </div>
       <ConfirmDialog

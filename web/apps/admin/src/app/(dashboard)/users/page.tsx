@@ -17,6 +17,7 @@ import { Dialog, DialogContent } from "@heirs/ui";
 import { useMe } from "@/hooks/api/use-auth";
 import { Button } from "@heirs/ui";
 import { Input } from "@heirs/ui";
+import { usePagination } from "@heirs/ui";
 
 const ROLES: AdminRole[] = ["owner", "manager", "viewer"];
 
@@ -116,7 +117,8 @@ const InviteUserModal = () => {
 };
 
 const Page = () => {
-  const users = useAdminUsers();
+  const { params, tableProps } = usePagination();
+  const users = useAdminUsers(params);
   const me = useMe();
   const updateAdmin = useUpdateAdmin();
   const deleteAdmin = useDeleteAdmin();
@@ -179,12 +181,12 @@ const Page = () => {
             retrying={users.isFetching}
           />
         )}
-        {users.data && users.data.admins.length === 0 && (
+        {users.data && users.data.items.length === 0 && (
           <EmptyState icon={Users} title="No console users" description="Add a user above to grant console access." />
         )}
 
-        {users.data && users.data.admins.length > 0 && (
-          <DataTable columns={columns} data={users.data.admins} total={users.data.admins.length || 0} />
+        {users.data && users.data.items.length > 0 && (
+          <DataTable columns={columns} data={users.data.items} total={users.data.total} {...tableProps} />
         )}
       </div>
       <ConfirmDialog

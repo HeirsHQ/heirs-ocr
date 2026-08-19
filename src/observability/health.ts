@@ -1,5 +1,6 @@
 import { env } from "../config/env";
 import { getRedis } from "../redis";
+import { checkBlobStorage } from "../storage/blob";
 import { query } from "../db";
 
 /**
@@ -17,10 +18,12 @@ import { query } from "../db";
 export type DependencyHealth = {
   redis: boolean;
   postgres: boolean;
+  /** Object storage. `true` when switched off — an absent optional dependency is not a fault. */
+  blob: boolean;
 };
 
 export const checkDependencies = async (): Promise<DependencyHealth> => {
-  const [redis, postgres] = await Promise.all([
+  const [redis, postgres, blob] = await Promise.all([
     getRedis()
       .ping()
       .then((pong) => pong === "PONG")
@@ -28,12 +31,18 @@ export const checkDependencies = async (): Promise<DependencyHealth> => {
     query("SELECT 1")
       .then(() => true)
       .catch(() => false),
+    // Reports healthy when storage is switched off — an optional dependency that is
+    // deliberately absent is not a degraded service.
+    checkBlobStorage()
+      .then((r) => r.ok)
+      .catch(() => false),
   ]);
-  return { redis, postgres };
+  return { redis, postgres, blob };
 };
 
 /** Which interpretation providers are configured. Informational, not a readiness gate. */
 export const providerStatus = () => ({
+  blobStorage: env.BLOB_STORAGE_ENABLED === "true",
   tesseract: true, // always available (bundled)
   glm: env.GLM_ENABLED === "true",
   azureOpenAI: env.AZURE_OPENAI_ENABLED === "true",

@@ -7,10 +7,13 @@ interface TenantColumnHandlers {
   onOwners: (row: AdminTenant) => void;
   onPlan: (row: AdminTenant) => void;
   onDelete: (row: AdminTenant) => void;
+  /** Opens the tenant — the same destination as the row menu's "View". */
+  onOpen: (row: AdminTenant) => void;
 }
 
-export function createTenantColumns({ onOwners, onPlan, onDelete }: TenantColumnHandlers) {
+export function createTenantColumns({ onOwners, onPlan, onDelete, onOpen }: TenantColumnHandlers) {
   return createColumns<AdminTenant>({
+    onRowClick: (row) => onOpen(row.original),
     columns: [
       {
         id: "name",

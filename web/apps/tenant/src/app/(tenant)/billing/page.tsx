@@ -45,6 +45,20 @@ const usagePercent = (sub: Subscription): number => {
   return Math.min(100, Math.round((sub.usage.documentsProcessed / cap) * 100));
 };
 
+/**
+ * Supporting line for the Pages tile.
+ *
+ * There is no per-period page allowance in {@link PlanLimits} — only
+ * `documentsPerPeriod` — so this used to render the *document* percentage under a
+ * Pages heading, which read as "0% of allowance" on uncapped plans and as a wrong
+ * number on every other one. The only page-related limit is the per-document
+ * ceiling, so that is what it says.
+ */
+const pagesHint = (sub: Subscription): string => {
+  const perDocument = sub.plan.entitlements.limits.maxPagesPerDocument;
+  return perDocument === null ? "no page limit" : `max ${perDocument.toLocaleString()} per document`;
+};
+
 const Page = () => {
   const billing = useTenantBilling();
   const sub = billing.data?.subscription ?? null;
@@ -77,7 +91,11 @@ const Page = () => {
         ) : (
           <>
             <div className="grid grid-cols-2 gap-6 lg:grid-cols-4">
-              <StatTile label="Plan" value={sub?.plan.name ?? "—"} hint={sub ? sub.status : "not enrolled"} />
+              <StatTile
+                label="Plan"
+                value={sub?.plan.name ?? "—"}
+                hint={sub ? (sub.effectiveStatus ?? sub.status) : "not enrolled"}
+              />
               <StatTile
                 label="Documents"
                 value={sub ? sub.usage.documentsProcessed.toLocaleString() : (usage?.requests ?? 0).toLocaleString()}
@@ -87,7 +105,7 @@ const Page = () => {
               <StatTile
                 label="Pages"
                 value={sub ? sub.usage.pagesProcessed.toLocaleString() : "—"}
-                hint={sub ? `${usagePercent(sub)}% of allowance` : "needs a plan"}
+                hint={sub ? pagesHint(sub) : "needs a plan"}
               />
               <StatTile
                 label="Accrued"

@@ -15,11 +15,14 @@
 5. [OCR API](#ocr-api--v1ocr) — the caller-facing contract
 6. [Security](#security)
 7. [Subscriptions & entitlements](#subscriptions--entitlements)
-8. [Error handling and status codes](#error-handling-and-status-codes)
-9. [Function catalog](#function-catalog)
-10. [Appendix A — Tenant Portal API](#appendix-a--tenant-portal-api-tenantapi)
-11. [Appendix B — Admin API](#appendix-b--admin-api-adminapi)
-12. [Glossary](#glossary)
+8. [Data lifecycle](#data-lifecycle) — registry, archives, retention, logs, export
+9. [Webhooks](#webhooks)
+10. [Error handling and status codes](#error-handling-and-status-codes)
+11. [Function catalog](#function-catalog)
+12. [Deployment topology](#deployment-topology)
+13. [Appendix A — Tenant Portal API](#appendix-a--tenant-portal-api-tenantapi)
+14. [Appendix B — Admin API](#appendix-b--admin-api-adminapi)
+15. [Glossary](#glossary)
 
 ## Document control
 
@@ -110,6 +113,31 @@ origins are not permitted unless explicitly configured). **Content types:** requ
   it and quote it in support requests.
 - **Size cap:** uploads are capped at `MAX_FILE_SIZE_BYTES` (default 50 MiB), enforced during
   upload buffering. A subscription plan may impose a tighter per-document cap.
+
+### List responses
+
+Every collection endpoint on the management APIs (Appendices A and B) answers with one
+envelope, so a client pages any list without special-casing it:
+
+```jsonc
+{
+  "items": [...],
+  "page": 1,        // the page actually served (a past-the-end request is clamped back)
+  "pageSize": 25,   // default 25, capped at 200
+  "total": 137,     // rows matching the request, across all pages
+  "totalPages": 6
+}
+```
+
+`?page=` and `?pageSize=` are both optional and advisory: an out-of-range or unparseable
+value falls back to the default rather than returning 400 — a bad page number is not a reason
+to refuse to render a list. Endpoints returning a fixed enumeration rather than a collection
+of records (`GET /v1/ocr/functions`, `GET /admin/api/functions`) are **not** paginated.
+
+Most lists are sliced in memory because the underlying tables are bounded. The three that are
+not — `audit_events`, `documents`, and `request_logs`, each of which grows with time or
+traffic — page in SQL with a `COUNT(*)` over the identical predicate, so `total` can never
+disagree with `items`.
 
 ## OCR API — `/v1/ocr`
 
@@ -313,6 +341,105 @@ beyond request handling (or the extraction cache TTL, for standard functions onl
   unless explicitly configured (`CORS_ALLOWED_ORIGINS`). The `/admin` and `/tenant` management
   APIs are same-origin (served alongside the frontend) and need no CORS entry.
 
+### Multi-factor authentication
+
+Both interactive surfaces — the admin console and the tenant portal — support **TOTP**
+(RFC 6238: SHA-1, 6 digits, 30-second steps, ±1 step of clock skew), so any standard
+authenticator app enrols by scanning the `otpauth://` URI.
+
+Login is **genuinely two-step whenever the account is enrolled.** The password POST does not
+set a session cookie; it returns `{ "mfaRequired": true, "challenge": "<opaque>" }`, where the
+challenge is a single-use Redis handle with a 5-minute TTL. `POST /api/login/mfa` trades that
+handle plus a valid code for the real session. A stolen password is therefore not sufficient on
+its own — there is no session to steal until the second factor lands. Failed code attempts
+count against the same per-IP and per-email throttle buckets as failed passwords, because a
+six-digit code is guessable in a way a password is not.
+
+Enrolment is two-phase: `POST /security/mfa` stores the secret **unconfirmed**, and only
+`POST /security/mfa/verify` — which requires a code derived from it — turns the factor on. An
+authenticator that never received the secret therefore cannot lock the user out. Confirmation
+mints **ten single-use recovery codes**, returned once and stored only as sha256 hashes; either
+a TOTP code or a recovery code satisfies the login step. Each accepted TOTP step is persisted,
+so a code observed in transit cannot be replayed for the remainder of its 30-second window.
+
+Disabling MFA and re-minting recovery codes both re-check the account password: a hijacked
+session must not be able to strip the account back to a single factor.
+
+Losing both the authenticator and the recovery codes would otherwise be a permanent lockout —
+the secret is unrecoverable and the codes are stored only as hashes — so an **owner** can clear
+another account's factor (`DELETE /admin/api/admins/:id/mfa`, `DELETE /tenant/api/users/:id/mfa`,
+the latter scoped to the caller's own org). Both are audited: the action lowers someone else's
+account security, so the request should be verified out of band first.
+
+### Sessions
+
+Each account's live sessions are listed on its security page and can be revoked in bulk
+(`DELETE /security/sessions`, both surfaces). Revocation is deliberately "everything except the
+caller" rather than per-session: someone reaching for it has lost a device or suspects a
+compromise, and identifying the right row from a list of IP addresses is exactly the judgement
+they cannot reliably make. Session **tokens are never returned** — each row carries a short,
+non-secret prefix as its id, along with the source IP, user agent and sign-in time.
+
+Sessions are indexed per user in Redis alongside the session keys themselves. Without that
+index a token answers "who is this?" but not "where else is this account signed in?", and
+scanning the keyspace to find out would be O(all sessions) on every page render.
+
+### Sign-in IP restrictions
+
+An IP allowlist may restrict where a session is **established**: platform-wide for the console
+(the `security` settings namespace) and per-organisation for the portal
+(`GET/PUT /tenant/api/security/ip-allowlist`, owner only). Both accept bare addresses and CIDR
+ranges, IPv4 and IPv6, including the IPv4-mapped form (`::ffff:203.0.113.4`) that Node reports
+on a dual-stack listener — an allowlist written as `203.0.113.0/24` must still match a request
+arriving that way, or the control behaves differently per deployment.
+
+Entries are validated **on write**. A malformed entry matches nothing, so saving one into an
+enabled list would deny every sign-in — a lockout caused by a typo. The tenant endpoint
+additionally refuses a list that would block the caller's own address. **An empty list allows
+everything:** that is the unconfigured state, not "deny all".
+
+The check runs **before** password verification, so a denial cannot double as an oracle for
+whether the password was right.
+
+This restricts where a session may be established, not where an existing one may be used; a
+session minted from an allowed address keeps working if its holder moves. Enforcing per request
+would require the policy on the hot path, which is why the UI says "sign-ins".
+
+### Passwords
+
+Both surfaces expose a self-service change at `POST /security/password`. Three things happen
+beyond writing the new hash:
+
+- **The current password is required.** A session alone must not be enough, or a hijacked
+  session becomes a permanent takeover by locking the real owner out.
+- **Failures count against the login throttle.** The endpoint verifies a credential, so without
+  that it is a rate-limit-free oracle for guessing the current password from inside a stolen
+  session.
+- **Every other session is revoked.** Someone changing their password usually believes they are
+  compromised; leaving the attacker's session alive defeats the point.
+
+The `passwordMinLength` setting in the `security` namespace is enforced **wherever a password is
+set** — self-service changes, admin-created console users, tenant team members, and seeded
+tenant owners — not only on the page that displays it. A hard floor of 8 applies regardless of
+the setting, and a settings-store outage falls back to that floor rather than refusing every
+password change.
+
+### Audit trail
+
+Every administrative mutation is recorded in `audit_events` and exposed at
+`GET /admin/api/audit` (filterable by action prefix and actor, paged in SQL).
+
+Each event carries both machine identifiers and human-readable names. `action` stays a stable
+key (`tenant.revoked`) because filters and alerting match on it; `actionLabel` is the same event
+as a sentence ("Revoked a tenant API key"), resolved on read from a label map so wording can be
+improved without breaking a saved filter. An unregistered action degrades to a humanised form of
+its key rather than leaking `foo.bar_baz` into the UI.
+
+`actorLabel` and `targetLabel` name the people and organisations involved
+(`Ada Obi (ada@x.com)`, `Acme Corp (acme)`) and are **snapshotted at write time** — they must
+survive the thing they name being deleted (often that deletion is the very event), and must read
+as the name was _then_, not as it is after a later rename.
+
 ## Subscriptions & entitlements
 
 A tenant may be enrolled in a **subscription** to a **plan**. The `requireSubscription`
@@ -336,6 +463,136 @@ publishes the plan's per-minute rate ceiling onto the rate limiter.
 
 Plan tiers, prices, and limits are defined in TECHNICAL.md § Billing & subscriptions. Plans are
 managed as data via the Admin API (Appendix B).
+
+## Data lifecycle
+
+### The document registry
+
+Every document processed through a **`standard`**-sensitivity function is recorded in a
+registry that backs the tenant portal's document list and reports. The registry holds
+**metadata only** — filename, function, page count, byte size, outcome, provider, duration.
+No file bytes, no extracted text, and no interpreted result are persisted by it.
+
+Documents processed by **`pii`** or **`restricted`** functions are **not recorded at all**.
+This is deliberately stricter than redacting fields: a filename is itself identifying
+(`jane-smith-passport.pdf`), and the existence of a row would disclose that a named individual
+was screened. Consequently the document list is _not_ a complete account of everything a tenant
+submitted — the aggregate usage counters (`GET /tenant/api/billing`) remain the authoritative
+total, and the portal says so on the page.
+
+Failures are recorded alongside successes: "we sent it and it bounced" is the case a tenant is
+most likely to come looking for.
+
+### Archived source files (object storage)
+
+When `BLOB_STORAGE_ENABLED=true`, the source file is also archived to S3-compatible object
+storage and the registry row carries its `storageKey`. This is **off by default** — keeping the
+bytes is a materially different privacy posture from a metadata-only registry, so it is switched
+on deliberately rather than arriving with a deploy. The sensitivity rule still governs:
+`pii`/`restricted` documents are never recorded and never uploaded.
+
+Keys are `documents/<tenant>/<date>/<uuid>/<name>`; the uuid carries uniqueness, not the
+(attacker-controlled) filename, which is sanitised against traversal. Upload runs off the
+response path and is best-effort — the OCR request has already succeeded, so a storage outage
+leaves the document recorded with no key rather than failing the call.
+
+Downloads are issued as **short-lived presigned URLs**
+(`GET /tenant/api/documents/:id/download`, `S3_DOWNLOAD_URL_TTL_SECONDS`, default 300) so the
+bytes travel from the store to the browser without occupying an API process. Tenant ownership is
+checked when the link is minted; the link itself is a bearer URL, hence the short window.
+
+The same code path talks to MinIO locally and real S3 in production — only `S3_ENDPOINT` differs.
+
+### Retention
+
+Records are deleted by an hourly **retention sweep** running in the worker, governed by the
+`retention` settings namespace (`documentRetentionDays`, default 90; `auditRetentionDays`,
+default 365; `enabled`, which suspends the sweep). It covers document records **and their
+archived files**, audit events, webhook deliveries, and request logs — the row is only an index,
+so purging it alone would leave documents in the bucket forever while the console reported them
+gone.
+
+The cutoff is recomputed from the current policy on every run rather than stamped onto each row
+at insert, so **shortening a window trims the existing backlog** rather than applying only to new
+records. Replicas coordinate through a Redis lock so one sweep runs per window, and a Redis
+outage skips the sweep rather than running it unguarded. `POST /admin/api/retention/sweep`
+(manager, audited) runs it immediately.
+
+### Tenant request logs
+
+`GET /tenant/api/logs` returns the org's own API call history — method, path, function, status,
+error code, duration, and request id. No request or response body is recorded.
+
+This is deliberately **not** the platform log stream (`GET /admin/api/logs`), which is
+operator-facing and spans every tenant. It is also not the document registry: that records
+documents that were _processed_, whereas this records _requests_, so it is the only place a
+tenant can see the calls that never became documents — a 402 over quota, a 429, an unsupported
+file type. Those are precisely what debugging an integration turns on.
+
+Recorded by middleware mounted above the auth and entitlement guards, so refusals are captured
+too, and written on response `finish` so it stays off the response path. A request that failed
+**authentication** is not recorded: there is no tenant to attribute it to, and inferring one
+from a rejected key would be worse than the gap.
+
+### Tenant data export
+
+`GET /tenant/api/backup/export` (owner only) returns the org's own documents, API key metadata
+and team members as JSON.
+
+**It is an export, not a restorable backup, and the difference is by design.** Two of the three
+sections are deliberately unrecoverable:
+
+- **API keys** are stored as sha256 of the raw key, which is shown once at creation and never
+  again. The export carries the hash, limits and expiry — nothing that authenticates a request.
+- **Team members** are stored with argon2id password hashes. Those are credential material;
+  writing them into a file a browser downloads would hand anyone who obtained it an offline
+  cracking target for every account in the org. They are omitted entirely.
+
+Restoring this file would therefore produce keys that do not work and users who cannot sign in.
+Rather than offer a restore that silently cannot restore the parts that matter, the endpoint is
+framed as record-keeping and portability, and the file restates its own exclusions in an
+`excluded` field so a reader of the JSON — not just of the UI — knows what it is. Source
+documents are excluded too (each is individually downloadable); the document history is capped,
+with a `truncated` flag so a short file is never mistaken for a complete one.
+
+The download is **audited** (`tenant.export.downloaded`): it is the single request that reads
+out everything the org holds, which is the shape of an exfiltration, and an owner should be able
+to see when one happened and who asked.
+
+This is unrelated to the admin-side configuration backup (`/admin/api/backups`), which snapshots
+the platform catalog, contains no credentials, and genuinely restores.
+
+## Webhooks
+
+A tenant may register endpoints (`/tenant/api/webhooks`, **owner only** — an endpoint receives
+the org's event stream, so adding one is a data-egress decision) subscribed to
+`document.processed` and `document.failed`. URLs must be `https` outside development.
+
+**Signing.** Every delivery carries `X-Heirs-Signature: t=<unix>,v1=<hmac>`, an HMAC-SHA256 over
+`<timestamp>.<body>` keyed by the endpoint's secret, plus `X-Heirs-Delivery` (stable across
+retries, so receivers can dedupe) and `X-Heirs-Event`. The timestamp is **inside** the signed
+material: signing the body alone would make any captured delivery replayable forever, whereas
+here a receiver can reject anything older than its tolerance and an attacker cannot advance the
+clock without invalidating the MAC. The secret is returned at creation and on rotation only — it
+is not recoverable, and rotating invalidates the previous one immediately.
+
+**Payloads follow the registry's privacy rule.** `fileName` is omitted for `pii`/`restricted`
+functions. The event still fires — the tenant learns a document was processed, not what it was
+called. The reasoning is the document registry's, and it binds harder here because a webhook
+sends the value to a third-party URL rather than storing it.
+
+**Delivery** runs in the worker as an outbox: `webhook_deliveries` is both the queue and the
+log, because the retry state a worker needs is the same state the tenant's deliveries page
+displays, and splitting them would mean keeping two copies in step. Rows are claimed with
+`FOR UPDATE ... SKIP LOCKED` so several workers never send the same delivery.
+
+Failures — **including 4xx**, which is usually a deploy in flight rather than a permanent
+refusal — retry with exponential backoff (10s doubling) up to 6 attempts, after which the
+delivery is marked `dead`. An unbounded retry queue against a host that is not coming back is
+how a webhook system becomes an outage of its own. Deliveries whose endpoint was deleted are
+marked dead rather than left pending forever. `POST /tenant/api/webhooks/:id/test` queues a
+synthetic event so a receiver can be verified end to end, signature included, without waiting
+for a real document.
 
 ## Error handling and status codes
 
@@ -407,6 +664,27 @@ The live `GET /v1/ocr/functions` response is authoritative. Summary of the thirt
 `SIGNING` requires the GLM-OCR provider (`layout`, `seals` capabilities). `pii` functions are
 never cached or queued and always run inline.
 
+## Deployment topology
+
+The image runs **two process types** from one build (12-factor VIII): `node build/index.js`
+(HTTP) and `node build/worker.js` — the OCR queue, the retention sweep, and webhook delivery.
+
+Deploying only the default command would leave every background feature silently inert: queued
+documents never processed, retention never swept, webhooks queued and never sent. To make that
+impossible, the web process **also runs the background work by default**
+(`RUN_BACKGROUND_WORKERS`, default `true`), so a single container is a complete service. Set it
+to `false` on the web process only where a dedicated worker container is deployed beside it;
+`docker-compose.yml` and `docker-compose-prod.yml` both do exactly that.
+
+Running the background work in both places is safe rather than merely tolerated: the retention
+sweep takes a Redis lock, webhook delivery claims rows with `FOR UPDATE ... SKIP LOCKED`, and
+BullMQ locks each job, so duplicate runners coordinate instead of double-processing.
+
+Boot waits for Postgres and Redis before accepting traffic, retrying a transient failure (a DNS
+hiccup resolving a managed host returns `EAI_AGAIN` — "try again") before giving up. A genuinely
+unreachable store still ends in a non-zero exit, and both compose files set
+`restart: unless-stopped` so an orchestrator or the Docker daemon brings the container back.
+
 ## Appendix A — Tenant Portal API (`/tenant/api`)
 
 Same-origin JSON API for a tenant's own users (served behind the Next.js portal). All routes
@@ -414,19 +692,42 @@ except login require a **tenant session cookie**; management routes require the 
 Every route is scoped to the caller's own tenant org — a tenant can never read or mutate
 another org's keys or users. Errors use a `{ error: { code, message } }` shape.
 
-| Method + path            | Role   | Purpose                                                                          |
-| ------------------------ | ------ | -------------------------------------------------------------------------------- |
-| `POST /api/login`        | open   | Authenticate; sets the session cookie. Login-throttled.                          |
-| `POST /api/logout`       | member | Destroy the session.                                                             |
-| `GET  /api/me`           | member | Current user + tenant + role.                                                    |
-| `GET  /api/billing`      | member | Current subscription plus lifetime OCR usage counters.                           |
-| `GET  /api/keys`         | owner  | List the org's API keys (hash + prefix, expiry, status; never the secret).       |
-| `POST /api/keys`         | owner  | Mint a new API key with optional `expiresAt` — the raw key is returned **once**. |
-| `DELETE /api/keys/:hash` | owner  | Revoke one of the org's keys.                                                    |
-| `GET  /api/users`        | owner  | List team members.                                                               |
-| `POST /api/users`        | owner  | Create a team member (`owner`/`member`).                                         |
-| `PATCH /api/users/:id`   | owner  | Update a member (guards against removing the last owner).                        |
-| `DELETE /api/users/:id`  | owner  | Delete a member (guards against deleting the last owner).                        |
+| Method + path                           | Role   | Purpose                                                                  |
+| --------------------------------------- | ------ | ------------------------------------------------------------------------ |
+| `POST /api/login`                       | open   | Authenticate. Returns a session, or an MFA challenge. Login-throttled.   |
+| `POST /api/login/mfa`                   | open   | Redeem an MFA challenge for a session. Login-throttled.                  |
+| `POST /api/logout`                      | member | Destroy the session.                                                     |
+| `GET  /api/me`                          | member | Current user + tenant + role.                                            |
+| `POST /api/security/password`           | member | Change own password. Revokes every other session.                        |
+| `GET  /api/security/sessions`           | member | Live sign-ins for this account. Never returns tokens.                    |
+| `DELETE /api/security/sessions`         | member | Sign out every other session; the caller's stays live.                   |
+| `GET  /api/security/mfa`                | member | Second-factor status (`enabled`, `pending`, codes remaining).            |
+| `POST /api/security/mfa`                | member | Begin enrolment — returns the secret + `otpauth://` URI.                 |
+| `POST /api/security/mfa/verify`         | member | Confirm enrolment; returns one-time recovery codes.                      |
+| `DELETE /api/security/mfa`              | member | Disable MFA. Requires the account password.                              |
+| `POST /api/security/mfa/recovery-codes` | member | Re-mint recovery codes. Requires the password.                           |
+| `GET/PUT /api/security/ip-allowlist`    | owner  | The org's sign-in IP restrictions.                                       |
+| `GET  /api/billing`                     | member | Current subscription plus lifetime OCR usage counters.                   |
+| `GET  /api/documents`                   | member | Processed-document history (paginated; PII runs excluded).               |
+| `GET  /api/documents/report`            | member | Aggregated activity over a trailing window, plus the retention policy.   |
+| `GET  /api/documents/:id/download`      | member | Short-lived presigned URL for the archived source file.                  |
+| `GET  /api/jobs`                        | member | Recent async OCR jobs (status, timings, attempts).                       |
+| `GET  /api/logs`                        | member | The org's API request history, including refused calls.                  |
+| `GET  /api/backup`                      | owner  | What a data export would contain (counts + exclusions).                  |
+| `GET  /api/backup/export`               | owner  | The export itself: documents, key metadata, team. Audited.               |
+| `GET/POST /api/webhooks`                | owner  | List / register endpoints. Create returns the signing secret **once**.   |
+| `PATCH/DELETE /api/webhooks/:id`        | owner  | Update or remove an endpoint.                                            |
+| `POST /api/webhooks/:id/rotate-secret`  | owner  | Re-mint the secret; the previous one stops working immediately.          |
+| `POST /api/webhooks/:id/test`           | owner  | Queue a synthetic event to verify a receiver.                            |
+| `GET  /api/webhooks/deliveries`         | owner  | Delivery log (attempts, response status, last error).                    |
+| `GET  /api/keys`                        | owner  | List API keys (hash + prefix, expiry, status; never the secret).         |
+| `POST /api/keys`                        | owner  | Mint a key with optional `expiresAt` — the raw key is returned **once**. |
+| `DELETE /api/keys/:hash`                | owner  | Revoke one of the org's keys.                                            |
+| `GET  /api/users`                       | owner  | List team members.                                                       |
+| `POST /api/users`                       | owner  | Create a team member (`owner`/`member`).                                 |
+| `PATCH /api/users/:id`                  | owner  | Update a member (guards against removing the last owner).                |
+| `DELETE /api/users/:id`                 | owner  | Delete a member (guards against deleting the last owner).                |
+| `DELETE /api/users/:id/mfa`             | owner  | Clear a member's second factor (lockout recovery; audited).              |
 
 ## Appendix B — Admin API (`/admin/api`)
 
@@ -435,19 +736,43 @@ everything else requires an **admin session cookie** and the appropriate role
 (`owner` > `manager` > `viewer`). Admin users and passwords (argon2id) live in Postgres; the
 first owner is seeded from env at startup.
 
-| Method + path                                                 | Min role    | Purpose                                           |
-| ------------------------------------------------------------- | ----------- | ------------------------------------------------- |
-| `POST /api/login` · `POST /api/logout` · `GET /api/me`        | — / session | Session lifecycle.                                |
-| `GET/POST /api/admins`, `PATCH/DELETE /api/admins/:id`        | owner       | Manage admin users.                               |
-| `GET/POST /api/tenants`, `PATCH/DELETE /api/tenants/:keyHash` | manager     | Manage tenants and their keys/limits.             |
-| `GET/POST /api/tenants/:tenantId/users`                       | manager     | Manage a tenant's portal users.                   |
-| `GET/POST /api/plans`, `PUT/DELETE /api/plans/:id`            | owner       | Manage the subscription plan catalog (DB-backed). |
-| `GET/PUT /api/tenants/:tenantId/subscription`                 | manager     | Read/assign a tenant's subscription.              |
-| `GET /api/functions`                                          | viewer      | The function catalog (as `/v1/ocr/functions`).    |
-| `GET /api/metrics/summary`                                    | viewer      | Request counts, error rate, tokens, fallbacks.    |
-| `GET /api/usage`                                              | viewer      | Per-tenant usage counters.                        |
-| `GET /api/queue`                                              | viewer      | BullMQ queue depth + recent jobs.                 |
-| `GET /api/health`                                             | viewer      | Health/provider matrix.                           |
+| Method + path                                             | Min role         | Purpose                                                      |
+| --------------------------------------------------------- | ---------------- | ------------------------------------------------------------ |
+| `POST /api/login` · `POST /api/login/mfa`                 | open             | Authenticate; redeem an MFA challenge. Login-throttled.      |
+| `POST /api/logout` · `GET /api/me`                        | session          | Session lifecycle.                                           |
+| `POST /api/security/password`                             | session          | Change own password. Revokes every other session.            |
+| `GET/DELETE /api/security/sessions`                       | session          | The caller's live sign-ins; DELETE revokes all others.       |
+| `GET/POST/DELETE /api/security/mfa`                       | session          | The caller's own second factor.                              |
+| `POST /api/security/mfa/verify` · `.../recovery-codes`    | session          | Confirm enrolment; re-mint recovery codes.                   |
+| `GET/POST /api/admins`, `PATCH/DELETE /api/admins/:id`    | owner            | Manage console users.                                        |
+| `DELETE /api/admins/:id/mfa`                              | owner            | Clear an admin's second factor (lockout recovery; audited).  |
+| `GET /api/tenants` · `GET /api/tenants/:id`               | viewer           | List tenants; one tenant with keys, users and subscription.  |
+| `POST /api/tenants`, `PATCH/DELETE /api/tenants/:keyHash` | manager          | Create, edit and revoke tenants and their keys/limits.       |
+| `GET /api/tenants/:tenantId/users`                        | viewer           | A tenant's portal users.                                     |
+| `POST /api/tenants/:tenantId/users`                       | manager          | Seed a tenant's portal login.                                |
+| `GET /api/plans`                                          | viewer           | The subscription plan catalog (DB-backed; includes hidden).  |
+| `POST /api/plans`, `PUT/DELETE /api/plans/:id`            | manager          | Manage the plan catalog.                                     |
+| `GET /api/subscriptions`                                  | viewer           | Every tenant's enrolment, with the derived status.           |
+| `GET /api/subscriptions/summary`                          | viewer           | Estate-wide totals for the console's stat tiles.             |
+| `GET /api/tenants/:tenantId/subscription`                 | viewer           | One tenant's subscription.                                   |
+| `PUT /api/tenants/:tenantId/subscription`                 | manager          | Assign a plan (catalog plans only).                          |
+| `GET /api/functions`                                      | viewer           | The function catalog (as `/v1/ocr/functions`).               |
+| `GET /api/metrics/summary`                                | viewer           | Request counts, error rate, tokens, fallbacks, per function. |
+| `GET /api/usage`                                          | viewer           | Per-tenant usage counters.                                   |
+| `GET /api/documents`                                      | viewer           | Processed-document registry across all tenants.              |
+| `GET /api/queue`                                          | viewer           | BullMQ queue depth + recent jobs.                            |
+| `GET /api/health`                                         | viewer           | Health/provider matrix.                                      |
+| `GET /api/audit`                                          | viewer           | Audit trail, filterable by action prefix and actor.          |
+| `GET /api/logs`                                           | viewer           | Platform log tail (Redis ring buffer), filterable by level.  |
+| `GET/PUT /api/settings/notifications`                     | viewer / manager | Notification channels and event toggles.                     |
+| `GET/PUT /api/settings/api-integrations`                  | viewer / manager | Outbound integration registry.                               |
+| `GET/PUT /api/settings/platform`                          | viewer / manager | Maintenance mode, default limits, feature flags.             |
+| `GET/PUT /api/settings/retention`                         | viewer / manager | Retention windows for documents and audit events.            |
+| `POST /api/retention/sweep`                               | manager          | Run the retention sweep immediately (audited).               |
+| `GET/PUT /api/security`                                   | viewer / manager | Security policy, plus a read-only live posture snapshot.     |
+| `GET/POST /api/backups`                                   | viewer / manager | List and create configuration snapshots.                     |
+| `GET /api/backups/:id`                                    | viewer           | Download one snapshot.                                       |
+| `POST /api/backups/:id/restore`                           | manager          | Idempotently restore plans, subscriptions and settings.      |
 
 ## Glossary
 

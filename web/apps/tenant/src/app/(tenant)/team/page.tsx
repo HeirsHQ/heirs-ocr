@@ -16,6 +16,7 @@ import { Dialog, DialogContent } from "@heirs/ui";
 import { SelectOption, type Option } from "@heirs/ui";
 import { Button } from "@heirs/ui";
 import { Input } from "@heirs/ui";
+import { usePagination } from "@heirs/ui";
 import {
   useCreateTeamMember,
   useDeleteTeamMember,
@@ -120,7 +121,8 @@ const InviteMemberModal = () => {
 };
 
 const Page = () => {
-  const team = useTenantTeam();
+  const { params, tableProps } = usePagination();
+  const team = useTenantTeam(params);
   const me = useTenantMe();
   const updateMember = useUpdateTeamMember();
   const deleteMember = useDeleteTeamMember();
@@ -183,15 +185,15 @@ const Page = () => {
             retrying={team.isFetching}
           />
         )}
-        {team.data && team.data.users.length === 0 && (
+        {team.data && team.data.items.length === 0 && (
           <EmptyState
             icon={UsersRound}
             title="No team members"
             description="Invite a teammate above to manage this tenant."
           />
         )}
-        {team.data && team.data.users.length > 0 && (
-          <DataTable columns={columns} data={team.data.users} total={team.data.users.length || 0} />
+        {team.data && team.data.items.length > 0 && (
+          <DataTable columns={columns} data={team.data.items} total={team.data.total} {...tableProps} />
         )}
       </div>
       <ConfirmDialog

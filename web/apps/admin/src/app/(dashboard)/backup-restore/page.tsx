@@ -13,11 +13,13 @@ import { getErrorMessage } from "@heirs/api-client";
 import { DataTable, Label } from "@heirs/ui";
 import { Button } from "@heirs/ui";
 import { Input } from "@heirs/ui";
+import { usePagination } from "@heirs/ui";
 
 const fmt = (iso: string) => new Date(iso).toLocaleString();
 
 const Page = () => {
-  const backups = useBackups();
+  const { params, tableProps } = usePagination();
+  const backups = useBackups(params);
   const create = useCreateBackup();
   const restore = useRestoreBackup();
   const [note, setNote] = useState("");
@@ -80,14 +82,19 @@ const Page = () => {
             onRetry={() => backups.refetch()}
             retrying={backups.isFetching}
           />
-        ) : backups.data && backups.data.backups.length === 0 ? (
+        ) : backups.data && backups.data.items.length === 0 ? (
           <EmptyState
             icon={Archive}
             title="No backups yet"
             description="Create a snapshot before risky changes. Each backup captures the current plans, subscriptions, and settings."
           />
         ) : (
-          <DataTable columns={columns} data={backups.data?.backups || []} total={backups.data?.backups.length || 0} />
+          <DataTable
+            columns={columns}
+            data={backups.data?.items ?? []}
+            total={backups.data?.total ?? 0}
+            {...tableProps}
+          />
         )}
       </div>
 

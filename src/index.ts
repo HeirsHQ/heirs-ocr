@@ -2,8 +2,9 @@ import "dotenv/config";
 import http from "http";
 
 import { initTracing, shutdownTracing } from "./observability/otel";
-import { closeDb, ensureSchema, whenDbReady } from "./db";
-import { closeRedis, whenRedisReady } from "./redis";
+import { closeDb, ensureSchema } from "./db";
+import { closeRedis } from "./redis";
+import { startBackgroundWorkers, waitForStores } from "./boot";
 import { ensureBootstrapAdmin } from "./auth/admins";
 import { seedPlans } from "./billing/plan-store";
 import { logger } from "./observability/logger";
@@ -14,6 +15,9 @@ initTracing();
 
 const app = main();
 const server = http.createServer(app);
+
+/** Set when this process also runs the background work; cleared on shutdown. */
+let stopBackgroundWorkers: (() => Promise<void>) | undefined;
 
 // Loud warning if the metrics endpoint is left open in production — it exposes
 // operational telemetry to anyone who can reach the port.
@@ -39,7 +43,9 @@ if (env.NODE_ENV === "production" && !env.METRICS_AUTH_TOKEN) {
  * restarts us rather than serving a broken instance.
  */
 const boot = async (): Promise<void> => {
-  await Promise.all([whenRedisReady(), whenDbReady()]);
+  // Retries a transient failure (a DNS blip resolving a managed host) rather than
+  // treating one unlucky lookup as fatal — see src/boot.ts.
+  await waitForStores();
 
   // Not wrapped: a schema failure must propagate to the `.catch` below and exit.
   // Swallowing it left the service accepting traffic against missing tables while
@@ -53,6 +59,16 @@ const boot = async (): Promise<void> => {
     logger.error("boot seeding failed (continuing; retried next boot)", {
       err: err instanceof Error ? err.message : String(err),
     });
+  }
+
+  // Unless a dedicated worker process is deployed, this process runs the background
+  // work too — otherwise a single-container deploy silently never processes queued
+  // documents, never sweeps retention, and never delivers a webhook. See
+  // `RUN_BACKGROUND_WORKERS` for why the default is on and why doubling up is safe.
+  if (env.RUN_BACKGROUND_WORKERS === "true") {
+    stopBackgroundWorkers = startBackgroundWorkers();
+  } else {
+    logger.info("background workers disabled in this process (RUN_BACKGROUND_WORKERS=false)");
   }
 };
 
@@ -87,6 +103,8 @@ const shutdown = async (signal: string): Promise<void> => {
 
   try {
     await new Promise<void>((resolve, reject) => server.close((err) => (err ? reject(err) : resolve())));
+    // Stop background work before releasing the stores it depends on.
+    await stopBackgroundWorkers?.();
     await shutdownTracing();
     await closeDb();
     await closeRedis();

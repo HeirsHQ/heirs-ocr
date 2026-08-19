@@ -18,6 +18,8 @@ services:
       context: .
       dockerfile: apps/admin/Dockerfile
     image: heirs-admin-web
+    # Survive a crash and a host reboot, same as the API stack.
+    restart: unless-stopped
     environment:
       NODE_ENV: production
       PORT: "3000"
@@ -35,6 +37,8 @@ services:
       context: .
       dockerfile: apps/tenant/Dockerfile
     image: heirs-tenant-web
+    # Survive a crash and a host reboot, same as the API stack.
+    restart: unless-stopped
     environment:
       NODE_ENV: production
       PORT: "3001"

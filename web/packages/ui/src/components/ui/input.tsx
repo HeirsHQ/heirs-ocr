@@ -29,7 +29,9 @@ const strengthConfig: Record<PasswordStrength, { label: string; className: strin
   strong: { label: "Strong", className: "bg-green-100 text-green-500" },
 };
 
-function Input({ className, type, ...props }: React.ComponentProps<"input">) {
+function Input({ className, type, wrapperClassName, ...props }: React.ComponentProps<"input"> & {
+  wrapperClassName?: string
+}) {
   const [showPassword, setShowPassword] = React.useState(false);
   const [passwordValue, setPasswordValue] = React.useState("");
 
@@ -44,14 +46,14 @@ function Input({ className, type, ...props }: React.ComponentProps<"input">) {
   };
 
   return (
-    <div className={cn("relative w-full")}>
+    <div className={cn("relative w-full", wrapperClassName)}>
       {isSearch && <Search className="text-muted-foreground absolute top-1/2 left-3 size-4 -translate-y-1/2" />}
       <input
         type={isPassword && showPassword ? "text" : type}
         data-slot="input"
         className={cn(
-          "file:text-foreground input placeholder:text-muted-foreground selection:bg-primary selection:text-primary-foreground dark:bg-input/30 border-input h-8 w-full min-w-0 appearance-none rounded-md border bg-transparent px-3 py-1 text-base transition-[color,box-shadow,border] duration-150 outline-none file:inline-flex file:h-7 file:border-0 file:bg-transparent file:text-sm file:font-medium disabled:pointer-events-none disabled:cursor-not-allowed disabled:opacity-50 md:text-sm",
-          "focus-visible:border-ring",
+          "file:text-foreground input placeholder:text-muted-foreground selection:bg-primary selection:text-primary-foreground dark:bg-input/30 border-input h-8 w-full min-w-0 appearance-none rounded-md border bg-transparent px-3 py-1 text-base transition-[color,box-shadow,border] duration-150 outline-none file:inline-flex file:h-8 file:border-0 file:bg-transparent file:text-sm file:font-medium disabled:pointer-events-none disabled:cursor-not-allowed disabled:opacity-50 md:text-sm",
+          "focus-visible:border-ring file:cursor-pointer",
           "aria-invalid:border-destructive dark:aria-invalid:border-destructive/50",
           "[appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none",
           isPassword && "pr-24",

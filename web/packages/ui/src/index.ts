@@ -2,6 +2,7 @@
 export * from "./lib/utils";
 export * from "./lib/string";
 export * from "./types";
+export * from "./hooks/use-pagination";
 
 // shadcn / base-ui primitives
 export * from "./components/ui/badge";
@@ -33,9 +34,15 @@ export * from "./components/shared/data-table";
 export * from "./components/shared/empty-state";
 export * from "./components/shared/error-state";
 export * from "./components/shared/field";
+export * from "./components/shared/mfa-challenge-form";
+export * from "./components/shared/mfa-settings";
+export * from "./components/shared/mfa-setup-dialog";
 export * from "./components/shared/page-layout";
+export * from "./components/shared/qr-code";
+export * from "./components/shared/pagination";
 export * from "./components/shared/schema-form";
-export * from "./components/shared/scroll-area"
+export * from "./components/shared/session-list";
+export * from "./components/shared/scroll-area";
 export * from "./components/shared/searchable-select";
 export * from "./components/shared/secret-callout";
 export * from "./components/shared/select-option";
@@ -43,5 +50,5 @@ export * from "./components/shared/skeleton";
 export * from "./components/shared/stat-tile";
 export * from "./components/shared/status-badge";
 export * from "./components/shared/tab-panel";
-export * from "./components/shared/text-label"
+export * from "./components/shared/text-label";
 export * from "./components/shared/toggle-list";

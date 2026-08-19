@@ -2,7 +2,10 @@ import type { DocumentInput, OcrProvider, RecognizedDocument, RecognizeOptions }
 import { resolveResultSchema, type OcrContext, type OcrFunctionDefinition } from "./functions/define";
 import { createRedactingLogger, type Logger } from "./observability/logger";
 import { extractionCacheKey, type ExtractionCache } from "./cache";
-import { recordTenantUsage } from "./observability/usage";
+import { recordFunctionUsage, recordTenantUsage } from "./observability/usage";
+import { isRecordable, recordDocument } from "./observability/documents";
+import { blobStorageEnabled, putDocument } from "./storage/blob";
+import { dispatchDocumentEvent } from "./webhooks/dispatch";
 import type { ProviderPolicy } from "./config/providers";
 import { withSpan } from "./observability/tracing";
 import { routeProvider } from "./providers/router";
@@ -144,8 +147,9 @@ export const runPipeline = async <TArgs, TResult>(
     // Quality SLI: functions that carry a confidence signal expose `confidenceOf`;
     // the pipeline is the single place it's read and turned into a metric.
     const confidence = def.confidenceOf?.(result);
-    if (confidence !== undefined) {
-      metrics.recordConfidence(def.key, confidence <= env.LOW_CONFIDENCE_THRESHOLD);
+    const lowConfidence = confidence === undefined ? undefined : confidence <= env.LOW_CONFIDENCE_THRESHOLD;
+    if (lowConfidence !== undefined) {
+      metrics.recordConfidence(def.key, lowConfidence);
     }
 
     // Cost SLI: priced off the tokens we can see (extraction); 0-rate disables it.
@@ -177,8 +181,28 @@ export const runPipeline = async <TArgs, TResult>(
       estimatedCostNgn,
       outcome: "success",
     });
-    // Per-tenant counters for the admin console (fire-and-forget; see usage.ts).
+    // Durable counters for the admin console (fire-and-forget; see usage.ts). These
+    // shadow the Prometheus series deliberately: the registry is per-process and
+    // resets on deploy, so the console reads these instead.
     recordTenantUsage(req.tenantId, { outcome: "success", tokensUsed: doc.tokensUsed });
+    recordFunctionUsage(def.key, {
+      outcome: "success",
+      tokensUsed: doc.tokensUsed,
+      lowConfidence,
+      fellBack: doc.fellBackFrom !== undefined,
+    });
+    // Metadata for the portal's document list, and — when blob storage is on — the
+    // archived source file. Both no-op for `pii`/`restricted` functions: `archive`
+    // gates on the same rule the registry owns, so the bytes of a sensitive document
+    // are never uploaded.
+    archiveAndRecord(def, req, {
+      pageCount: doc.pageCount,
+      outcome: "success",
+      provider: doc.provider,
+      tokensUsed: doc.tokensUsed ?? null,
+      durationMs: meta.durationMs,
+      mimeType: input.mime,
+    });
 
     return { result, meta };
   } catch (err) {
@@ -198,8 +222,100 @@ export const runPipeline = async <TArgs, TResult>(
       outcome: "error",
     });
     recordTenantUsage(req.tenantId, { outcome: "error", tokensUsed: doc?.tokensUsed });
+    // No `lowConfidence` on the error path: the request never produced a result to
+    // score, so it must not enter the ratio's denominator.
+    recordFunctionUsage(def.key, {
+      outcome: "error",
+      tokensUsed: doc?.tokensUsed,
+      fellBack: doc?.fellBackFrom !== undefined,
+    });
+    // Failures are listed too: "we sent it and it bounced" is the case a tenant is
+    // most likely to come looking for — and the one where having the original file
+    // to re-run is most useful.
+    archiveAndRecord(def, req, {
+      pageCount: doc?.pageCount ?? 0,
+      outcome: "error",
+      provider: doc?.provider ?? null,
+      tokensUsed: doc?.tokensUsed ?? null,
+      durationMs: null,
+      mimeType: input?.mime,
+    });
     throw err;
   }
+};
+
+/**
+ * Archives the source file (when enabled) and records the registry row.
+ *
+ * Runs off the response path — the request has already been answered by the time
+ * this settles, so an upload to object storage never adds latency to the OCR call
+ * and never turns a successful extraction into a failed request. Both steps are
+ * individually best-effort: a failed upload just leaves `storageKey` null, and the
+ * document still lists.
+ *
+ * The sensitivity check happens here rather than being left to `recordDocument`,
+ * because the upload has to be skipped too — otherwise the bytes of a `pii`
+ * document would reach the bucket even though no row ever mentions them.
+ */
+const archiveAndRecord = <TArgs, TResult>(
+  def: OcrFunctionDefinition<TArgs, TResult>,
+  req: OcrRequest,
+  outcome: {
+    pageCount: number;
+    outcome: "success" | "error";
+    provider: string | null;
+    tokensUsed: number | null;
+    durationMs: number | null;
+    mimeType?: string;
+  },
+): void => {
+  // Webhooks fire for *every* sensitivity — a tenant subscribed to document events
+  // should hear about a PII run too. The payload is what differs: `dispatch` withholds
+  // the filename for pii/restricted, so the event says "this happened" without saying
+  // what the document was called.
+  void dispatchDocumentEvent({
+    tenantId: req.tenantId,
+    functionKey: def.key,
+    sensitivity: def.sensitivity,
+    outcome: outcome.outcome,
+    pageCount: outcome.pageCount,
+    fileName: req.file.originalName,
+    requestId: req.requestId,
+  });
+
+  if (!isRecordable(def.sensitivity)) return;
+
+  const record = (storageKey?: string): void => {
+    void recordDocument({
+      tenantId: req.tenantId,
+      functionKey: def.key,
+      sensitivity: def.sensitivity,
+      fileName: req.file.originalName,
+      byteSize: req.file.buffer.byteLength,
+      pageCount: outcome.pageCount,
+      outcome: outcome.outcome,
+      provider: outcome.provider,
+      tokensUsed: outcome.tokensUsed,
+      durationMs: outcome.durationMs,
+      storageKey,
+    });
+  };
+
+  // With storage off — the default — record synchronously. Putting the call behind
+  // an `await` would defer it to a later microtask, which defeats `recordDocument`'s
+  // synchronous error handling and lets a store failure surface long after the
+  // request it belongs to has finished (see the note on `recordDocument`).
+  if (!blobStorageEnabled()) {
+    record();
+    return;
+  }
+  // Storage on: the key is only known once the upload settles, so this path defers.
+  void putDocument({
+    tenantId: req.tenantId,
+    fileName: req.file.originalName,
+    body: req.file.buffer,
+    contentType: outcome.mimeType,
+  }).then(record);
 };
 
 /** Placeholder document for `skipExtraction` functions that work on raw bytes. */
@@ -220,7 +336,13 @@ const ingest = async (req: OcrRequest): Promise<DocumentInput> => {
   if (!sniffed) {
     throw new OcrError("UNSUPPORTED_MEDIA_TYPE", "Could not determine a supported file type");
   }
-  return { buffer, mimeGroup: sniffed.mimeGroup, sha256: sha256(buffer), originalName: req.file.originalName };
+  return {
+    buffer,
+    mimeGroup: sniffed.mimeGroup,
+    mime: sniffed.mime,
+    sha256: sha256(buffer),
+    originalName: req.file.originalName,
+  };
 };
 
 /** Stage 2: route → cache lookup → recognize (with fallback) → cache store. */

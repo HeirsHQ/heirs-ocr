@@ -4,19 +4,27 @@ import { Building2, ChartColumn } from "lucide-react";
 
 import { DataTable, EmptyState, ErrorState, PageLayout, Skeleton, StatTile } from "@/components/shared";
 import { useMetricsSummary, useTenantUsage } from "@/hooks/api/use-admin-metrics";
-import { usageColumns } from "@/config/columns/analytics";
+import { functionColumns, usageColumns } from "@/config/columns/analytics";
 import { getErrorMessage } from "@heirs/api-client";
+import { usePagination } from "@heirs/ui";
 
 const pct = (ratio: number): string => `${(ratio * 100).toFixed(1)}%`;
 const num = (n: number): string => n.toLocaleString();
 
 const Page = () => {
   const metrics = useMetricsSummary();
-  const usage = useTenantUsage();
+  const { params, tableProps } = usePagination();
+  const usage = useTenantUsage(params);
+  // The per-function rollup arrives whole (one row per catalog function), so it pages
+  // in the browser. It still needs *some* page state: DataTable renders a pagination
+  // bar whenever `total` exceeds the page size, and without handlers that bar was
+  // inert — it claimed "1–10 of 12" while all 12 rows were on screen.
+  const fn = usePagination();
 
   const m = metrics.data;
-  const rows = m?.byFunction ?? [];
-  const tenants = usage.data?.usage ?? [];
+  const allRows = m?.byFunction ?? [];
+  const rows = allRows.slice((fn.params.page - 1) * fn.params.pageSize, fn.params.page * fn.params.pageSize);
+  const tenants = usage.data?.items ?? [];
 
   return (
     <PageLayout title="Analytics" subtitle="Request volume, errors, and token usage across the service.">
@@ -40,43 +48,20 @@ const Page = () => {
         )}
         {m && (
           <section className="space-y-2">
-            <p className="text-sm font-medium">By function</p>
-            {rows.length === 0 ? (
+            <p className="text-sm font-medium">By Function</p>
+            {allRows.length === 0 ? (
               <EmptyState
                 icon={ChartColumn}
                 title="No requests recorded yet"
                 description="Once tenants start running documents through the API, per-function volume and error rates appear here."
               />
             ) : (
-              <div className="overflow-x-auto rounded-md border">
-                <table className="w-full text-sm">
-                  <thead className="text-left text-xs text-muted-foreground">
-                    <tr className="border-b">
-                      <th className="px-3 py-2 font-medium">Function</th>
-                      <th className="px-3 py-2 text-right font-medium">Requests</th>
-                      <th className="px-3 py-2 text-right font-medium">Errors</th>
-                      <th className="px-3 py-2 text-right font-medium">Tokens</th>
-                      <th className="px-3 py-2 text-right font-medium">Low-confidence</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {rows.map((r) => (
-                      <tr key={r.function} className="border-b last:border-0">
-                        <td className="px-3 py-2">{r.function}</td>
-                        <td className="px-3 py-2 text-right tabular-nums">{num(r.requests)}</td>
-                        <td className="px-3 py-2 text-right tabular-nums">{num(r.errors)}</td>
-                        <td className="px-3 py-2 text-right tabular-nums">{num(r.tokens)}</td>
-                        <td className="px-3 py-2 text-right tabular-nums">{pct(r.lowConfidenceRatio)}</td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
+              <DataTable columns={functionColumns} data={rows} total={allRows.length} {...fn.tableProps} />
             )}
           </section>
         )}
         <section className="space-y-2">
-          <p className="text-sm font-medium">By tenant</p>
+          <p className="text-sm font-medium">By Tenant</p>
           {usage.isPending && <Skeleton skeleton="table" columns={4} rows={5} />}
           {usage.isError && (
             <ErrorState
@@ -93,7 +78,12 @@ const Page = () => {
               description="Usage is attributed per tenant as they call the API. Provision a tenant and run a document to see it here."
             />
           ) : (
-            <DataTable columns={usageColumns} data={usage.data?.usage || []} total={usage.data?.usage.length || 0} />
+            <DataTable
+              columns={usageColumns}
+              data={usage.data?.items ?? []}
+              total={usage.data?.total ?? 0}
+              {...tableProps}
+            />
           )}
         </section>
       </div>

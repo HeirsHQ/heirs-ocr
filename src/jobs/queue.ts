@@ -33,6 +33,18 @@ export type JobRecord = {
   result?: unknown;
   meta?: OcrResponseMeta;
   error?: { code: string; message: string };
+  /** Epoch ms when the job was enqueued. Always present. */
+  createdAt?: number;
+  /** Epoch ms when a worker picked it up; absent while still waiting. */
+  startedAt?: number;
+  /** Epoch ms when it settled (completed or failed); absent while in flight. */
+  finishedAt?: number;
+  /**
+   * Deliveries so far. Above 1 means the job was retried or redelivered after a
+   * stall — worth surfacing, because a job that eventually succeeded on its third
+   * attempt looks identical to a first-try success without it.
+   */
+  attempts?: number;
 };
 
 export interface OcrQueue {
@@ -99,6 +111,10 @@ const toJobRecord = async (job: Job<OcrJobData>, jobId: string = job.id ?? "unkn
     status,
     tenantId: job.data.request.tenantId,
     function: job.data.function,
+    createdAt: job.timestamp,
+    startedAt: job.processedOn ?? undefined,
+    finishedAt: job.finishedOn ?? undefined,
+    attempts: job.attemptsMade,
   };
   if (status === "completed") {
     const outcome = job.returnvalue as { result?: unknown; meta?: OcrResponseMeta } | undefined;
@@ -174,7 +190,24 @@ export const ocrQueue: OcrQueue = {
     return toJobRecord(job, jobId);
   },
 
-  async getRecentForTenant(tenantId, limit = 20) {
+  /**
+   * Recent jobs for one tenant, newest first.
+   *
+   * Two deliberate shapes here:
+   *
+   *  - **`result` is stripped.** This is a list; a page of twenty completed jobs
+   *    would otherwise carry twenty full OCR payloads to render a table that shows
+   *    none of them. `meta` stays because it is small and the columns use it. The
+   *    detail endpoint (`GET /v1/ocr/jobs/:id`) still returns the result.
+   *  - **Sorted by enqueue time.** BullMQ returns jobs grouped by state, not
+   *    chronologically, so without this the list interleaves by status and a fresh
+   *    job can appear below an old completed one.
+   *
+   * The underlying scan reads at most 100 jobs across *all* tenants before
+   * filtering, so on a busy shared queue a given tenant may see fewer than `limit`.
+   * Fixing that properly needs a per-tenant index rather than a queue scan.
+   */
+  async getRecentForTenant(tenantId, limit = 100) {
     const jobs = await getQueue().getJobs(["waiting", "active", "delayed", "completed", "failed"], 0, 99);
     const records = await Promise.all(
       jobs
@@ -182,6 +215,6 @@ export const ocrQueue: OcrQueue = {
         .slice(0, limit)
         .map((job) => toJobRecord(job)),
     );
-    return records;
+    return records.map(({ result: _result, ...rest }) => rest).sort((a, b) => (b.createdAt ?? 0) - (a.createdAt ?? 0));
   },
 };

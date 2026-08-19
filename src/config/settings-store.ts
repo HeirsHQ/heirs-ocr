@@ -1,5 +1,7 @@
 import { z } from "zod";
 
+import { matchesEntry } from "../auth/ip-allowlist";
+
 import { logger } from "../observability/logger";
 import { query } from "../db";
 
@@ -58,11 +60,43 @@ export const platformSchema = z.object({
   featureFlags: z.record(z.string(), z.boolean()).default({}),
 });
 
+/**
+ * One allowlist entry — a bare IP or a CIDR range.
+ *
+ * Validated on write rather than only on match. A malformed entry never matches
+ * anything (see `matchesEntry`), so saving one into a non-empty list would deny every
+ * sign-in — that is a lockout caused by a typo, and refusing the save is the only
+ * point at which it can still be corrected easily.
+ */
+export const ipAllowlistEntry = z
+  .string()
+  .min(1)
+  .refine((value) => matchesEntry(value.split("/")[0] ?? "", value), {
+    message: "Must be a valid IP address or CIDR range, e.g. 203.0.113.0/24",
+  });
+
 export const securitySchema = z.object({
   enforceHttps: z.boolean().default(true),
   sessionIdleTimeoutMinutes: z.number().int().positive().default(60),
   passwordMinLength: z.number().int().min(8).max(128).default(8),
-  ipAllowlist: z.array(z.string().min(1)).default([]),
+  /** Empty allows every address; that is the unconfigured state, not "deny all". */
+  ipAllowlist: z.array(ipAllowlistEntry).default([]),
+});
+
+/**
+ * How long processed-document records and audit events are kept.
+ *
+ * The sweep (src/jobs/retention.ts) reads this every run and deletes by age, so
+ * shortening a window applies to rows already stored rather than only to new ones.
+ * `enabled: false` suspends the sweep entirely — an escape hatch for an operator who
+ * needs to preserve everything during an investigation.
+ */
+export const retentionSchema = z.object({
+  enabled: z.boolean().default(true),
+  documentRetentionDays: z.number().int().min(1).max(3650).default(90),
+  // Longer than documents by default: the audit trail is the record of who changed
+  // what, which is exactly what a post-incident review needs to reach back into.
+  auditRetentionDays: z.number().int().min(1).max(3650).default(365),
 });
 
 /** Registry of every settings namespace with its schema. */
@@ -71,6 +105,7 @@ export const SETTINGS_SCHEMAS = {
   api_integrations: apiIntegrationsSchema,
   platform: platformSchema,
   security: securitySchema,
+  retention: retentionSchema,
 } as const;
 
 export type SettingsNamespace = keyof typeof SETTINGS_SCHEMAS;

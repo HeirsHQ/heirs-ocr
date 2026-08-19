@@ -52,7 +52,9 @@ export const TENANT_ROUTES: RouteGroup[] = [
     routes: [
       { href: "/webhooks", label: "Webhooks", icon: Webhook },
       { href: "/jobs", label: "Job Queues", icon: ListChecks },
-      { href: "/logs", label: "Audit Logs", icon: Logs },
+      // "Request Logs", not "Audit Logs": this is the org's own API call history, not
+      // a record of administrative changes.
+      { href: "/logs", label: "Request Logs", icon: Logs },
       { href: "/backup", label: "Backup", icon: DatabaseBackup },
       { href: "/security", label: "Security", icon: ShieldCheck },
     ],

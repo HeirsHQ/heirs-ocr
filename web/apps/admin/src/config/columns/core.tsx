@@ -4,7 +4,7 @@ import { format, formatDistanceToNow } from "date-fns";
 import { Fragment } from "react";
 import Link from "next/link";
 
-import type { DataTableFeatures } from "@heirs/ui";
+import type { ColumnsWithRowClick, DataTableFeatures } from "@heirs/ui";
 import { Popover, PopoverContent, PopoverTrigger } from "@heirs/ui";
 import { SelectOption } from "@heirs/ui";
 import { Checkbox } from "@heirs/ui";
@@ -20,12 +20,12 @@ type TabelActionVariant = "amber" | "default" | "destructive" | "info" | "succes
 // text on `gray-100` inverted into near-invisibility. `success` also referenced a
 // `success-600` scale that was never defined, so those items rendered unstyled.
 const variants: Record<TabelActionVariant, string> = {
-  amber: "text-warning hover:bg-warning/10",
-  default: "text-foreground hover:bg-accent",
-  destructive: "text-destructive hover:bg-destructive/10",
-  info: "text-primary hover:bg-primary/10",
-  success: "text-success hover:bg-success/10",
-  warning: "text-warning hover:bg-warning/10",
+  amber: "text-amber-500 hover:text-amber-600 hover:bg-amber-100/90",
+  default: "text-neutral-500 hover:text-neutral-600 hover:bg-neutral-100/90",
+  destructive: "text-red-500 hover:text-red-600 hover:bg-red-100/90",
+  info: "text-blue-500 hover:text-blue-600 hover:bg-blue-100/90",
+  success: "text-green-500 hover:text-green-600 hover:bg-green-100/10",
+  warning: "text-yellow-500 hover:text-yellow-600 hover:bg-yellow-100/10",
 };
 
 interface TableActionItem<T> {
@@ -45,6 +45,13 @@ interface CreateColumnsProps<T extends object> {
   actionColumnHeader?: string;
   /** Prefixed to relative `href`s returned by actions. */
   baseHref?: string;
+  /**
+   * Opens the row — usually its detail page. Declared here, beside the action menu
+   * and the selection checkbox, but applied by {@link DataTable}, which owns the
+   * `<tr>`: it ignores clicks that came from a control inside the row and adds
+   * keyboard activation.
+   */
+  onRowClick?: (row: Row<DataTableFeatures, T>) => void;
   /** Prepends a checkbox column for row selection. */
   selectable?: boolean;
 }
@@ -87,7 +94,6 @@ const RowActions = <T extends object>({
                 {item.label}
               </Fragment>
             );
-
             return href ? (
               <Link key={index} href={baseHref ? `${baseHref}${href}` : href} className={className}>
                 {content}
@@ -120,8 +126,9 @@ export function createColumns<T extends object>({
   actionColumnId = "actions",
   actionColumnHeader = "",
   baseHref,
+  onRowClick,
   selectable,
-}: CreateColumnsProps<T>): Column<T>[] {
+}: CreateColumnsProps<T>): ColumnsWithRowClick<T> {
   const result: Column<T>[] = [];
 
   if (selectable) {
@@ -156,7 +163,11 @@ export function createColumns<T extends object>({
     });
   }
 
-  return result;
+  // Attached rather than returned separately so every call site keeps passing a
+  // plain `columns={...}` — see `ColumnsWithRowClick`.
+  const withRowClick = result as ColumnsWithRowClick<T>;
+  withRowClick.onRowClick = onRowClick;
+  return withRowClick;
 }
 
 export const TextCell = ({ value, className }: { value?: string | null; className?: string }) =>
@@ -241,14 +252,14 @@ const STATUS_DEFAULTS: Record<string, StatusVariant> = {
 };
 
 export const STATUS_STYLES: Record<StatusVariant, string> = {
-  amber: "bg-warning/10 text-warning border-warning/30",
-  danger: "bg-destructive/10 text-destructive border-destructive/30",
+  amber: "bg-amber-100 text-amber-600 border-amber-300",
+  danger: "bg-red-100 text-red-600 border-red-300",
   draft: "bg-muted text-muted-foreground border-border",
-  info: "bg-primary/10 text-primary border-primary/30",
+  info: "bg-blue-100 text-blue-600 border-blue-300",
   neutral: "bg-muted text-muted-foreground border-border",
   outline: "bg-transparent text-foreground border-foreground",
-  success: "bg-success/10 text-success border-success/30",
-  warning: "bg-warning/10 text-warning border-warning/30",
+  success: "bg-green-100 text-green-600 border-green-300",
+  warning: "bg-yellow-100 text-yellow-600 border-yellow-300",
 };
 
 interface StatusCellProps<TStatus extends string> {

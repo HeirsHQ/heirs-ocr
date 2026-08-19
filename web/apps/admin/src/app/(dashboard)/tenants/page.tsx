@@ -1,6 +1,7 @@
 "use client";
 
 import { Building2, Loader, Plus } from "lucide-react";
+import { useRouter } from "next/navigation";
 import { useMemo, useState } from "react";
 import { toast } from "sonner";
 import Link from "next/link";
@@ -8,8 +9,9 @@ import Link from "next/link";
 import { createTenantColumns } from "@/config/columns/tenants";
 import { Button, Input, SelectOption } from "@heirs/ui";
 import { usePlans } from "@/hooks/api/use-admin-plans";
-import { getErrorMessage } from "@heirs/api-client";
+import { getErrorMessage, MAX_PAGE_SIZE } from "@heirs/api-client";
 import { Dialog, DialogContent } from "@heirs/ui";
+import { usePagination } from "@heirs/ui";
 import type { AdminTenant } from "@/types/tenant";
 import { ConfirmDialog, DataTable, EmptyState, ErrorState, PageLayout, Skeleton } from "@/components/shared";
 import {
@@ -55,9 +57,9 @@ const OwnersModal = ({ tenantId, onClose }: { tenantId: string; onClose: () => v
         <div className="space-y-5">
           {users.isPending && <p className="text-xs text-muted-foreground">Loading logins…</p>}
           {users.isError && <p className="text-xs text-destructive">{getErrorMessage(users.error)}</p>}
-          {users.data && users.data.users.length > 0 ? (
+          {users.data && users.data.items.length > 0 ? (
             <ul className="divide-y rounded-md border text-sm">
-              {users.data.users.map((u) => (
+              {users.data.items.map((u) => (
                 <li key={u.id} className="flex items-center justify-between gap-3 px-2.5 py-1.5">
                   <span className="truncate">
                     {u.name} <span className="text-muted-foreground">· {u.email}</span>
@@ -107,12 +109,13 @@ const OwnersModal = ({ tenantId, onClose }: { tenantId: string; onClose: () => v
 
 const PlanModal = ({ tenantId, onClose }: { tenantId: string; onClose: () => void }) => {
   const sub = useTenantSubscription(tenantId);
-  const plans = usePlans();
+  // Feeds a plan picker, so it needs the whole catalog rather than a first page.
+  const plans = usePlans({ pageSize: MAX_PAGE_SIZE });
   const assign = useAssignSubscription(tenantId);
   const [planId, setPlanId] = useState("");
 
   const current = sub.data?.subscription;
-  const available = plans.data?.plans ?? [];
+  const available = plans.data?.items ?? [];
 
   const onAssign = () => {
     if (!planId) return;
@@ -182,7 +185,9 @@ const PlanModal = ({ tenantId, onClose }: { tenantId: string; onClose: () => voi
 // ── Page ──────────────────────────────────────────────────────────────────────
 
 const Page = () => {
-  const tenants = useTenants();
+  const router = useRouter();
+  const { params, tableProps } = usePagination();
+  const tenants = useTenants(params);
   const deleteTenant = useDeleteTenant();
   const [active, setActive] = useState<{ kind: ModalKind; row: AdminTenant } | null>(null);
   const [pendingDelete, setPendingDelete] = useState<AdminTenant | null>(null);
@@ -205,8 +210,11 @@ const Page = () => {
         onOwners: (row) => setActive({ kind: "owners", row }),
         onPlan: (row) => setActive({ kind: "plan", row }),
         onDelete: (row) => setPendingDelete(row),
+        onOpen: (row) => router.push(`/tenants/${row.tenant.tenantId}`),
       }),
-    [],
+    // `router` is stable across renders, so this never actually rebuilds the columns
+    // — listing it keeps the dependency honest rather than silencing the rule.
+    [router],
   );
 
   return (
@@ -230,15 +238,15 @@ const Page = () => {
             retrying={tenants.isFetching}
           />
         )}
-        {tenants.data && tenants.data.tenants.length === 0 && (
+        {tenants.data && tenants.data.items.length === 0 && (
           <EmptyState
             icon={Building2}
             title="No tenants yet"
             description="Create a tenant above to issue an API key and assign a plan."
           />
         )}
-        {tenants.data && tenants.data.tenants.length > 0 && (
-          <DataTable columns={columns} data={tenants.data.tenants} total={tenants.data.tenants.length || 0} />
+        {tenants.data && tenants.data.items.length > 0 && (
+          <DataTable columns={columns} data={tenants.data.items} total={tenants.data.total} {...tableProps} />
         )}
       </div>
       {active?.kind === "owners" && (

@@ -4,14 +4,15 @@ import { useRouter, useSearchParams } from "next/navigation";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { useForm } from "react-hook-form";
 import { Loader } from "lucide-react";
-import { Suspense } from "react";
+import { Suspense, useState } from "react";
 import { toast } from "sonner";
 import { z } from "zod";
 
+import { useTenantLogin, useTenantLoginMfa } from "@/hooks/api/use-tenant-auth";
+import { getErrorMessage, isMfaChallenge } from "@heirs/api-client";
+import { MfaChallengeForm } from "@heirs/ui";
 import { Field } from "@heirs/ui";
 import { Button } from "@heirs/ui";
-import { useTenantLogin } from "@/hooks/api/use-tenant-auth";
-import { getErrorMessage } from "@heirs/api-client";
 import { Input } from "@heirs/ui";
 
 const schema = z.object({
@@ -25,6 +26,15 @@ const LoginForm = () => {
   const router = useRouter();
   const searchParams = useSearchParams();
   const login = useTenantLogin();
+  const loginMfa = useTenantLoginMfa();
+
+  /**
+   * Set only when the password was right but the account has a second factor. It
+   * is a handle to a pending login, not a session — the cookie arrives once the
+   * code is redeemed below.
+   */
+  const [challenge, setChallenge] = useState<string>();
+  const [mfaError, setMfaError] = useState<string>();
 
   const {
     register,
@@ -32,12 +42,37 @@ const LoginForm = () => {
     formState: { errors },
   } = useForm<FormValues>({ resolver: zodResolver(schema) });
 
+  const land = () => router.replace(searchParams.get("next") || "/ocr");
+
   const onSubmit = handleSubmit((values) => {
     login.mutate(values, {
-      onSuccess: () => router.replace(searchParams.get("next") || "/ocr"),
+      onSuccess: (result) => (isMfaChallenge(result) ? setChallenge(result.challenge) : land()),
       onError: (error) => toast.error(getErrorMessage(error)),
     });
   });
+
+  if (challenge) {
+    return (
+      <MfaChallengeForm
+        pending={loginMfa.isPending}
+        error={mfaError}
+        onCancel={() => {
+          setChallenge(undefined);
+          setMfaError(undefined);
+        }}
+        onSubmit={(code) => {
+          setMfaError(undefined);
+          loginMfa.mutate(
+            { challenge, code },
+            {
+              onSuccess: land,
+              onError: (error) => setMfaError(getErrorMessage(error)),
+            },
+          );
+        }}
+      />
+    );
+  }
 
   return (
     <div className="space-y-6">

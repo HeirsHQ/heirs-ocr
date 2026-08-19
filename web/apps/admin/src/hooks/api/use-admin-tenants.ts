@@ -1,7 +1,8 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 
 import type { AdminTenant, AdminTenantDetail, SubscriptionView, TenantRecord } from "@/types/tenant";
-import { http, unwrap } from "@heirs/api-client";
+import { http, unwrap, type Paginated, type PaginatedParams } from "@heirs/api-client";
+import { adminInvalidations, adminKeys, invalidate } from "./query-keys";
 import type { TenantUser } from "@/types/user";
 
 /**
@@ -10,23 +11,19 @@ import type { TenantUser } from "@/types/user";
  * first portal login, and assign a subscription plan.
  */
 
-const TENANTS = ["admin", "tenants"];
-const usersKey = (tenantId: string) => ["admin", "tenants", tenantId, "users"];
-const subKey = (tenantId: string) => ["admin", "tenants", tenantId, "subscription"];
-
 // ── Tenants ───────────────────────────────────────────────────────────────────
 
-export function useTenants() {
+export function useTenants(params?: PaginatedParams) {
   return useQuery({
-    queryKey: TENANTS,
-    queryFn: () => http.get<{ tenants: AdminTenant[] }>("/api/admin/tenants").then(unwrap),
+    queryKey: adminKeys.tenantList(params),
+    queryFn: () => http.get<Paginated<AdminTenant>>("/api/admin/tenants", params).then(unwrap),
     retry: false,
   });
 }
 
 export function useTenant(id: string) {
   return useQuery({
-    queryKey: [...TENANTS, id],
+    queryKey: adminKeys.tenant(id),
     queryFn: () => http.get<AdminTenantDetail>(`/api/admin/tenants/${id}`).then(unwrap),
     enabled: !!id,
     retry: false,
@@ -48,7 +45,7 @@ export function useCreateTenant() {
     mutationKey: ["admin", "tenants", "create"],
     mutationFn: (payload: CreateTenantPayload) =>
       http.post<{ tenant: TenantRecord; apiKey: string }>("/api/admin/tenants", payload).then(unwrap),
-    onSuccess: () => qc.invalidateQueries({ queryKey: TENANTS }),
+    onSuccess: () => invalidate(qc, adminInvalidations.tenants),
   });
 }
 
@@ -83,7 +80,7 @@ export function useOnboardTenant() {
       }
       return created;
     },
-    onSuccess: () => qc.invalidateQueries({ queryKey: TENANTS }),
+    onSuccess: () => invalidate(qc, adminInvalidations.onboard),
   });
 }
 
@@ -97,7 +94,7 @@ export function useUpdateTenant() {
     mutationKey: ["admin", "tenants", "update"],
     mutationFn: ({ keyHash, patch }: { keyHash: string; patch: TenantPatch }) =>
       http.patch<{ tenant: TenantRecord }>(`/api/admin/tenants/${keyHash}`, patch).then(unwrap),
-    onSuccess: () => qc.invalidateQueries({ queryKey: TENANTS }),
+    onSuccess: () => invalidate(qc, adminInvalidations.tenants),
   });
 }
 
@@ -107,16 +104,16 @@ export function useDeleteTenant() {
   return useMutation({
     mutationKey: ["admin", "tenants", "delete"],
     mutationFn: (keyHash: string) => http.delete(`/api/admin/tenants/${keyHash}`).then(unwrap),
-    onSuccess: () => qc.invalidateQueries({ queryKey: TENANTS }),
+    onSuccess: () => invalidate(qc, adminInvalidations.tenants),
   });
 }
 
 // ── Portal login users (bootstrap the tenant portal) ──────────────────────────
 
-export function useTenantLoginUsers(tenantId: string) {
+export function useTenantLoginUsers(tenantId: string, params?: PaginatedParams) {
   return useQuery({
-    queryKey: usersKey(tenantId),
-    queryFn: () => http.get<{ users: TenantUser[] }>(`/api/admin/tenants/${tenantId}/users`).then(unwrap),
+    queryKey: [...adminKeys.tenantUsers(tenantId), params],
+    queryFn: () => http.get<Paginated<TenantUser>>(`/api/admin/tenants/${tenantId}/users`, params).then(unwrap),
     enabled: !!tenantId,
     retry: false,
   });
@@ -137,7 +134,7 @@ export function useSeedTenantOwner(tenantId: string) {
       http
         .post<{ user: TenantUser }>(`/api/admin/tenants/${tenantId}/users`, { role: "owner", ...payload })
         .then(unwrap),
-    onSuccess: () => qc.invalidateQueries({ queryKey: usersKey(tenantId) }),
+    onSuccess: () => invalidate(qc, [adminKeys.tenantUsers(tenantId), adminKeys.tenants, adminKeys.audit]),
   });
 }
 
@@ -147,7 +144,7 @@ export function useSeedTenantOwner(tenantId: string) {
 
 export function useTenantSubscription(tenantId: string) {
   return useQuery({
-    queryKey: subKey(tenantId),
+    queryKey: adminKeys.tenantSubscription(tenantId),
     queryFn: () =>
       http.get<{ subscription: SubscriptionView | null }>(`/api/admin/tenants/${tenantId}/subscription`).then(unwrap),
     enabled: !!tenantId,
@@ -163,6 +160,6 @@ export function useAssignSubscription(tenantId: string) {
       http
         .put<{ subscription: SubscriptionView }>(`/api/admin/tenants/${tenantId}/subscription`, { planId })
         .then(unwrap),
-    onSuccess: () => qc.invalidateQueries({ queryKey: subKey(tenantId) }),
+    onSuccess: () => invalidate(qc, [adminKeys.tenantSubscription(tenantId), ...adminInvalidations.subscription]),
   });
 }
