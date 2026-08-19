@@ -14,10 +14,18 @@ export interface HealthStatus {
   version: string;
 }
 
+/** One job's state, mirroring `JobStatus` in src/jobs/queue.ts. */
+export type JobStatus = "queued" | "active" | "completed" | "failed";
+
 /** `GET /api/admin/queue`. */
 export interface QueueStats {
   counts: { waiting: number; active: number; completed: number; failed: number; delayed: number };
-  recent: Array<{ jobId: string; status: "active" | "failed"; function: string; tenantId: string }>;
+  /**
+   * Newest first, across every state the counts above cover — not just the ones in
+   * flight. Narrowing this to `active | failed` was how the table came to be empty
+   * while the Completed tile read 1.
+   */
+  recent: Array<{ jobId: string; status: JobStatus; function: string; tenantId: string }>;
 }
 
 export interface FunctionMetric {
