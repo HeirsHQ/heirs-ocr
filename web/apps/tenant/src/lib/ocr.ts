@@ -8,6 +8,22 @@ import type { NextRequest } from "next/server";
 /** Base URL of the OCR API. Defaults to the local dev server. */
 export const ocrApiUrl = (): string => process.env.OCR_API_URL ?? "http://localhost:8080";
 
+/**
+ * The host to print in public documentation — what a customer types into their own
+ * client, which is not necessarily what this app dials.
+ *
+ * Deliberately a separate variable rather than a fallback to {@link ocrApiUrl}:
+ * that one is the server-to-server address and in a deployed environment is
+ * typically an internal name (or `http://localhost:8080` in dev). Falling back to
+ * it would publish an internal hostname on the marketing site the first time
+ * someone forgot to set this. Unset means the docs keep the neutral placeholder,
+ * which is wrong but harmless.
+ *
+ * Server-only, like the rest of this module — the docs pages that read it are
+ * server components, and the value is baked in when they prerender.
+ */
+export const publicApiUrl = (): string => process.env.OCR_PUBLIC_API_URL ?? "https://api.heirs-ocr.example";
+
 /** The tenant-portal session cookie (mirrors the backend's `tenant_session`). */
 export const TENANT_SESSION_COOKIE = "tenant_session";
 
