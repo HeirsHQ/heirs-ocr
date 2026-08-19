@@ -2,9 +2,9 @@
 
 import { format } from "date-fns";
 
+import { Button, capitalizeWords } from "@heirs/ui";
 import { StatusCell } from "@/config/columns/core";
 import { LogEntry } from "@/types/admin-console";
-import { Button, capitalizeWords } from "@heirs/ui";
 import {
   Dialog,
   DialogContent,
@@ -25,7 +25,7 @@ interface Props {
 export const ViewLog = ({ log, onOpenChange, open }: Props) => {
   return (
     <Dialog onOpenChange={onOpenChange} open={open}>
-      <DialogContent>
+      <DialogContent className="sm:max-w-175">
         <DialogHeader>
           <DialogTitle>View Log Entry</DialogTitle>
           <DialogDescription></DialogDescription>
@@ -43,7 +43,11 @@ export const ViewLog = ({ log, onOpenChange, open }: Props) => {
             <TextLabel label="Message" value={log.msg} />
             {log.fields &&
               Object.entries(log.fields).map(([key, value]) => (
-                <TextLabel key={key} label={capitalizeWords(fromCamelCase(key))} value={value as string} />
+                <TextLabel
+                  key={key}
+                  label={capitalizeWords(fromCamelCase(key))}
+                  value={JSON.stringify(value, null, 2)}
+                />
               ))}
           </div>
         </DialogHeader>

@@ -15,6 +15,7 @@ import type {
   ColumnDef,
   ColumnFiltersState,
   ColumnOrderState,
+  Row,
   RowData,
   RowSelectionState,
   SortingState,
@@ -22,12 +23,13 @@ import type {
 } from "@tanstack/react-table";
 
 import type { LucideIcon } from "lucide-react";
-import type { ReactNode } from "react";
+import type { KeyboardEvent, MouseEvent, ReactNode } from "react";
 import { SearchX } from "lucide-react";
 
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "../ui/table";
 import { EmptyState } from "./empty-state";
 import { Pagination } from "./pagination";
+import { cn } from "../../lib/utils";
 
 /**
  * The feature set this table registers (v9 requires explicit registration). Exported
@@ -43,7 +45,35 @@ export const dataTableFeatures = tableFeatures({
   sortedRowModel: createSortedRowModel(),
 });
 
+/**
+ * Whether a click or keypress came from something that handles its own activation.
+ *
+ * Rows carrying an action menu, a selection checkbox or a link would otherwise fire
+ * the row handler *as well* — so opening the row menu would also navigate away, and
+ * "Delete" would delete and then leave the page. Walking up to the row catches the
+ * case where the event target is an icon or span nested inside the real control.
+ */
+const isInteractiveTarget = (target: EventTarget | null): boolean =>
+  target instanceof Element &&
+  !!target.closest('button, a, input, select, textarea, label, [role="menuitem"], [role="checkbox"]');
+
 export type DataTableFeatures = typeof dataTableFeatures;
+
+/**
+ * A column set that also carries its row-click handler.
+ *
+ * Row rendering lives here, in {@link DataTable} — a column definition cannot attach
+ * a handler to the `<tr>` it is rendered inside. But the natural place to *declare*
+ * row behaviour is the column factory, next to the row's action menu and its
+ * selection checkbox, so `createColumns` returns the array with the handler attached
+ * and {@link DataTable} picks it up. Passing `onRowClick` directly to `DataTable`
+ * still wins, for the one-off case.
+ *
+ * A plain `ColumnDef[]` remains valid — the property is optional.
+ */
+export type ColumnsWithRowClick<TData extends RowData> = ColumnDef<DataTableFeatures, TData, unknown>[] & {
+  onRowClick?: (row: Row<DataTableFeatures, TData>) => void;
+};
 
 type Features = DataTableFeatures;
 
@@ -61,6 +91,18 @@ interface Props<TData extends RowData> {
   pageSize?: number;
   rowSelection?: RowSelectionState;
   showPageSizeChange?: boolean;
+  /**
+   * Makes rows clickable — typically to open the record's detail page.
+   *
+   * Clicks originating from something interactive inside the row (the action menu, a
+   * checkbox, a link, a button) are **ignored**: without that, hitting "Delete" in the
+   * row menu would also navigate, which is the classic way this feature goes wrong.
+   *
+   * When provided, rows also become keyboard-operable — focusable, and activated by
+   * Enter or Space — because a click handler on a `<tr>` is otherwise unreachable
+   * without a mouse.
+   */
+  onRowClick?: (row: Row<Features, TData>) => void;
   /**
    * What to show when the body has no rows. The default speaks to the *filtered*
    * case ("nothing matches"), which is what a table normally hits: pages branch on
@@ -86,8 +128,13 @@ export const DataTable = <TData extends RowData>({
   showPageSizeChange = true,
   onRowSelectionChange,
   rowSelection: externalRowSelection,
+  onRowClick,
   empty,
 }: Props<TData>) => {
+  // An explicit prop beats whatever `createColumns` attached, so a page can override
+  // the factory's default for one table without rebuilding its columns.
+  const handleRowClick = onRowClick ?? (columns as Partial<ColumnsWithRowClick<TData>>).onRowClick;
+
   const [columnFilters, setColumnFilters] = useState<ColumnFiltersState>([]);
   const [columnOrder, setColumnOrder] = useState<ColumnOrderState>([]);
   const [sorting, setSorting] = useState<SortingState>([]);
@@ -119,7 +166,10 @@ export const DataTable = <TData extends RowData>({
           {table.getHeaderGroups().map((headerGroup) => (
             <TableRow className="h-11" key={headerGroup.id}>
               {headerGroup.headers.map((header) => (
-                <TableHead key={header.id} className="text-primary text-sm font-medium first:rounded-tl-lg last:rounded-tr-lg">
+                <TableHead
+                  key={header.id}
+                  className="text-primary text-sm font-medium first:rounded-tl-lg last:rounded-tr-lg"
+                >
                   {header.isPlaceholder ? null : <table.FlexRender header={header} />}
                 </TableHead>
               ))}
@@ -134,7 +184,25 @@ export const DataTable = <TData extends RowData>({
                 data-state={row.getIsSelected() && "selected"}
                 // `text-secondary-200` is not a token; selected rows fell back to default
                 // text on a 25% primary wash. A lighter wash keeps contrast intact.
-                className="data-[state=selected]:bg-primary/10 h-14"
+                className={cn("data-[state=selected]:bg-primary/10 h-14", handleRowClick && "cursor-pointer")}
+                // Only announced as a control when it actually is one — a plain table
+                // row must not claim to be a button to a screen reader.
+                {...(handleRowClick
+                  ? {
+                      role: "button",
+                      tabIndex: 0,
+                      onClick: (event: MouseEvent<HTMLTableRowElement>) => {
+                        if (!isInteractiveTarget(event.target)) handleRowClick(row);
+                      },
+                      onKeyDown: (event: KeyboardEvent<HTMLTableRowElement>) => {
+                        if (event.key !== "Enter" && event.key !== " ") return;
+                        if (isInteractiveTarget(event.target)) return;
+                        // Space would otherwise scroll the page out from under them.
+                        event.preventDefault();
+                        handleRowClick(row);
+                      },
+                    }
+                  : {})}
               >
                 {row.getAllCells().map((cell) => (
                   <TableCell key={cell.id} className="whitespace-nowrap">

@@ -8,10 +8,10 @@ import { toast } from "sonner";
 import { useOnboardTenant, type OnboardTenantPayload } from "@/hooks/api/use-admin-tenants";
 import { PageLayout, SecretCallout, ToggleList } from "@/components/shared";
 import { useOcrFunctionKeys, usePlans } from "@/hooks/api/use-admin-plans";
+import { getErrorMessage, MAX_PAGE_SIZE } from "@heirs/api-client";
+import { Field, SelectOption } from "@heirs/ui";
 import { Textarea } from "@heirs/ui";
 import { Button } from "@heirs/ui";
-import { getErrorMessage } from "@heirs/api-client";
-import { Field, SelectOption } from "@heirs/ui";
 import { Input } from "@heirs/ui";
 
 /**
@@ -19,6 +19,13 @@ import { Input } from "@heirs/ui";
  * the absence of a plan needs an explicit option value that maps back to `""`.
  */
 const NO_PLAN = "__none__";
+
+const toSlug = (name: string) =>
+  name
+    .toLowerCase()
+    .trim()
+    .replace(/[^a-z0-9._-]+/g, "-")
+    .replace(/^-+|-+$/g, "");
 
 interface FormState {
   tenantId: string;
@@ -93,7 +100,8 @@ const Page = () => {
   const router = useRouter();
   const onboard = useOnboardTenant();
   const functions = useOcrFunctionKeys();
-  const plans = usePlans();
+  // Feeds a plan picker, so it needs the whole catalog rather than a first page.
+  const plans = usePlans({ pageSize: MAX_PAGE_SIZE });
 
   const [s, setS] = useState<FormState>(empty);
   const [error, setError] = useState<string | null>(null);
@@ -158,16 +166,18 @@ const Page = () => {
           <ArrowLeft className="size-4" />
           Back
         </Button>
-
-        {/* Tenant details */}
         <section className="space-y-3 rounded-md border p-3">
           <p className="text-sm font-medium">Tenant details</p>
           <div className="grid gap-3 sm:grid-cols-3">
-            <Field label="Tenant ID" hint="Lowercase slug, e.g. acme">
-              <Input value={s.tenantId} placeholder="acme" onChange={(e) => set("tenantId", e.target.value)} />
+            <Field label="Name" hint="Name displayed for this tenant">
+              <Input
+                value={s.name}
+                placeholder="Acme Inc."
+                onChange={(e) => setS((p) => ({ ...p, name: e.target.value, tenantId: toSlug(e.target.value) }))}
+              />
             </Field>
-            <Field label="Display name" hint="Optional">
-              <Input value={s.name} placeholder="Acme Inc." onChange={(e) => set("name", e.target.value)} />
+            <Field label="Tenant ID" hint="Auto-derived from name">
+              <Input value={s.tenantId} placeholder="acme-inc" readOnly />
             </Field>
             <Field label="Rate limit /min" hint="Optional; blank = default">
               <Input
@@ -203,8 +213,6 @@ const Page = () => {
             />
           </Field>
         </section>
-
-        {/* Portal owner */}
         <section className="space-y-3 rounded-md border p-3">
           <div>
             <p className="text-sm font-medium">Portal owner</p>
@@ -239,8 +247,6 @@ const Page = () => {
             </Field>
           </div>
         </section>
-
-        {/* Subscription */}
         <section className="space-y-3 rounded-md border p-3">
           <div>
             <p className="text-sm font-medium">Subscription</p>
@@ -250,7 +256,7 @@ const Page = () => {
           </div>
           {plans.isError ? (
             <p className="text-xs text-destructive">{getErrorMessage(plans.error)}</p>
-          ) : (plans.data?.plans.length ?? 0) === 0 ? (
+          ) : (plans.data?.items.length ?? 0) === 0 ? (
             <p className="text-xs text-muted-foreground">
               No plans in the catalog yet — create one under Subscription Plans.
             </p>
@@ -263,13 +269,13 @@ const Page = () => {
                 onValueChange={(v) => set("planId", v === NO_PLAN ? "" : v)}
                 options={[
                   { label: "No subscription (unlimited defaults)", value: NO_PLAN },
-                  ...(plans.data?.plans ?? []).map((p) => ({
+                  ...(plans.data?.items ?? []).map((p) => ({
                     label: p.hidden ? `${p.name} (${p.tier}) · admin-only` : `${p.name} (${p.tier})`,
                     value: p.id,
                   })),
                 ]}
               />
-              {s.planId && (plans.data?.plans ?? []).find((p) => p.id === s.planId)?.hidden && (
+              {s.planId && (plans.data?.items ?? []).find((p) => p.id === s.planId)?.hidden && (
                 <p className="text-xs text-muted-foreground">
                   Enterprise plan — custom pricing, not visible to tenants in self-serve.
                 </p>
@@ -277,7 +283,6 @@ const Page = () => {
             </Field>
           )}
         </section>
-
         {error && (
           <div className="rounded-md border border-destructive/40 bg-destructive/10 px-3 py-2 text-sm text-destructive">
             {error}

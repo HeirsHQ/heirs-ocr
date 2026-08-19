@@ -8,13 +8,14 @@ import { EmptyState, ErrorState, PageLayout, Skeleton } from "@/components/share
 import { Button } from "@heirs/ui";
 import { PlanForm } from "@/components/admin/plan-form";
 import { usePlans } from "@/hooks/api/use-admin-plans";
-import { getErrorMessage } from "@heirs/api-client";
+import { getErrorMessage, MAX_PAGE_SIZE } from "@heirs/api-client";
 
 const Page = ({ params }: { params: Promise<{ id: string }> }) => {
   const { id } = use(params);
   const router = useRouter();
-  const plans = usePlans();
-  const plan = plans.data?.plans.find((p) => p.id === id);
+  // Looking one plan up by id across the catalog — a first page could miss it.
+  const plans = usePlans({ pageSize: MAX_PAGE_SIZE });
+  const plan = plans.data?.items.find((p) => p.id === id);
 
   return (
     <PageLayout title="Edit plan" subtitle={`Editing “${id}”.`}>

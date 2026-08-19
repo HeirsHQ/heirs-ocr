@@ -1,11 +1,56 @@
 import { Router, type Request, type RequestHandler, type Response } from "express";
 import { z } from "zod";
 
-import { resolveSubscription, SubscriptionStoreUnavailableError } from "../../billing/subscriptions";
+import {
+  resolveSubscription,
+  SubscriptionStoreUnavailableError,
+  toEffectiveSubscription,
+} from "../../billing/subscriptions";
 import { clearLoginFailures, loginAllowed, recordLoginFailure } from "../../auth/login-throttle";
-import { SESSION_COOKIE, createSession, destroySession } from "../../auth/tenant-session";
+import {
+  SESSION_COOKIE,
+  createSession,
+  destroySession,
+  listSessions,
+  revokeOtherSessions,
+} from "../../auth/tenant-session";
+import { consumeChallenge, createChallenge, peekChallenge } from "../../auth/mfa-challenge";
+import { recordAuditEvent } from "../../observability/audit";
+import { personLabel } from "../../observability/audit-labels";
+import {
+  beginEnrolment,
+  confirmEnrolment,
+  disableMfa,
+  getMfaStatus,
+  isMfaEnabled,
+  MfaAlreadyEnabledError,
+  regenerateRecoveryCodes,
+  verifyMfa,
+} from "../../auth/mfa";
 import { requireTenantRole, tenantAuth } from "../middleware/tenant-auth";
 import { getTenantUsage } from "../../observability/usage";
+import { getDocumentById, getDocumentReport, listDocumentsPage } from "../../observability/documents";
+import {
+  createEndpoint,
+  deleteEndpoint,
+  enqueueDelivery,
+  getEndpoint,
+  listDeliveriesPage,
+  listEndpoints,
+  rotateSecret,
+  updateEndpoint,
+} from "../../webhooks/store";
+import { WEBHOOK_EVENTS } from "../../webhooks/events";
+import { listRequestLogsPage } from "../../observability/request-log";
+import { assertPasswordPolicy } from "../../auth/password-policy";
+import { buildTenantExport, getTenantExportSummary } from "../../ops/tenant-export";
+import { randomUUID } from "crypto";
+import { presignDownload } from "../../storage/blob";
+import { env } from "../../config/env";
+import { pageParams, paginate, paginatedFrom } from "../pagination";
+import { getSettings } from "../../config/settings-store";
+import { getTenantSettings, putTenantSettings } from "../../config/tenant-settings";
+import { isIpAllowed } from "../../auth/ip-allowlist";
 import { parseCookies } from "../middleware/admin-auth";
 import { logger } from "../../observability/logger";
 import type { TenantUser } from "../../types/user";
@@ -81,6 +126,18 @@ const setSessionCookie = (req: Request, res: Response, token: string, ttlSeconds
 
 // ── Auth ────────────────────────────────────────────────────────────────────
 
+/**
+ * Provenance recorded against a new session, so the security page can show a person
+ * *which* sign-ins are live rather than an anonymous count. Both fields are
+ * self-reported by the client — useful for recognising your own devices, not
+ * evidence of anything.
+ */
+const sessionContext = (req: Request): { ip?: string; userAgent?: string } => ({
+  ip: req.ip,
+  // Bounded: a user-agent is attacker-controlled and lands in a Redis value.
+  userAgent: req.get("user-agent")?.slice(0, 200),
+});
+
 const loginSchema = z.object({ email: z.string().min(1), password: z.string().min(1) });
 
 tenantApiRouter.post(
@@ -105,6 +162,19 @@ tenantApiRouter.post(
     let user, session;
     try {
       user = await getTenantUserByEmail(email);
+
+      // IP restriction is checked *before* the password, so a denial cannot double as
+      // an oracle for whether the password was right. An unknown email has no org and
+      // therefore no allowlist to apply — it falls through to the same 401 as always.
+      if (user) {
+        const settings = await getTenantSettings(user.tenantId);
+        if (settings.ipAllowlistEnabled && !isIpAllowed(ip, settings.ipAllowlist)) {
+          logger.warn("tenant.login.ip_denied", { email, ip, tenantId: user.tenantId });
+          sendError(res, 403, "FORBIDDEN", "Sign-in is not permitted from this network");
+          return;
+        }
+      }
+
       // Same response whether the email is unknown or the password is wrong.
       if (!user || !(await verifyPassword(user, parsed.data.password))) {
         await recordLoginFailure("tenant", ip, email);
@@ -112,7 +182,16 @@ tenantApiRouter.post(
         sendError(res, 401, "UNAUTHORIZED", "Invalid email or password");
         return;
       }
-      session = await createSession(user.id, user.tenantId, user.role);
+      // Enrolled accounts stop here with a challenge instead of a session — the
+      // cookie is only minted once the second factor lands (src/auth/mfa-challenge.ts).
+      if (await isMfaEnabled("tenant_users", user.id)) {
+        const challenge = await createChallenge("tenant", { userId: user.id, email: user.email });
+        await clearLoginFailures("tenant", ip, email);
+        logger.info("tenant.login.mfa_required", { userId: user.id, tenantId: user.tenantId, email: user.email, ip });
+        res.json({ mfaRequired: true, challenge });
+        return;
+      }
+      session = await createSession(user.id, user.tenantId, user.role, sessionContext(req));
     } catch (err) {
       logger.error("tenant login: store unavailable", { err: err instanceof Error ? err.message : String(err) });
       sendError(res, 503, "PROVIDER_UNAVAILABLE", "Authentication store unavailable");
@@ -123,6 +202,381 @@ tenantApiRouter.post(
     setSessionCookie(req, res, session.token, session.ttl);
     logger.info("tenant.login", { userId: user.id, tenantId: user.tenantId, email: user.email, ip });
     res.json({ user: publicUser(user), tenantId: user.tenantId, role: user.role });
+  }),
+);
+
+// ── Second factor ─────────────────────────────────────────────────────────────
+// The tenant-side twin of the admin console's MFA routes (src/http/admin/routes.ts).
+
+const mfaLoginSchema = z.object({ challenge: z.string().min(1), code: z.string().min(1) });
+
+tenantApiRouter.post(
+  "/api/login/mfa",
+  handler(async (req, res) => {
+    const parsed = mfaLoginSchema.safeParse(req.body);
+    if (!parsed.success) {
+      sendError(res, 400, "INVALID_ARGS", "challenge and code are required");
+      return;
+    }
+
+    const ip = req.ip ?? "unknown";
+    const pending = await peekChallenge("tenant", parsed.data.challenge);
+    if (!pending) {
+      // Expired, already spent, or forged — indistinguishable to the caller.
+      sendError(res, 401, "UNAUTHORIZED", "Login session expired. Sign in again.");
+      return;
+    }
+
+    // A six-digit code is guessable in a way the password is not, so failures count
+    // against the same throttle buckets.
+    if (!(await loginAllowed("tenant", ip, pending.email))) {
+      logger.warn("tenant.login.mfa.throttled", { email: pending.email, ip });
+      sendError(res, 429, "RATE_LIMITED", "Too many failed attempts. Try again later.");
+      return;
+    }
+
+    let session, user;
+    try {
+      const factor = await verifyMfa("tenant_users", pending.userId, parsed.data.code);
+      if (!factor) {
+        await recordLoginFailure("tenant", ip, pending.email);
+        logger.warn("tenant.login.mfa.failed", { userId: pending.userId, email: pending.email, ip });
+        sendError(res, 401, "UNAUTHORIZED", "Invalid verification code");
+        return;
+      }
+
+      user = await getTenantUserById(pending.userId);
+      // Disabled or deleted between the two steps — the challenge must not outlive it.
+      if (!user || user.disabled) {
+        await consumeChallenge("tenant", parsed.data.challenge);
+        sendError(res, 401, "UNAUTHORIZED", "Invalid email or password");
+        return;
+      }
+
+      await consumeChallenge("tenant", parsed.data.challenge);
+      session = await createSession(user.id, user.tenantId, user.role, sessionContext(req));
+      logger.info("tenant.login", { userId: user.id, tenantId: user.tenantId, email: user.email, ip, factor });
+    } catch (err) {
+      logger.error("tenant mfa: store unavailable", { err: err instanceof Error ? err.message : String(err) });
+      sendError(res, 503, "PROVIDER_UNAVAILABLE", "Authentication store unavailable");
+      return;
+    }
+
+    await clearLoginFailures("tenant", ip, pending.email);
+    setSessionCookie(req, res, session.token, session.ttl);
+    res.json({ user: publicUser(user), tenantId: user.tenantId, role: user.role });
+  }),
+);
+
+// ── Password ──────────────────────────────────────────────────────────────────
+
+const changePasswordSchema = z.object({
+  current: z.string().min(1),
+  next: z.string().min(1),
+});
+
+/**
+ * Self-service password change.
+ *
+ * Three things beyond writing the new hash:
+ *
+ *  - **The current password is required.** A session alone must not be enough to
+ *    change it, or a hijacked session becomes a permanent takeover by locking the
+ *    real owner out.
+ *  - **Failures count against the login throttle.** This endpoint verifies a
+ *    credential, so without that it is a rate-limit-free oracle for guessing the
+ *    current password from inside a stolen session.
+ *  - **Every other session is revoked.** Someone changing their password usually
+ *    believes they are compromised; leaving the attacker's session alive would defeat
+ *    the entire point of the change.
+ */
+tenantApiRouter.post(
+  "/api/security/password",
+  tenantAuth,
+  handler(async (req, res) => {
+    const parsed = changePasswordSchema.safeParse(req.body);
+    if (!parsed.success) {
+      sendError(res, 400, "INVALID_ARGS", "current and next are required");
+      return;
+    }
+
+    const ip = req.ip ?? "unknown";
+    const user = await getTenantUserById(req.tenantUser!.userId);
+    if (!user) {
+      sendError(res, 401, "UNAUTHORIZED", "Account no longer exists");
+      return;
+    }
+
+    if (!(await loginAllowed("tenant", ip, user.email))) {
+      sendError(res, 429, "RATE_LIMITED", "Too many failed attempts. Try again later.");
+      return;
+    }
+
+    if (!(await verifyPassword(user, parsed.data.current))) {
+      await recordLoginFailure("tenant", ip, user.email);
+      logger.warn("tenant.password.change_failed", { userId: user.id, tenantId: user.tenantId, ip });
+      sendError(res, 401, "UNAUTHORIZED", "Current password is incorrect");
+      return;
+    }
+
+    if (parsed.data.next === parsed.data.current) {
+      sendError(res, 400, "INVALID_ARGS", "New password must be different from the current one");
+      return;
+    }
+
+    try {
+      await assertPasswordPolicy(parsed.data.next);
+    } catch (err) {
+      sendError(res, 400, "INVALID_ARGS", err instanceof Error ? err.message : "Password does not meet policy");
+      return;
+    }
+
+    await updateTenantUser(user.tenantId, user.id, { password: parsed.data.next }, user.id);
+    await clearLoginFailures("tenant", ip, user.email);
+
+    // Keep the caller signed in; drop everyone else claiming to be them.
+    const token = parseCookies(req.headers.cookie)[SESSION_COOKIE];
+    const revoked = await revokeOtherSessions(user.id, token);
+
+    await recordAuditEvent({
+      action: "tenant.password.changed",
+      actor: user.id,
+      actorLabel: personLabel(user),
+      target: user.tenantId,
+      targetLabel: user.tenantId,
+      metadata: { sessionsRevoked: revoked },
+    });
+    res.json({ ok: true, sessionsRevoked: revoked });
+  }),
+);
+
+// ── Active sessions ───────────────────────────────────────────────────────────
+
+/** Live sessions for the signed-in tenant user. Tokens are never returned. */
+tenantApiRouter.get(
+  "/api/security/sessions",
+  tenantAuth,
+  handler(async (req, res) => {
+    const token = parseCookies(req.headers.cookie)[SESSION_COOKIE];
+    res.json({ sessions: await listSessions(req.tenantUser!.userId, token) });
+  }),
+);
+
+/**
+ * Signs the account out everywhere else, keeping the session making the request.
+ *
+ * Deliberately "all others" rather than per-session revocation: someone reaching for
+ * this has lost a device or suspects a compromise, and picking the right row off a
+ * list of IP addresses is exactly the judgement they cannot reliably make.
+ */
+tenantApiRouter.delete(
+  "/api/security/sessions",
+  tenantAuth,
+  handler(async (req, res) => {
+    const token = parseCookies(req.headers.cookie)[SESSION_COOKIE];
+    const revoked = await revokeOtherSessions(req.tenantUser!.userId, token);
+    await recordAuditEvent({
+      action: "tenant.sessions.revoked",
+      actor: req.tenantUser!.userId,
+      actorLabel: req.tenantUser!.label,
+      target: req.tenantUser!.tenantId,
+      metadata: { revoked },
+    });
+    res.json({ revoked });
+  }),
+);
+
+// ── IP allowlist (owner only) ─────────────────────────────────────────────────
+// Restricts where a portal session may be *established*. Owner-only because it can
+// lock the whole org out of the portal.
+
+tenantApiRouter.get(
+  "/api/security/ip-allowlist",
+  tenantAuth,
+  requireTenantRole("owner"),
+  handler(async (req, res) => {
+    res.json(await getTenantSettings(req.tenantUser!.tenantId));
+  }),
+);
+
+const ipAllowlistSchema = z.object({
+  ipAllowlistEnabled: z.boolean(),
+  ipAllowlist: z.array(z.string().min(1)),
+});
+
+tenantApiRouter.put(
+  "/api/security/ip-allowlist",
+  tenantAuth,
+  requireTenantRole("owner"),
+  handler(async (req, res) => {
+    const parsed = ipAllowlistSchema.safeParse(req.body);
+    if (!parsed.success) {
+      sendError(res, 400, "INVALID_ARGS", "ipAllowlistEnabled and ipAllowlist are required");
+      return;
+    }
+
+    const tenantId = req.tenantUser!.tenantId;
+    const entries = parsed.data.ipAllowlist.map((e) => e.trim()).filter(Boolean);
+
+    // Refuse a rule set that would lock the caller out of their own portal. The
+    // entries are already validated for syntax by the schema; this catches the
+    // subtler mistake of a *valid* range that simply does not include you.
+    if (parsed.data.ipAllowlistEnabled && entries.length > 0 && !isIpAllowed(req.ip, entries)) {
+      sendError(
+        res,
+        400,
+        "INVALID_ARGS",
+        `This list would block your own address (${req.ip ?? "unknown"}). Add it before enabling.`,
+      );
+      return;
+    }
+
+    try {
+      const settings = await putTenantSettings(tenantId, {
+        ipAllowlistEnabled: parsed.data.ipAllowlistEnabled,
+        ipAllowlist: entries,
+      });
+      await recordAuditEvent({
+        action: "tenant.ip_allowlist.updated",
+        actor: req.tenantUser!.userId,
+        actorLabel: req.tenantUser!.label,
+        target: tenantId,
+        targetLabel: tenantId,
+        metadata: { enabled: settings.ipAllowlistEnabled, entries: settings.ipAllowlist.length },
+      });
+      res.json(settings);
+    } catch (err) {
+      // A schema rejection here is a malformed CIDR the client should fix, not a 500.
+      sendError(res, 400, "INVALID_ARGS", err instanceof Error ? err.message : "Invalid allowlist");
+    }
+  }),
+);
+
+tenantApiRouter.get(
+  "/api/security/mfa",
+  tenantAuth,
+  handler(async (req, res) => {
+    const status = await getMfaStatus("tenant_users", req.tenantUser!.userId);
+    if (!status) {
+      sendError(res, 401, "UNAUTHORIZED", "Account no longer exists");
+      return;
+    }
+    res.json(status);
+  }),
+);
+
+tenantApiRouter.post(
+  "/api/security/mfa",
+  tenantAuth,
+  handler(async (req, res) => {
+    const user = await getTenantUserById(req.tenantUser!.userId);
+    if (!user) {
+      sendError(res, 401, "UNAUTHORIZED", "Account no longer exists");
+      return;
+    }
+    try {
+      res.json(await beginEnrolment("tenant_users", user.id, user.email));
+    } catch (err) {
+      if (err instanceof MfaAlreadyEnabledError) {
+        sendError(res, 409, "CONFLICT", err.message);
+        return;
+      }
+      throw err;
+    }
+  }),
+);
+
+const mfaCodeSchema = z.object({ code: z.string().min(1) });
+
+tenantApiRouter.post(
+  "/api/security/mfa/verify",
+  tenantAuth,
+  handler(async (req, res) => {
+    const parsed = mfaCodeSchema.safeParse(req.body);
+    if (!parsed.success) {
+      sendError(res, 400, "INVALID_ARGS", "code is required");
+      return;
+    }
+
+    const result = await confirmEnrolment("tenant_users", req.tenantUser!.userId, parsed.data.code);
+    if (!result.ok) {
+      sendError(res, 400, "INVALID_ARGS", "Invalid verification code");
+      return;
+    }
+
+    await recordAuditEvent({
+      action: "tenant.mfa.enabled",
+      actor: req.tenantUser!.userId,
+      actorLabel: req.tenantUser!.label,
+      target: req.tenantUser!.tenantId,
+      targetLabel: req.tenantUser!.tenantId,
+    });
+    // The plaintext codes exist only in this response — only their hashes are stored.
+    res.json({ enabled: true, recoveryCodes: result.recoveryCodes });
+  }),
+);
+
+/** Password re-check: a hijacked session must not be able to strip the account back
+ *  to a single factor. Same reasoning as the console's disable route. */
+const mfaPasswordSchema = z.object({ password: z.string().min(1) });
+
+tenantApiRouter.delete(
+  "/api/security/mfa",
+  tenantAuth,
+  handler(async (req, res) => {
+    const parsed = mfaPasswordSchema.safeParse(req.body);
+    if (!parsed.success) {
+      sendError(res, 400, "INVALID_ARGS", "password is required");
+      return;
+    }
+
+    const user = await getTenantUserById(req.tenantUser!.userId);
+    if (!user || !(await verifyPassword(user, parsed.data.password))) {
+      sendError(res, 401, "UNAUTHORIZED", "Invalid password");
+      return;
+    }
+
+    await disableMfa("tenant_users", user.id);
+    await recordAuditEvent({
+      action: "tenant.mfa.disabled",
+      actor: user.id,
+      actorLabel: personLabel(user),
+      target: user.tenantId,
+      targetLabel: user.tenantId,
+    });
+    res.json({ enabled: false });
+  }),
+);
+
+tenantApiRouter.post(
+  "/api/security/mfa/recovery-codes",
+  tenantAuth,
+  handler(async (req, res) => {
+    const parsed = mfaPasswordSchema.safeParse(req.body);
+    if (!parsed.success) {
+      sendError(res, 400, "INVALID_ARGS", "password is required");
+      return;
+    }
+
+    const user = await getTenantUserById(req.tenantUser!.userId);
+    if (!user || !(await verifyPassword(user, parsed.data.password))) {
+      sendError(res, 401, "UNAUTHORIZED", "Invalid password");
+      return;
+    }
+
+    const recoveryCodes = await regenerateRecoveryCodes("tenant_users", user.id);
+    if (!recoveryCodes) {
+      sendError(res, 409, "CONFLICT", "Two-factor authentication is not enabled");
+      return;
+    }
+    await recordAuditEvent({
+      action: "tenant.mfa.recovery_codes_regenerated",
+      actor: user.id,
+      actorLabel: personLabel(user),
+      target: user.tenantId,
+      targetLabel: user.tenantId,
+    });
+    res.json({ recoveryCodes });
   }),
 );
 
@@ -156,8 +610,11 @@ tenantApiRouter.get(
   handler(async (req, res) => {
     const tenantId = req.tenantUser!.tenantId;
     try {
-      const [subscription, usage] = await Promise.all([resolveSubscription(tenantId), getTenantUsage(tenantId)]);
-      res.json({ subscription: subscription ?? null, usage });
+      const [stored, usage] = await Promise.all([resolveSubscription(tenantId), getTenantUsage(tenantId)]);
+      // The derived status, so the portal's plan badge agrees with what the API will
+      // actually allow — a lapsed trial reads "expired" here, not "trialing".
+      const subscription = stored ? toEffectiveSubscription(stored) : null;
+      res.json({ subscription, usage });
     } catch (err) {
       if (err instanceof SubscriptionStoreUnavailableError) {
         sendError(res, 503, "PROVIDER_UNAVAILABLE", "Billing store unavailable");
@@ -168,12 +625,345 @@ tenantApiRouter.get(
   }),
 );
 
+// ── Data export (owner only) ──────────────────────────────────────────────────
+// The org's own documents, keys and team, packaged for download. Owner-only: it is a
+// bulk read of everything the org holds here.
+
+tenantApiRouter.get(
+  "/api/backup",
+  tenantAuth,
+  requireTenantRole("owner"),
+  handler(async (req, res) => {
+    res.json(await getTenantExportSummary(req.tenantUser!.tenantId));
+  }),
+);
+
+/**
+ * Builds the export itself.
+ *
+ * Audited, because it is the single request that reads out everything the org has —
+ * exactly the shape of a data exfiltration, and an owner should be able to see when
+ * one happened and who asked for it.
+ */
+tenantApiRouter.get(
+  "/api/backup/export",
+  tenantAuth,
+  requireTenantRole("owner"),
+  handler(async (req, res) => {
+    const tenantId = req.tenantUser!.tenantId;
+    const payload = await buildTenantExport(tenantId);
+
+    await recordAuditEvent({
+      action: "tenant.export.downloaded",
+      actor: req.tenantUser!.userId,
+      actorLabel: req.tenantUser!.label,
+      target: tenantId,
+      targetLabel: tenantId,
+      metadata: { ...payload.counts, truncated: payload.truncated },
+    });
+    res.json(payload);
+  }),
+);
+
+// ── Request logs ──────────────────────────────────────────────────────────────
+// The org's API call history. Member-visible (unlike webhooks/keys, this is
+// read-only and carries no secrets) — anyone debugging an integration needs it.
+
+tenantApiRouter.get(
+  "/api/logs",
+  tenantAuth,
+  handler(async (req, res) => {
+    const params = pageParams(req.query);
+    const { items, total } = await listRequestLogsPage({
+      ...params,
+      // Forced from the session; the filters below only narrow.
+      tenantId: req.tenantUser!.tenantId,
+      functionKey: req.query.functionKey ? String(req.query.functionKey) : undefined,
+      outcome: req.query.outcome === "error" || req.query.outcome === "success" ? req.query.outcome : undefined,
+    });
+    res.json(paginatedFrom(items, total, params));
+  }),
+);
+
+// ── Webhooks (owner only) ─────────────────────────────────────────────────────
+// Endpoint registration plus the delivery log. Owner-only: an endpoint receives the
+// org's event stream, so adding one is a data-egress decision.
+
+const webhookEventsSchema = z.array(z.enum(WEBHOOK_EVENTS)).min(1, "Subscribe to at least one event");
+
+/**
+ * Only http(s), and https is required outside development.
+ *
+ * A webhook URL is a destination this service will POST to on the tenant's behalf.
+ * Refusing other schemes keeps it from being pointed at something that is not an HTTP
+ * receiver at all.
+ */
+const webhookUrlSchema = z
+  .string()
+  .url()
+  .refine((value) => {
+    const protocol = new URL(value).protocol;
+    return protocol === "https:" || (protocol === "http:" && env.NODE_ENV !== "production");
+  }, "Webhook URLs must use https");
+
+const createWebhookSchema = z.object({
+  url: webhookUrlSchema,
+  description: z.string().max(200).optional(),
+  events: webhookEventsSchema,
+});
+
+tenantApiRouter.get(
+  "/api/webhooks",
+  tenantAuth,
+  requireTenantRole("owner"),
+  handler(async (req, res) => {
+    const endpoints = await listEndpoints(req.tenantUser!.tenantId);
+    res.json(paginate(endpoints, pageParams(req.query)));
+  }),
+);
+
+tenantApiRouter.post(
+  "/api/webhooks",
+  tenantAuth,
+  requireTenantRole("owner"),
+  handler(async (req, res) => {
+    const parsed = createWebhookSchema.safeParse(req.body);
+    if (!parsed.success) {
+      sendError(res, 400, "INVALID_ARGS", parsed.error.issues[0]?.message ?? "Invalid webhook");
+      return;
+    }
+
+    const endpoint = await createEndpoint({ tenantId: req.tenantUser!.tenantId, ...parsed.data });
+    await recordAuditEvent({
+      action: "tenant.webhook.created",
+      actor: req.tenantUser!.userId,
+      actorLabel: req.tenantUser!.label,
+      target: req.tenantUser!.tenantId,
+      targetLabel: req.tenantUser!.tenantId,
+      metadata: { endpointId: endpoint.id, url: endpoint.url },
+    });
+    // The secret is returned exactly once — it is not recoverable afterwards, only
+    // rotatable, so the client must capture it here.
+    res.status(201).json(endpoint);
+  }),
+);
+
+const updateWebhookSchema = z.object({
+  url: webhookUrlSchema.optional(),
+  description: z.string().max(200).optional(),
+  events: webhookEventsSchema.optional(),
+  enabled: z.boolean().optional(),
+});
+
+tenantApiRouter.patch(
+  "/api/webhooks/:id",
+  tenantAuth,
+  requireTenantRole("owner"),
+  handler(async (req, res) => {
+    const parsed = updateWebhookSchema.safeParse(req.body);
+    if (!parsed.success) {
+      sendError(res, 400, "INVALID_ARGS", parsed.error.issues[0]?.message ?? "Invalid webhook");
+      return;
+    }
+
+    const updated = await updateEndpoint(req.tenantUser!.tenantId, String(req.params.id), parsed.data);
+    if (!updated) {
+      sendError(res, 404, "NOT_FOUND", "No such webhook");
+      return;
+    }
+    await recordAuditEvent({
+      action: "tenant.webhook.updated",
+      actor: req.tenantUser!.userId,
+      actorLabel: req.tenantUser!.label,
+      target: req.tenantUser!.tenantId,
+      targetLabel: req.tenantUser!.tenantId,
+      metadata: { endpointId: updated.id, enabled: updated.enabled },
+    });
+    res.json(updated);
+  }),
+);
+
+tenantApiRouter.delete(
+  "/api/webhooks/:id",
+  tenantAuth,
+  requireTenantRole("owner"),
+  handler(async (req, res) => {
+    const removed = await deleteEndpoint(req.tenantUser!.tenantId, String(req.params.id));
+    if (!removed) {
+      sendError(res, 404, "NOT_FOUND", "No such webhook");
+      return;
+    }
+    await recordAuditEvent({
+      action: "tenant.webhook.deleted",
+      actor: req.tenantUser!.userId,
+      actorLabel: req.tenantUser!.label,
+      target: req.tenantUser!.tenantId,
+      targetLabel: req.tenantUser!.tenantId,
+      metadata: { endpointId: String(req.params.id) },
+    });
+    res.json({ ok: true });
+  }),
+);
+
+tenantApiRouter.post(
+  "/api/webhooks/:id/rotate-secret",
+  tenantAuth,
+  requireTenantRole("owner"),
+  handler(async (req, res) => {
+    const rotated = await rotateSecret(req.tenantUser!.tenantId, String(req.params.id));
+    if (!rotated) {
+      sendError(res, 404, "NOT_FOUND", "No such webhook");
+      return;
+    }
+    await recordAuditEvent({
+      action: "tenant.webhook.secret_rotated",
+      actor: req.tenantUser!.userId,
+      actorLabel: req.tenantUser!.label,
+      target: req.tenantUser!.tenantId,
+      targetLabel: req.tenantUser!.tenantId,
+      metadata: { endpointId: rotated.id },
+    });
+    // The previous secret stopped working the moment this returned.
+    res.json(rotated);
+  }),
+);
+
+/**
+ * Queues a synthetic event so a tenant can verify their receiver end to end —
+ * signature included — without waiting to process a real document.
+ */
+tenantApiRouter.post(
+  "/api/webhooks/:id/test",
+  tenantAuth,
+  requireTenantRole("owner"),
+  handler(async (req, res) => {
+    const tenantId = req.tenantUser!.tenantId;
+    const endpoint = await getEndpoint(tenantId, String(req.params.id));
+    if (!endpoint) {
+      sendError(res, 404, "NOT_FOUND", "No such webhook");
+      return;
+    }
+
+    const deliveryId = randomUUID();
+    await enqueueDelivery({
+      id: deliveryId,
+      endpointId: endpoint.id,
+      tenantId,
+      event: "document.processed",
+      payload: {
+        event: "document.processed",
+        deliveryId,
+        tenantId,
+        functionKey: "TEXT_EXTRACTION",
+        outcome: "success",
+        pageCount: 1,
+        fileName: "test-document.pdf",
+        occurredAt: new Date().toISOString(),
+        // Marked so a receiver can tell a drill from the real thing.
+        test: true,
+      },
+    });
+    res.status(202).json({ deliveryId });
+  }),
+);
+
+tenantApiRouter.get(
+  "/api/webhooks/deliveries",
+  tenantAuth,
+  requireTenantRole("owner"),
+  handler(async (req, res) => {
+    const params = pageParams(req.query);
+    const { items, total } = await listDeliveriesPage({
+      ...params,
+      tenantId: req.tenantUser!.tenantId,
+      endpointId: req.query.endpointId ? String(req.query.endpointId) : undefined,
+    });
+    res.json(paginatedFrom(items, total, params));
+  }),
+);
+
+// ── Documents & reports ───────────────────────────────────────────────────────
+// The org's processing history. Only `standard`-sensitivity functions are recorded
+// at all (src/observability/documents.ts) — a PII run leaves no row here by design,
+// so this list is deliberately not a complete account of everything submitted.
+
+tenantApiRouter.get(
+  "/api/documents",
+  tenantAuth,
+  handler(async (req, res) => {
+    const params = pageParams(req.query);
+    const { items, total } = await listDocumentsPage({
+      ...params,
+      // Forced from the session, never read from the query: this is the only thing
+      // stopping one org from paging through another's history.
+      tenantId: req.tenantUser!.tenantId,
+      functionKey: req.query.functionKey ? String(req.query.functionKey) : undefined,
+      outcome: req.query.outcome === "error" || req.query.outcome === "success" ? req.query.outcome : undefined,
+    });
+    res.json(paginatedFrom(items, total, params));
+  }),
+);
+
+/**
+ * A short-lived presigned link to the archived source file.
+ *
+ * The API issues the link and the browser fetches the bytes straight from object
+ * storage, so a large download never occupies an API process. Ownership is checked
+ * *here*, when the link is minted — the link itself is a bearer URL, which is why
+ * its TTL is measured in minutes.
+ */
+tenantApiRouter.get(
+  "/api/documents/:id/download",
+  tenantAuth,
+  handler(async (req, res) => {
+    const doc = await getDocumentById(String(req.params.id));
+    // Same 404 whether it does not exist or belongs to another org — a distinct
+    // "forbidden" would confirm the id is real.
+    if (!doc || doc.tenantId !== req.tenantUser!.tenantId) {
+      sendError(res, 404, "NOT_FOUND", "No such document");
+      return;
+    }
+    if (!doc.storageKey) {
+      sendError(res, 404, "NOT_FOUND", "This document's file was not archived");
+      return;
+    }
+
+    const url = await presignDownload(doc.storageKey, doc.fileName);
+    if (!url) {
+      sendError(res, 503, "PROVIDER_UNAVAILABLE", "Document storage unavailable");
+      return;
+    }
+    res.json({ url, fileName: doc.fileName, expiresInSeconds: env.S3_DOWNLOAD_URL_TTL_SECONDS });
+  }),
+);
+
+tenantApiRouter.get(
+  "/api/documents/report",
+  tenantAuth,
+  handler(async (req, res) => {
+    const days = Number(req.query.days);
+    const report = await getDocumentReport(req.tenantUser!.tenantId, Number.isFinite(days) ? days : 30);
+    // The retention window rides along so the page can say *why* the history stops
+    // where it does, rather than looking like data loss.
+    const policy = await getSettings("retention");
+    res.json({
+      ...report,
+      retention: {
+        enabled: policy.enabled,
+        documentRetentionDays: policy.documentRetentionDays,
+      },
+    });
+  }),
+);
+
 tenantApiRouter.get(
   "/api/jobs",
   tenantAuth,
   handler(async (req, res) => {
+    // The queue holds a bounded recent window, so this is paged in memory like the
+    // other small collections rather than in the store.
     const jobs = await ocrQueue.getRecentForTenant(req.tenantUser!.tenantId);
-    res.json({ jobs });
+    res.json(paginate(jobs, pageParams(req.query)));
   }),
 );
 
@@ -248,7 +1038,12 @@ tenantApiRouter.get(
   requireTenantRole("owner"),
   handler(async (req, res) => {
     const keys = await listKeysForTenant(req.tenantUser!.tenantId);
-    res.json({ keys: keys.map(({ keyHash, tenant }) => publicKey(keyHash, tenant)) });
+    res.json(
+      paginate(
+        keys.map(({ keyHash, tenant }) => publicKey(keyHash, tenant)),
+        pageParams(req.query),
+      ),
+    );
   }),
 );
 
@@ -329,7 +1124,7 @@ tenantApiRouter.get(
   tenantAuth,
   requireTenantRole("owner"),
   handler(async (req, res) => {
-    res.json({ users: await listTenantUsers(req.tenantUser!.tenantId) });
+    res.json(paginate(await listTenantUsers(req.tenantUser!.tenantId), pageParams(req.query)));
   }),
 );
 
@@ -342,6 +1137,18 @@ tenantApiRouter.post(
     if (!parsed.success) {
       sendError(res, 400, "INVALID_ARGS", parsed.error.issues[0]?.message ?? "Invalid user");
       return;
+    }
+
+    // The platform's minimum-length policy applies wherever a password is set, not
+    // only to self-service changes — otherwise raising it leaves every account
+    // created by an owner on the old floor.
+    if (parsed.data.password !== undefined) {
+      try {
+        await assertPasswordPolicy(parsed.data.password);
+      } catch (err) {
+        sendError(res, 400, "INVALID_ARGS", err instanceof Error ? err.message : "Password does not meet policy");
+        return;
+      }
     }
     try {
       const user = await createTenantUser(
@@ -364,6 +1171,18 @@ tenantApiRouter.patch(
     if (!parsed.success) {
       sendError(res, 400, "INVALID_ARGS", parsed.error.issues[0]?.message ?? "Invalid update");
       return;
+    }
+
+    // The platform's minimum-length policy applies wherever a password is set, not
+    // only to self-service changes — otherwise raising it leaves every account
+    // created by an owner on the old floor.
+    if (parsed.data.password !== undefined) {
+      try {
+        await assertPasswordPolicy(parsed.data.password);
+      } catch (err) {
+        sendError(res, 400, "INVALID_ARGS", err instanceof Error ? err.message : "Password does not meet policy");
+        return;
+      }
     }
     const tenantId = req.tenantUser!.tenantId;
     const id = String(req.params.id);
@@ -404,5 +1223,41 @@ tenantApiRouter.delete(
     }
     await deleteTenantUser(tenantId, id, req.tenantUser!.userId);
     res.json({ ok: true });
+  }),
+);
+
+/**
+ * Org-owner escape hatch: clears a team member's second factor.
+ *
+ * Losing both the authenticator and the recovery codes is otherwise a permanent
+ * lockout (the secret is unrecoverable; the codes are stored only as hashes).
+ * Scoped to the caller's own org and audited — it lowers someone else's account
+ * security, so the request should be verified out of band first.
+ */
+tenantApiRouter.delete(
+  "/api/users/:id/mfa",
+  tenantAuth,
+  requireTenantRole("owner"),
+  handler(async (req, res) => {
+    const tenantId = req.tenantUser!.tenantId;
+    const id = String(req.params.id);
+    const target = await getTenantUserById(id);
+    if (!target || target.tenantId !== tenantId) {
+      sendError(res, 404, "NOT_FOUND", "No such user");
+      return;
+    }
+
+    await disableMfa("tenant_users", id, req.tenantUser!.userId);
+    await recordAuditEvent({
+      action: "tenant.mfa.reset",
+      actor: req.tenantUser!.userId,
+      actorLabel: req.tenantUser!.label,
+      // The org is the target of record, but the person is what a reader needs.
+      target: tenantId,
+      targetLabel: personLabel(target),
+      metadata: { userId: id, email: target.email },
+    });
+    logger.warn("tenant.mfa.reset", { userId: id, tenantId, actor: req.tenantUser!.userId });
+    res.json({ enabled: false });
   }),
 );

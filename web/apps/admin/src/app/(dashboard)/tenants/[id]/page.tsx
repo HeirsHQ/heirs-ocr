@@ -19,6 +19,7 @@ import {
   StatusBadge,
   TextLabel,
   capitalize,
+  usePagination,
 } from "@heirs/ui";
 
 const SUB_TONE: Record<string, StatusTone> = {
@@ -36,6 +37,12 @@ const Page = () => {
   const { data, isPending, isError, error, refetch, isFetching } = useTenant(id);
 
   const columns = useMemo(() => createTenantUserColumns(), []);
+  /**
+   * Paged in the browser: the list arrives whole, but DataTable renders a pagination
+   * bar once `total` exceeds the page size — without handlers that bar was inert.
+   * Declared above the early returns below so hook order stays stable.
+   */
+  const userPage = usePagination();
 
   if (isPending) {
     return (
@@ -138,7 +145,15 @@ const Page = () => {
               description="Seed an owner login from the tenants list to grant portal access."
             />
           ) : (
-            <DataTable columns={columns} data={users} total={users.length} />
+            <DataTable
+              columns={columns}
+              data={users.slice(
+                (userPage.params.page - 1) * userPage.params.pageSize,
+                userPage.params.page * userPage.params.pageSize,
+              )}
+              total={users.length}
+              {...userPage.tableProps}
+            />
           )}
         </section>
       </div>

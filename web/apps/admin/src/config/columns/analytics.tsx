@@ -1,5 +1,5 @@
-import { createColumns } from "./core";
-import { TenantUsage } from "@/types/metrics";
+import { FunctionMetric, TenantUsage } from "@/types/metrics";
+import { createColumns, PercentageCell } from "./core";
 
 export const usageColumns = createColumns<TenantUsage>({
   columns: [
@@ -11,5 +11,22 @@ export const usageColumns = createColumns<TenantUsage>({
     { accessorKey: "requests", header: "Requests" },
     { accessorKey: "errors", header: "Errors" },
     { accessorKey: "tokens", header: "Tokens" },
+  ],
+});
+
+export const functionColumns = createColumns<FunctionMetric>({
+  columns: [
+    {
+      accessorKey: "function",
+      header: "Function",
+    },
+    { accessorKey: "requests", header: "Requests" },
+    { accessorKey: "errors", header: "Errors" },
+    { accessorKey: "tokens", header: "Tokens" },
+    {
+      accessorKey: "lowConfidenceRatio",
+      header: "Low-confidence",
+      cell: ({ row }) => <PercentageCell value={row.getValue("lowConfidenceRatio")} />,
+    },
   ],
 });

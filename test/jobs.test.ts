@@ -15,6 +15,12 @@ type FakeJob = {
   state: "waiting" | "active" | "completed" | "failed";
   returnvalue?: unknown;
   failedReason?: string;
+  // BullMQ's own timestamps, surfaced on JobRecord so the portal's jobs table can
+  // show when something was submitted and how long it took.
+  timestamp: number;
+  processedOn?: number;
+  finishedOn?: number;
+  attemptsMade: number;
   getState(): Promise<string>;
 };
 
@@ -29,12 +35,25 @@ vi.mock("bullmq", () => {
     ) {}
     async add(_name: string, data: FakeJob["data"]) {
       const id = String(++seq);
-      const job: FakeJob = { id, data, state: "waiting", getState: async () => job.state };
+      const job: FakeJob = {
+        id,
+        data,
+        state: "waiting",
+        // Distinct, increasing enqueue times so ordering assertions are meaningful.
+        timestamp: Date.now() + seq,
+        attemptsMade: 0,
+        getState: async () => job.state,
+      };
       jobs.set(id, job);
       return { id };
     }
     async getJob(id: string) {
       return jobs.get(id);
+    }
+    async getJobs(_states: string[], _start: number, _end: number) {
+      // BullMQ returns jobs grouped by state, not chronologically — insertion order
+      // here stands in for that "arbitrary" ordering the store applies its own sort to.
+      return [...jobs.values()];
     }
   }
   class Worker {
@@ -95,6 +114,18 @@ vi.mock("../src/redis", () => ({
       return "OK";
     },
   }),
+}));
+
+// The pipeline writes usage counters and the document registry as it runs. Without a
+// stub these reach the real pool and fail *asynchronously*, so their warnings land
+// after the test has finished — surfacing as a flaky "Closing rpc while
+// onUserConsoleLog was pending" teardown error rather than a failure. A worker unit
+// test has no business opening a database connection anyway.
+vi.mock("../src/db", () => ({
+  query: async () => ({ rows: [], rowCount: 0 }),
+  ensureSchema: async () => {},
+  whenDbReady: async () => {},
+  closeDb: async () => {},
 }));
 
 import { ocrQueue, encodeJobError, type OcrJobData } from "../src/jobs/queue";
@@ -174,6 +205,65 @@ describe("ocrQueue — enqueue + status", () => {
 
   it("returns undefined for an unknown job id", async () => {
     expect(await ocrQueue.getStatus("nope")).toBeUndefined();
+  });
+});
+
+describe("ocrQueue.getRecentForTenant — the portal's jobs list", () => {
+  it("returns only the asking tenant's jobs", async () => {
+    await ocrQueue.enqueue(jobData());
+    await ocrQueue.enqueue(jobData());
+    await ocrQueue.enqueue({ ...jobData(), request: { ...jobData().request, tenantId: "tenant_b" } });
+
+    const mine = await ocrQueue.getRecentForTenant("tenant_a");
+    expect(mine).toHaveLength(2);
+    expect(mine.every((j) => j.tenantId === "tenant_a")).toBe(true);
+  });
+
+  it("orders newest first", async () => {
+    const first = await ocrQueue.enqueue(jobData());
+    const second = await ocrQueue.enqueue(jobData());
+
+    // BullMQ hands them back grouped by state; the list has to impose its own order
+    // or a fresh job appears below an old completed one.
+    expect((await ocrQueue.getRecentForTenant("tenant_a")).map((j) => j.jobId)).toEqual([second, first]);
+  });
+
+  it("omits the result payload but keeps meta", async () => {
+    const id = await ocrQueue.enqueue(jobData());
+    const job = jobs.get(id)!;
+    job.state = "completed";
+    job.returnvalue = { result: { text: "a very large extracted document" }, meta: { provider: "plain-text" } };
+
+    const [record] = await ocrQueue.getRecentForTenant("tenant_a");
+    // A page of completed jobs would otherwise carry a full OCR payload each, to
+    // render a table that displays none of them.
+    expect(record).not.toHaveProperty("result");
+    expect(record!.meta).toMatchObject({ provider: "plain-text" });
+  });
+
+  it("carries the timestamps and attempt count the table renders", async () => {
+    const id = await ocrQueue.enqueue(jobData());
+    const job = jobs.get(id)!;
+    job.state = "completed";
+    job.processedOn = job.timestamp + 100;
+    job.finishedOn = job.timestamp + 900;
+    job.attemptsMade = 2;
+
+    const [record] = await ocrQueue.getRecentForTenant("tenant_a");
+    expect(record).toMatchObject({
+      createdAt: job.timestamp,
+      startedAt: job.timestamp + 100,
+      finishedAt: job.timestamp + 900,
+      attempts: 2,
+    });
+  });
+
+  it("leaves start/finish absent while a job is still waiting", async () => {
+    await ocrQueue.enqueue(jobData());
+    const [record] = await ocrQueue.getRecentForTenant("tenant_a");
+    expect(record!.createdAt).toBeTypeOf("number");
+    expect(record!.startedAt).toBeUndefined();
+    expect(record!.finishedAt).toBeUndefined();
   });
 });
 

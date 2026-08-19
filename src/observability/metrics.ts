@@ -1,5 +1,6 @@
 import { Counter, Histogram, Registry, collectDefaultMetrics } from "prom-client";
 
+import { getAllFunctionUsage } from "./usage";
 import type { OcrFunctionKey } from "../functions/define";
 
 /**
@@ -159,50 +160,40 @@ export type MetricsSummary = {
   }>;
 };
 
-type JsonMetric = { name: string; values: Array<{ value: number; labels: Record<string, string> }> };
-
-/** Sums a counter's samples, optionally filtered by a label predicate. */
-const sumValues = (metrics: JsonMetric[], name: string, pred?: (labels: Record<string, string>) => boolean): number => {
-  const m = metrics.find((x) => x.name === name);
-  if (!m) return 0;
-  return m.values.reduce((acc, s) => (pred && !pred(s.labels) ? acc : acc + s.value), 0);
-};
-
 /**
- * Aggregates the raw prom-client registry into {@link MetricsSummary}. Reads the
- * structured JSON (`getMetricsAsJSON`) rather than parsing the text exposition, so
- * it stays in step with the series defined above without brittle string parsing.
+ * Aggregates the durable `function_usage` rollup (src/observability/usage.ts) into
+ * {@link MetricsSummary}.
+ *
+ * Not read from the Prometheus registry, though every one of these numbers also
+ * exists there: that registry is per-process and in-memory, so a console reading it
+ * would show totals that reset on every deploy and silently exclude every document
+ * the worker processed. Prometheus stays the operational view (histograms, labels,
+ * scrape-interval resolution); this is the business view, and both are fed from the
+ * same pipeline call sites so they agree within a process lifetime.
+ *
+ * **Throws** if the store is unreachable — the admin route surfaces that rather than
+ * rendering a confident page of zeroes.
  */
 export const getMetricsSummary = async (): Promise<MetricsSummary> => {
-  const raw = (await registry.getMetricsAsJSON()) as unknown as JsonMetric[];
+  const usage = await getAllFunctionUsage();
 
-  const totalRequests = sumValues(raw, "ocr_requests_total");
-  const errorRequests = sumValues(raw, "ocr_requests_total", (l) => l.outcome === "error");
-
-  const functions = new Set<string>();
-  for (const name of ["ocr_requests_total", "ocr_tokens_used_total", "ocr_confidence_observations_total"]) {
-    for (const s of raw.find((x) => x.name === name)?.values ?? []) {
-      if (s.labels.function) functions.add(s.labels.function);
-    }
-  }
-
-  const byFunction = [...functions]
-    .map((fn) => {
-      const requests = sumValues(raw, "ocr_requests_total", (l) => l.function === fn);
-      const errors = sumValues(raw, "ocr_requests_total", (l) => l.function === fn && l.outcome === "error");
-      const tokens = sumValues(raw, "ocr_tokens_used_total", (l) => l.function === fn);
-      const obs = sumValues(raw, "ocr_confidence_observations_total", (l) => l.function === fn);
-      const low = sumValues(raw, "ocr_low_confidence_total", (l) => l.function === fn);
-      return { function: fn, requests, errors, tokens, lowConfidenceRatio: obs ? low / obs : 0 };
-    })
-    .sort((a, b) => b.requests - a.requests);
+  const sum = (pick: (u: (typeof usage)[number]) => number): number => usage.reduce((acc, u) => acc + pick(u), 0);
+  const totalRequests = sum((u) => u.requests);
+  const errorRequests = sum((u) => u.errors);
 
   return {
     totalRequests,
     errorRequests,
     errorRate: totalRequests ? errorRequests / totalRequests : 0,
-    totalTokens: sumValues(raw, "ocr_tokens_used_total"),
-    providerFallbacks: sumValues(raw, "ocr_provider_fallback_total"),
-    byFunction,
+    totalTokens: sum((u) => u.tokens),
+    providerFallbacks: sum((u) => u.fallbacks),
+    // `getAllFunctionUsage` already sorts busiest-first.
+    byFunction: usage.map((u) => ({
+      function: u.function,
+      requests: u.requests,
+      errors: u.errors,
+      tokens: u.tokens,
+      lowConfidenceRatio: u.confidenceObservations ? u.lowConfidence / u.confidenceObservations : 0,
+    })),
   };
 };

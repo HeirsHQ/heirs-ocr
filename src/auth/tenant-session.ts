@@ -1,9 +1,8 @@
-import { randomBytes } from "crypto";
-
+import { createSessionStore, type SessionContext, type SessionView } from "./session-store";
+import { personLabel } from "../observability/audit-labels";
 import { getTenantUserById } from "./tenant-users";
 import type { TenantRole } from "../types/user";
 import { env } from "../config/env";
-import { getRedis } from "../redis";
 
 /**
  * Redis-backed tenant-portal sessions — the tenant-side twin of the admin sessions
@@ -22,38 +21,51 @@ const SESSION_PREFIX = "tenant_session:";
 export const SESSION_COOKIE = "tenant_session";
 
 /** The resolved tenant-user identity attached to a request by the tenant-auth middleware. */
-export type TenantSession = { userId: string; tenantId: string; role: TenantRole };
+export type TenantSession = {
+  userId: string;
+  tenantId: string;
+  role: TenantRole;
+  /** Display name for the audit trail; resolved free from the record read below. */
+  label?: string;
+};
 
-const sessionKey = (token: string): string => `${SESSION_PREFIX}${token}`;
+/**
+ * The shared Redis session mechanics (src/auth/session-store.ts), pinned to the
+ * portal's prefix and TTL. `revalidate` re-reads the user on every request, so the
+ * stored `tenantId`/`role` cannot go stale and a disabled account stops working
+ * immediately rather than at TTL expiry.
+ */
+const store = createSessionStore<TenantSession>({
+  prefix: SESSION_PREFIX,
+  ttlSeconds: () => env.TENANT_SESSION_TTL_SECONDS,
+  revalidate: async (userId) => {
+    const user = await getTenantUserById(userId);
+    if (!user || user.disabled) return undefined;
+    return { userId, tenantId: user.tenantId, role: user.role, label: personLabel(user) };
+  },
+});
 
 /** Creates a session for a tenant user, returning the token and its TTL (seconds). */
 export const createSession = async (
   userId: string,
   tenantId: string,
   role: TenantRole,
-): Promise<{ token: string; ttl: number }> => {
-  const token = randomBytes(32).toString("base64url");
-  const ttl = env.TENANT_SESSION_TTL_SECONDS;
-  await getRedis().set(sessionKey(token), JSON.stringify({ userId, tenantId, role }), "EX", ttl);
-  return { token, ttl };
-};
+  ctx?: SessionContext,
+): Promise<{ token: string; ttl: number }> => store.create(userId, { userId, tenantId, role }, ctx);
 
 /**
  * Resolves a session token to the current caller, or `undefined` if the token is
- * unknown/expired, or the underlying user was deleted or disabled. The stored
- * `tenantId`/`role` are re-read from the user record so they can't go stale.
+ * unknown/expired, or the underlying user was deleted or disabled.
  */
-export const resolveSession = async (token: string): Promise<TenantSession | undefined> => {
-  const raw = await getRedis().get(sessionKey(token));
-  if (!raw) return undefined;
-
-  const { userId } = JSON.parse(raw) as TenantSession;
-  const user = await getTenantUserById(userId);
-  if (!user || user.disabled) return undefined;
-  return { userId, tenantId: user.tenantId, role: user.role };
-};
+export const resolveSession = (token: string): Promise<TenantSession | undefined> => store.resolve(token);
 
 /** Destroys a session (logout). Idempotent. */
-export const destroySession = async (token: string): Promise<void> => {
-  await getRedis().del(sessionKey(token));
-};
+export const destroySession = (token: string): Promise<void> => store.destroy(token);
+
+/** Live sessions for one tenant user, for the portal's security page. Never returns tokens. */
+export const listSessions = (userId: string, currentToken?: string): Promise<SessionView[]> =>
+  store.list(userId, currentToken);
+
+/** Signs the user out everywhere except the session making the request. */
+export const revokeOtherSessions = (userId: string, keepToken?: string): Promise<number> =>
+  store.revokeOthers(userId, keepToken);

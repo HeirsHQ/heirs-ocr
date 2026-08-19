@@ -49,7 +49,12 @@ export function createSubscriptionColumns() {
         accessorKey: "status",
         header: "Status",
         cell: ({ row }) => (
-          <StatusBadge tone={STATUS_TONE[row.original.status]} label={row.original.status.replace("_", " ")} />
+          // The derived status, not the stored one: a lapsed trial is still recorded
+          // as `trialing` but is already being refused by the API.
+          <StatusBadge
+            tone={STATUS_TONE[row.original.effectiveStatus ?? row.original.status]}
+            label={(row.original.effectiveStatus ?? row.original.status).replace("_", " ")}
+          />
         ),
       },
       {

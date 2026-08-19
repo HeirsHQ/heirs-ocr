@@ -1,5 +1,3 @@
-import { Eye } from "lucide-react";
-
 import { createColumns, DateTimeCell, StatusCell } from "./core";
 import { LogEntry } from "@/types/admin-console";
 
@@ -23,6 +21,6 @@ export function createLogColumns({ onView }: LogEntryHandlers) {
       },
       { accessorKey: "msg", header: "Message" },
     ],
-    actions: (log) => [{ label: "View", icon: Eye, onClick: () => onView(log) }],
+    onRowClick: (row) => onView(row.original),
   });
 }

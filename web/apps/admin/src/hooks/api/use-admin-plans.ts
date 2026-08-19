@@ -1,6 +1,7 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 
-import { http, unwrap } from "@heirs/api-client";
+import { http, unwrap, type Paginated, type PaginatedParams } from "@heirs/api-client";
+import { adminInvalidations, adminKeys, invalidate } from "./query-keys";
 import type { Plan, PlanInput } from "@/types/plan";
 
 /**
@@ -9,12 +10,10 @@ import type { Plan, PlanInput } from "@/types/plan";
  * assigned from (see the `assignablePlan` guard) and what each tier unlocks.
  */
 
-const PLANS = ["admin", "plans"];
-
-export function usePlans() {
+export function usePlans(params?: PaginatedParams) {
   return useQuery({
-    queryKey: PLANS,
-    queryFn: () => http.get<{ plans: Plan[] }>("/api/admin/plans").then(unwrap),
+    queryKey: adminKeys.planList(params),
+    queryFn: () => http.get<Paginated<Plan>>("/api/admin/plans", params).then(unwrap),
     retry: false,
   });
 }
@@ -22,7 +21,7 @@ export function usePlans() {
 /** Registered OCR function keys, for the plan's `allowedFunctions` picker. */
 export function useOcrFunctionKeys() {
   return useQuery({
-    queryKey: ["admin", "functions"],
+    queryKey: adminKeys.functions,
     queryFn: () => http.get<{ functions: string[] }>("/api/admin/functions").then(unwrap),
     retry: false,
     staleTime: 5 * 60_000,
@@ -34,7 +33,7 @@ export function useCreatePlan() {
   return useMutation({
     mutationKey: ["admin", "plans", "create"],
     mutationFn: (plan: PlanInput) => http.post<{ plan: Plan }>("/api/admin/plans", plan).then(unwrap),
-    onSuccess: () => qc.invalidateQueries({ queryKey: PLANS }),
+    onSuccess: () => invalidate(qc, adminInvalidations.plans),
   });
 }
 
@@ -43,7 +42,7 @@ export function useUpdatePlan() {
   return useMutation({
     mutationKey: ["admin", "plans", "update"],
     mutationFn: (plan: PlanInput) => http.put<{ plan: Plan }>(`/api/admin/plans/${plan.id}`, plan).then(unwrap),
-    onSuccess: () => qc.invalidateQueries({ queryKey: PLANS }),
+    onSuccess: () => invalidate(qc, adminInvalidations.plans),
   });
 }
 
@@ -52,6 +51,6 @@ export function useDeletePlan() {
   return useMutation({
     mutationKey: ["admin", "plans", "delete"],
     mutationFn: (id: string) => http.delete(`/api/admin/plans/${id}`).then(unwrap),
-    onSuccess: () => qc.invalidateQueries({ queryKey: PLANS }),
+    onSuccess: () => invalidate(qc, adminInvalidations.plans),
   });
 }

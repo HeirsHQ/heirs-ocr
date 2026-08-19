@@ -1,12 +1,11 @@
 import "dotenv/config";
-import type { Worker } from "bullmq";
 
 import { initTracing, shutdownTracing } from "./observability/otel";
-import { closeDb, ensureSchema, whenDbReady } from "./db";
-import { closeRedis, whenRedisReady } from "./redis";
+import { closeDb, ensureSchema } from "./db";
+import { closeRedis } from "./redis";
+import { startBackgroundWorkers, waitForStores } from "./boot";
 import { seedPlans } from "./billing/plan-store";
 import { logger } from "./observability/logger";
-import { startWorker } from "./jobs/worker";
 
 /**
  * Dedicated worker entrypoint. Runs the BullMQ loop in its own process so async
@@ -15,7 +14,7 @@ import { startWorker } from "./jobs/worker";
  */
 initTracing();
 
-let worker: Worker | undefined;
+let stopBackgroundWorkers: (() => Promise<void>) | undefined;
 
 /**
  * Wait for Redis + Postgres to be reachable before starting the BullMQ loop, then
@@ -26,7 +25,8 @@ let worker: Worker | undefined;
  * unreachable so the orchestrator restarts us.
  */
 const boot = async (): Promise<void> => {
-  await Promise.all([whenRedisReady(), whenDbReady()]);
+  // Same retry as the web entrypoint — see src/boot.ts.
+  await waitForStores();
 
   // Hard prerequisite — a worker without the schema drains the queue by failing
   // every job. Let it propagate and exit rather than start and destroy work.
@@ -39,7 +39,7 @@ const boot = async (): Promise<void> => {
       err: err instanceof Error ? err.message : String(err),
     });
   }
-  worker = startWorker();
+  stopBackgroundWorkers = startBackgroundWorkers();
   logger.info("ocr worker started");
 };
 
@@ -52,7 +52,7 @@ boot().catch((err) => {
 
 const shutdown = async (signal: string): Promise<void> => {
   logger.info("ocr worker shutting down", { signal });
-  await worker?.close();
+  await stopBackgroundWorkers?.();
   await shutdownTracing();
   await closeDb();
   await closeRedis();

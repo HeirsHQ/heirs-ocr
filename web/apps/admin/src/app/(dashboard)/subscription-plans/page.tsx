@@ -11,9 +11,11 @@ import { createPlanColumns } from "@/config/columns/plans";
 import { getErrorMessage } from "@heirs/api-client";
 import type { Plan } from "@/types/plan";
 import { Button } from "@heirs/ui";
+import { usePagination } from "@heirs/ui";
 
 const Page = () => {
-  const plans = usePlans();
+  const { params, tableProps } = usePagination();
+  const plans = usePlans(params);
   const deletePlan = useDeletePlan();
   const [pendingDelete, setPendingDelete] = useState<Plan | null>(null);
 
@@ -61,7 +63,7 @@ const Page = () => {
           />
         )}
 
-        {plans.data && plans.data.plans.length === 0 && (
+        {plans.data && plans.data.items.length === 0 && (
           <EmptyState
             icon={Blocks}
             title="No plans yet"
@@ -69,8 +71,8 @@ const Page = () => {
           />
         )}
 
-        {plans.data && plans.data.plans.length > 0 && (
-          <DataTable columns={columns} data={plans.data.plans} total={plans.data.plans.length || 0} />
+        {plans.data && plans.data.items.length > 0 && (
+          <DataTable columns={columns} data={plans.data.items} total={plans.data.total} {...tableProps} />
         )}
       </div>
 

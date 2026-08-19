@@ -9,7 +9,7 @@ import { useLogs } from "@/hooks/api/use-admin-console";
 import { createLogColumns } from "@/config/columns/log";
 import { ViewLog } from "@/components/admin/view-log";
 import { getErrorMessage } from "@heirs/api-client";
-import { cn, DataTable } from "@heirs/ui";
+import { cn, DataTable, usePagination } from "@heirs/ui";
 import { useValues } from "@/hooks";
 
 const LEVELS: { value: LogLevel | "all"; label: string }[] = [
@@ -20,9 +20,10 @@ const LEVELS: { value: LogLevel | "all"; label: string }[] = [
 ];
 
 const Page = () => {
-  const { onValueChange, values } = useValues({ level: "all" as LogLevel | "all", page: 1, size: 10 });
+  const { onValueChange, values } = useValues({ level: "all" as LogLevel | "all" });
   const [selected, setSelected] = useState<LogEntry | null>(null);
-  const logs = useLogs(values);
+  const { params, reset, tableProps } = usePagination();
+  const logs = useLogs({ ...values, ...params });
 
   const columns = createLogColumns({
     onView: (log) => setSelected(log),
@@ -35,7 +36,11 @@ const Page = () => {
           {LEVELS.map((l) => (
             <button
               key={l.value}
-              onClick={() => onValueChange("level", l.value)}
+              onClick={() => {
+                onValueChange("level", l.value);
+                // A stricter level yields fewer entries; stay on a page that exists.
+                reset();
+              }}
               className={cn(
                 "rounded-md border px-2.5 py-1 text-sm transition-colors",
                 values.level === l.value
@@ -56,16 +61,18 @@ const Page = () => {
             onRetry={() => logs.refetch()}
             retrying={logs.isFetching}
           />
-        ) : logs.data && logs.data.entries.length === 0 ? (
+        ) : logs.data && logs.data.items.length === 0 ? (
           <EmptyState
             icon={Terminal}
             title="No log entries"
             description="Recent structured log lines from the running service will stream in here."
           />
         ) : (
-          <DataTable columns={columns} data={logs.data?.entries || []} total={logs.data?.entries.length || 0} />
+          <DataTable columns={columns} data={logs.data?.items ?? []} total={logs.data?.total ?? 0} {...tableProps} />
         )}
-        {selected && <ViewLog log={selected} onOpenChange={() => setSelected(null)} open={selected !== null} />}
+        {selected && (
+          <ViewLog log={selected} onOpenChange={(open) => !open && setSelected(null)} open={selected !== null} />
+        )}
       </div>
     </PageLayout>
   );

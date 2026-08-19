@@ -45,6 +45,14 @@ export type DocumentInput = {
   mimeGroup: MimeGroup;
   sha256: string;
   originalName: string;
+  /**
+   * The exact sniffed media type (`application/pdf`, `image/png`, …), where
+   * `mimeGroup` is the coarse routing bucket. Optional so existing providers and
+   * test fixtures that only care about the group are unaffected; set by `ingest`
+   * and used when archiving the file so the stored object carries a real
+   * Content-Type rather than a generic byte stream.
+   */
+  mime?: string;
 };
 
 export type RecognizeOptions = {

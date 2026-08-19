@@ -3,56 +3,51 @@
 import { ScrollText } from "lucide-react";
 import { useState } from "react";
 
-import { EmptyState, ErrorState, PageLayout, Skeleton } from "@/components/shared";
+import { DataTable, EmptyState, ErrorState, PageLayout, Skeleton } from "@/components/shared";
+import { ViewAuditEvent } from "@/components/admin/view-audit-event";
+import { createAuditColumns } from "@/config/columns/audit-log";
 import { useAuditEvents } from "@/hooks/api/use-admin-console";
+import { Pagination, usePagination } from "@heirs/ui";
 import { getErrorMessage } from "@heirs/api-client";
+import { AuditEvent } from "@/types/admin-console";
+import { useValues } from "@/hooks";
 import { Input } from "@heirs/ui";
-import { cn } from "@heirs/ui";
-
-const fmt = (iso: string) => new Date(iso).toLocaleString();
-
-/** Colour the action's namespace chip by subject, so scanning the log is faster. */
-const chipTone = (action: string): string => {
-  const ns = action.split(".")[0];
-  switch (ns) {
-    case "tenant":
-      return "bg-(--chart-1)/12 text-(--chart-1)";
-    case "admin":
-      return "bg-(--chart-2)/12 text-(--chart-2)";
-    case "subscription":
-      return "bg-(--chart-3)/12 text-(--chart-3)";
-    case "backup":
-      return "bg-(--chart-4)/12 text-(--chart-4)";
-    default:
-      return "bg-muted text-muted-foreground";
-  }
-};
 
 const Page = () => {
-  const [action, setAction] = useState("");
-  const [actor, setActor] = useState("");
-  const events = useAuditEvents({ action: action || undefined, actor: actor || undefined });
+  const { onValueChange, values } = useValues({ action: "", actor: "" });
+  const [event, setEvent] = useState<AuditEvent | null>(null);
+  const { params, reset, tableProps } = usePagination();
+
+  const { action, actor } = values;
+  const events = useAuditEvents({ action: action || undefined, actor: actor || undefined, ...params });
+
+  // Narrowing the filter shortens the list, so a viewer sitting on page 6 would
+  // otherwise land past its end and see nothing.
+  const onFilter = (field: "action" | "actor", value: string) => {
+    onValueChange(field, value);
+    reset();
+  };
+
+  const columns = createAuditColumns((event) => setEvent(event));
 
   return (
     <PageLayout title="Audit Trail" subtitle="Administrative actions — who changed what, most recent first.">
       <div className="space-y-4">
-        <div className="flex flex-wrap gap-2">
+        <div className="flex items-center gap-4">
           <Input
             placeholder="Filter by action (e.g. tenant.)"
             value={action}
-            onChange={(e) => setAction(e.target.value)}
-            className="max-w-xs"
+            onChange={(e) => onFilter("action", e.target.value)}
+            wrapperClassName="max-w-xs"
           />
           <Input
             placeholder="Filter by actor"
             value={actor}
-            onChange={(e) => setActor(e.target.value)}
-            className="max-w-xs"
+            onChange={(e) => onFilter("actor", e.target.value)}
+            wrapperClassName="max-w-xs"
           />
         </div>
-
         {events.isPending && <Skeleton skeleton="table" columns={4} rows={8} />}
-
         {events.isError && (
           <ErrorState
             title="Couldn't load audit events"
@@ -61,8 +56,7 @@ const Page = () => {
             retrying={events.isFetching}
           />
         )}
-
-        {events.data && events.data.events.length === 0 && (
+        {events.data && events.data.items.length === 0 && (
           <EmptyState
             icon={ScrollText}
             title="No audit events"
@@ -73,38 +67,20 @@ const Page = () => {
             }
           />
         )}
-
-        {events.data && events.data.events.length > 0 && (
-          <div className="border-hairline bg-card overflow-x-auto rounded-md border">
-            <table className="w-full text-sm">
-              <thead className="bg-(--surface-strong)/40 text-left text-xs text-muted-foreground">
-                <tr className="border-hairline border-b">
-                  <th className="px-3 py-2.5 font-medium">Time</th>
-                  <th className="px-3 py-2.5 font-medium">Action</th>
-                  <th className="px-3 py-2.5 font-medium">Actor</th>
-                  <th className="px-3 py-2.5 font-medium">Target</th>
-                </tr>
-              </thead>
-              <tbody>
-                {events.data.events.map((e) => (
-                  <tr key={e.id} className="border-hairline hover:bg-accent/40 border-b align-middle last:border-0">
-                    <td className="whitespace-nowrap px-3 py-2.5 tabular-nums text-muted-foreground">
-                      {fmt(e.createdAt)}
-                    </td>
-                    <td className="px-3 py-2.5">
-                      <span className={cn("rounded-full px-2 py-0.5 font-mono text-xs", chipTone(e.action))}>
-                        {e.action}
-                      </span>
-                    </td>
-                    <td className="px-3 py-2.5 font-mono text-xs">{e.actor}</td>
-                    <td className="px-3 py-2.5 font-mono text-xs text-muted-foreground">{e.target ?? "—"}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
+        {events.data && events.data.items.length > 0 && (
+          <DataTable columns={columns} data={events.data.items} total={events.data.total} {...tableProps} />
+        )}
+        {events.data && events.data.total > 0 && (
+          <Pagination
+            total={events.data.total}
+            page={tableProps.page}
+            pageSize={tableProps.pageSize}
+            onPageChange={tableProps.onPageChange}
+            onPageSizeChange={tableProps.onPageSizeChange}
+          />
         )}
       </div>
+      {event && <ViewAuditEvent event={event} open onOpenChange={(open) => !open && setEvent(null)} />}
     </PageLayout>
   );
 };

@@ -1,9 +1,8 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 
-import { http, unwrap } from "@heirs/api-client";
+import { http, unwrap, type Paginated, type PaginatedParams } from "@heirs/api-client";
+import { invalidate, tenantInvalidations, tenantKeys } from "./query-keys";
 import type { TenantRole, TenantUser } from "@/types/user";
-
-const TEAM = ["tenant", "team"];
 
 export interface CreateTeamMember {
   email: string;
@@ -20,10 +19,10 @@ export interface UpdateTeamMember {
 }
 
 /** The signed-in tenant's users (owner only). */
-export function useTenantTeam() {
+export function useTenantTeam(params?: PaginatedParams) {
   return useQuery({
-    queryKey: TEAM,
-    queryFn: () => http.get<{ users: TenantUser[] }>("/api/tenant/users").then(unwrap),
+    queryKey: tenantKeys.teamList(params),
+    queryFn: () => http.get<Paginated<TenantUser>>("/api/tenant/users", params).then(unwrap),
     retry: false,
   });
 }
@@ -34,7 +33,7 @@ export function useCreateTeamMember() {
     mutationKey: ["tenant", "team", "create"],
     mutationFn: (payload: CreateTeamMember) =>
       http.post<{ user: TenantUser }>("/api/tenant/users", payload).then(unwrap),
-    onSuccess: () => qc.invalidateQueries({ queryKey: TEAM }),
+    onSuccess: () => invalidate(qc, tenantInvalidations.team),
   });
 }
 
@@ -44,7 +43,7 @@ export function useUpdateTeamMember() {
     mutationKey: ["tenant", "team", "update"],
     mutationFn: ({ id, patch }: { id: string; patch: UpdateTeamMember }) =>
       http.patch<{ user: TenantUser }>(`/api/tenant/users/${id}`, patch).then(unwrap),
-    onSuccess: () => qc.invalidateQueries({ queryKey: TEAM }),
+    onSuccess: () => invalidate(qc, tenantInvalidations.team),
   });
 }
 
@@ -53,6 +52,6 @@ export function useDeleteTeamMember() {
   return useMutation({
     mutationKey: ["tenant", "team", "delete"],
     mutationFn: (id: string) => http.delete(`/api/tenant/users/${id}`).then(unwrap),
-    onSuccess: () => qc.invalidateQueries({ queryKey: TEAM }),
+    onSuccess: () => invalidate(qc, tenantInvalidations.team),
   });
 }

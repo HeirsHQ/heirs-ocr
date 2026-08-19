@@ -1,6 +1,6 @@
 import { randomUUID } from "crypto";
 
-import type { Subscription, SubscriptionPlan, TrialWindow } from "../types/subscription";
+import type { Subscription, SubscriptionPlan, SubscriptionStatus, TrialWindow } from "../types/subscription";
 import { effectiveStatus, quoteDocument, resolveTrialWindow } from "./entitlements";
 import { logger } from "../observability/logger";
 import { env } from "../config/env";
@@ -168,6 +168,98 @@ export const listSubscriptions = async (): Promise<Subscription[]> => {
     });
     throw new SubscriptionStoreUnavailableError(err);
   }
+};
+
+/**
+ * Estate-wide subscription totals, for the console's stat tiles.
+ *
+ * Exists so the subscriptions page can page its table normally. Previously the page
+ * pulled the entire catalog at `MAX_PAGE_SIZE` and cut it in the browser, because
+ * the tiles describe the whole estate — paging the query would have made them
+ * silently describe page 1 instead. Splitting the aggregate out means the list is a
+ * page and the tiles are a total, each fetched as what it is.
+ *
+ * Aggregated in Node rather than SQL on purpose: `subscriptions` holds one row per
+ * tenant, so it is bounded by customer count rather than growing with time, and the
+ * accrued figure lives inside the `data` jsonb behind a billing union that would
+ * take some unpleasant path expressions to sum. The win being banked here is that
+ * the *browser* no longer downloads the catalog — not that the database does less
+ * work. If tenant count ever makes this read hurt, the counts move to SQL first.
+ */
+export type SubscriptionSummary = {
+  total: number;
+  /** Enrolments currently serving traffic. */
+  serving: number;
+  /** Enrolments an operator should look at (past due or suspended). */
+  attention: number;
+  /** Per-status breakdown, for anything that wants more than the two buckets above. */
+  byStatus: Record<string, number>;
+  /**
+   * Accrued this period, grouped by currency and sorted descending.
+   *
+   * Grouped rather than summed into one figure because plans may price in different
+   * currencies, and adding those together would produce a number that means nothing.
+   */
+  accruedByCurrency: { currency: string; amountMinor: number }[];
+};
+
+/**
+ * A subscription as a *reader* should see it.
+ *
+ * `status` is the value on the record; `effectiveStatus` is what the system actually
+ * enforces right now. They diverge whenever time has passed without a billing tick:
+ * a trial whose window elapsed is still stored as `trialing`, but
+ * {@link effectiveStatus} reports `expired` (or `active` where a payment method is on
+ * file), and it is that derived value the entitlement checks use to allow or deny a
+ * request.
+ *
+ * Reporting the stored value in the console therefore showed enrolments as "serving"
+ * that the API was already refusing — the dashboard and the enforcement disagreeing
+ * about the same subscription. Read endpoints return both: the derived one is the
+ * truth to display, the stored one stays visible so the drift is auditable rather
+ * than silently overwritten.
+ */
+export type EffectiveSubscription = Subscription & { effectiveStatus: SubscriptionStatus };
+
+/** Attaches the derived status. Pure — it never writes the record back. */
+export const toEffectiveSubscription = (sub: Subscription, now: Date = new Date()): EffectiveSubscription => ({
+  ...sub,
+  effectiveStatus: effectiveStatus(sub, now),
+});
+
+/** A plan's currency, whichever arm of the billing union it uses. */
+const currencyOf = (sub: Subscription): string => {
+  const billing = sub.plan.billing;
+  if (billing.kind === "per_document") return billing.unitPrice.currency;
+  if (billing.kind === "monthly") return billing.basePrice.currency;
+  // A free plan accrues nothing; the code is only a grouping key.
+  return "NGN";
+};
+
+export const getSubscriptionSummary = async (): Promise<SubscriptionSummary> => {
+  const subs = await listSubscriptions();
+
+  const now = new Date();
+  const byStatus: Record<string, number> = {};
+  const accrued = new Map<string, number>();
+  for (const sub of subs) {
+    // The *derived* status — see `toEffectiveSubscription`. Counting the stored one
+    // reported lapsed trials as "serving" while the API was already refusing them.
+    const status = effectiveStatus(sub, now);
+    byStatus[status] = (byStatus[status] ?? 0) + 1;
+    const currency = currencyOf(sub);
+    accrued.set(currency, (accrued.get(currency) ?? 0) + sub.usage.amountAccruedMinor);
+  }
+
+  return {
+    total: subs.length,
+    serving: (byStatus.active ?? 0) + (byStatus.trialing ?? 0),
+    attention: (byStatus.past_due ?? 0) + (byStatus.suspended ?? 0),
+    byStatus,
+    accruedByCurrency: [...accrued.entries()]
+      .map(([currency, amountMinor]) => ({ currency, amountMinor }))
+      .sort((a, b) => b.amountMinor - a.amountMinor),
+  };
 };
 
 /** Upserts a subscription and invalidates this process's cache entry. */

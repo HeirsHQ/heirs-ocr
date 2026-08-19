@@ -7,19 +7,10 @@ export interface Option {
   icon?: LucideIcon;
 }
 
-export interface PaginatedParams {
-  page: number;
-  size: number;
-  search?: string;
-}
-
 export interface HttpResponse<T> {
   data: T;
 }
 
-export interface PaginatedResponse<T> {
-  items: T[];
-  page: number;
-  size: number;
-  total: number;
-}
+// The list envelope and its query params are the API's shape, so they live with the
+// API client; re-exported here so `@/types` stays the one import for page code.
+export type { Paginated, PaginatedParams } from "@heirs/api-client";

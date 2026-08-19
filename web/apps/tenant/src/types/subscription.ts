@@ -28,6 +28,11 @@ export interface TrialWindow {
 }
 
 export interface Subscription {
+  /**
+   * What the API actually enforces right now. A lapsed trial is still stored as
+   * `trialing`; this reports `expired`. Render this rather than `status`.
+   */
+  effectiveStatus?: SubscriptionStatus;
   id: string;
   tenantId: string;
   plan: Plan;

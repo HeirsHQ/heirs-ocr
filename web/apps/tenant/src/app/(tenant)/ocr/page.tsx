@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 
+import { useInvalidateAfterOcrRun } from "@/hooks/api/use-tenant-documents";
 import { PageLayout, SchemaForm, cleanArgs, defaultArgs, hasArgsForm, type ArgValues } from "@/components/shared";
 import { Field, ScrollArea, SelectOption, StatusBadge } from "@heirs/ui";
 import { Textarea } from "@heirs/ui";
@@ -75,6 +76,9 @@ const formatBytes = (bytes: number): string =>
   bytes >= 1024 * 1024 ? `${(bytes / (1024 * 1024)).toFixed(1)} MB` : `${Math.ceil(bytes / 1024)} KB`;
 
 const Page = () => {
+  // Refreshes Documents / Reports / Billing once a run settles. Stable across
+  // renders, so the polling effect below can depend on it without re-subscribing.
+  const refreshAfterRun = useInvalidateAfterOcrRun();
   const [functions, setFunctions] = useState<OcrCatalogEntry[]>([]);
   const [catalogLoading, setCatalogLoading] = useState(true);
   const [selectedKey, setSelectedKey] = useState("");
@@ -152,10 +156,17 @@ const Page = () => {
         setJobStatus(body.status);
         if (body.status === "completed") {
           setResult({ result: body.result, meta: body.meta, requestId: body.requestId, function: body.function });
+          // Same refresh as the sync path — on the queued path the registry row and
+          // the metering only exist once the worker has finished, so it belongs here
+          // rather than at submit time.
+          void refreshAfterRun();
           stop();
           return;
         }
         if (body.status === "failed") {
+          // Failures are recorded in the document registry too, so the list is stale
+          // here as well — a tenant looking for the run that just bounced expects it.
+          void refreshAfterRun();
           stop(body.error ? explainError(body.error.code, body.error.message) : "The job failed.");
           return;
         }
@@ -170,7 +181,7 @@ const Page = () => {
       cancelled = true;
       clearTimeout(timer);
     };
-  }, [jobId]);
+  }, [jobId, refreshAfterRun]);
 
   const selected = functions.find((f) => f.key === selectedKey);
   const schemaMode = selected ? hasArgsForm(selected.argsSchema) : false;
@@ -236,6 +247,10 @@ const Page = () => {
       if (!res.ok || "error" in body) {
         const err = (body as OcrErrorBody).error;
         setError(err ? explainError(err.code, err.message) : `Request failed (${res.status}).`);
+        // A failure inside the pipeline is still recorded as a document; one refused
+        // before it (quota, auth) is not. The client cannot tell the two apart, and a
+        // redundant refetch is far cheaper than a silently stale list.
+        void refreshAfterRun();
         setRunning(false);
         return;
       }
@@ -249,6 +264,9 @@ const Page = () => {
       }
 
       setResult(body as OcrSuccess);
+      // The run landed a document row and metered against the subscription; tell the
+      // cache so Documents / Reports / Billing don't keep showing the pre-run state.
+      void refreshAfterRun();
       setRunning(false);
     } catch {
       setError("Network error reaching the OCR API.");

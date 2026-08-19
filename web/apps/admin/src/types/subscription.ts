@@ -39,6 +39,13 @@ export interface TrialWindow {
 }
 
 export interface Subscription {
+  /**
+   * What the system actually enforces right now, derived from the record's dates and
+   * trial window. Diverges from `status` when time has passed without a billing tick
+   * — a lapsed trial is still stored as `trialing` but enforced as `expired`. Render
+   * this, not `status`, or the console contradicts what the API does.
+   */
+  effectiveStatus?: SubscriptionStatus;
   id: string;
   tenantId: string;
   /** Snapshot of the plan at enrolment time — not a live catalog reference. */

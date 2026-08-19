@@ -1,4 +1,14 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
+// The pipeline records usage counters and a document-registry row as it runs. Stub
+// the pool so those writes cannot open a real connection whose failure resolves
+// *after* the test ends — that surfaces as a flaky "Closing rpc while
+// onUserConsoleLog was pending" teardown error rather than a test failure.
+vi.mock("../src/db", () => ({
+  query: async () => ({ rows: [], rowCount: 0 }),
+  ensureSchema: async () => {},
+  whenDbReady: async () => {},
+  closeDb: async () => {},
+}));
 
 import { PNG_1x1, deps, fakeProvider, request, runPipeline } from "./support";
 import { signing } from "../src/functions/signing";

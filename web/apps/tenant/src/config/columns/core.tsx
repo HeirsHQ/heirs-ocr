@@ -4,7 +4,7 @@ import { format, formatDistanceToNow } from "date-fns";
 import { Fragment } from "react";
 import Link from "next/link";
 
-import type { DataTableFeatures } from "@heirs/ui";
+import type { ColumnsWithRowClick, DataTableFeatures } from "@heirs/ui";
 import { Popover, PopoverContent, PopoverTrigger } from "@heirs/ui";
 import { SelectOption } from "@heirs/ui";
 import { Checkbox } from "@heirs/ui";
@@ -45,6 +45,13 @@ interface CreateColumnsProps<T extends object> {
   actionColumnHeader?: string;
   /** Prefixed to relative `href`s returned by actions. */
   baseHref?: string;
+  /**
+   * Opens the row — usually its detail page. Declared here, beside the action menu
+   * and the selection checkbox, but applied by {@link DataTable}, which owns the
+   * `<tr>`: it ignores clicks that came from a control inside the row and adds
+   * keyboard activation.
+   */
+  onRowClick?: (row: Row<DataTableFeatures, T>) => void;
   /** Prepends a checkbox column for row selection. */
   selectable?: boolean;
 }
@@ -120,8 +127,9 @@ export function createColumns<T extends object>({
   actionColumnId = "actions",
   actionColumnHeader = "",
   baseHref,
+  onRowClick,
   selectable,
-}: CreateColumnsProps<T>): Column<T>[] {
+}: CreateColumnsProps<T>): ColumnsWithRowClick<T> {
   const result: Column<T>[] = [];
 
   if (selectable) {
@@ -156,7 +164,11 @@ export function createColumns<T extends object>({
     });
   }
 
-  return result;
+  // Attached rather than returned separately so every call site keeps passing a
+  // plain `columns={...}` — see `ColumnsWithRowClick`.
+  const withRowClick = result as ColumnsWithRowClick<T>;
+  withRowClick.onRowClick = onRowClick;
+  return withRowClick;
 }
 
 export const TextCell = ({ value, className }: { value?: string | null; className?: string }) =>

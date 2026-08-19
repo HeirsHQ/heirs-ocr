@@ -22,6 +22,55 @@ const schema = z
       .int()
       .positive()
       .default(8 * 60 * 60),
+    /**
+     * Name an authenticator app shows beside an enrolled account. Purely cosmetic,
+     * but it is baked into the `otpauth://` URI at enrolment time, so changing it
+     * later only relabels accounts enrolled after the change.
+     */
+    /**
+     * Whether this process also runs the background work — the BullMQ OCR worker,
+     * the retention sweep, and webhook delivery.
+     *
+     * **Defaults to on**, deliberately. The two failure modes are not symmetric: with
+     * it off in a single-container deploy, queued documents are never processed,
+     * retention never runs and webhooks queue forever without sending — all silently.
+     * With it on where a dedicated worker also exists, the cost is that the web
+     * process shares some background load. A visible performance cost beats invisible
+     * data loss, so the default is the one that always works.
+     *
+     * Running it in both places is *safe*, not merely tolerable: the retention sweep
+     * takes a Redis lock, webhook delivery claims rows with `FOR UPDATE SKIP LOCKED`,
+     * and BullMQ locks each job — so duplicate runners coordinate rather than collide.
+     *
+     * Set `false` on the web service when a separate worker process is deployed
+     * (docker-compose.yml does exactly this), to keep OCR processing off the request
+     * path.
+     */
+    RUN_BACKGROUND_WORKERS: z.enum(["true", "false"]).default("true"),
+    MFA_ISSUER: z.string().min(1).default("Heirs OCR"),
+    /**
+     * Object storage for processed documents (src/storage/blob.ts).
+     *
+     * Off by default: storing the source file is a materially different privacy
+     * posture from the metadata-only registry, so it has to be switched on
+     * deliberately rather than arriving with an upgrade. When off, documents are
+     * still listed — they just have nothing to download.
+     */
+    BLOB_STORAGE_ENABLED: z.enum(["true", "false"]).default("false"),
+    /** Custom endpoint for an S3-compatible store (MinIO locally). Empty ⇒ real AWS S3. */
+    S3_ENDPOINT: z.string().default(""),
+    S3_BUCKET: z.string().default("heirs-ocr-documents"),
+    S3_REGION: z.string().default("us-east-1"),
+    S3_ACCESS_KEY_ID: z.string().default(""),
+    S3_SECRET_ACCESS_KEY: z.string().default(""),
+    /**
+     * Path-style addressing (`host/bucket/key`) instead of virtual-host style
+     * (`bucket.host/key`). MinIO needs it; so does any endpoint whose bucket name
+     * is not a valid DNS label.
+     */
+    S3_FORCE_PATH_STYLE: z.enum(["true", "false"]).default("true"),
+    /** Lifetime of a presigned download link. Short: it is a bearer URL for a document. */
+    S3_DOWNLOAD_URL_TTL_SECONDS: z.coerce.number().int().positive().default(300),
     API_KEY_CACHE_TTL_SECONDS: z.coerce.number().int().positive().default(30),
     /**
      * Ceilings for the initial connection to each backing store.
