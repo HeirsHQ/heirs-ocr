@@ -131,23 +131,48 @@ export type QueueStats = {
   recent: Array<{ jobId: string; status: JobStatus; function: string; tenantId?: string }>;
 };
 
+/** How many jobs the recent sample shows, and how many are scanned to find them. */
+const RECENT_LIMIT = 20;
+const RECENT_SCAN = 100;
+
 /**
- * Snapshot of the async OCR queue: BullMQ's own counters plus the most recent
- * active/failed jobs (the ones an operator actually wants to see). Read-only — it
- * never mutates the queue.
+ * Snapshot of the async OCR queue: BullMQ's own counters plus a recent-jobs sample.
+ * Read-only — it never mutates the queue.
+ *
+ * The sample covers **the same five states the counters do**. It previously fetched
+ * only `active` and `failed`, so a queue holding one completed job reported
+ * `completed: 1` above an empty list — the tiles and the table disagreed, and the
+ * empty state claimed the queue was clear. Completed jobs are the normal resting
+ * state of a working queue, so omitting them hid almost everything.
+ *
+ * Status comes from `job.getState()` rather than being inferred from timestamps. The
+ * old inference (`finishedOn && failedReason`) called everything that was not failed
+ * "active", which would now mislabel every completed and waiting job. That costs one
+ * Redis round-trip per job, which is why the scan is bounded — same tradeoff as
+ * `getRecentForTenant`.
  */
 export const getQueueStats = async (): Promise<QueueStats> => {
   const q = getQueue();
   const counts = await q.getJobCounts("waiting", "active", "completed", "failed", "delayed");
-  const jobs = await q.getJobs(["active", "failed"], 0, 19);
-  const recent = jobs
-    .filter((j): j is NonNullable<typeof j> => !!j)
-    .map((j) => ({
-      jobId: j.id ?? "unknown",
-      status: j.finishedOn && j.failedReason ? ("failed" as JobStatus) : ("active" as JobStatus),
-      function: j.data.function,
-      tenantId: j.data.request.tenantId,
-    }));
+  const jobs = await q.getJobs(["waiting", "active", "delayed", "completed", "failed"], 0, RECENT_SCAN - 1);
+  const sampled = await Promise.all(
+    jobs
+      .filter((j): j is Job<OcrJobData> => !!j)
+      .map(async (j) => ({
+        jobId: j.id ?? "unknown",
+        status: toStatus(await j.getState()),
+        function: j.data.function,
+        tenantId: j.data.request.tenantId,
+        // Sort key only; BullMQ returns jobs grouped by state rather than
+        // chronologically, so without this a fresh job sorts below an old completed
+        // one. Not part of the response shape.
+        createdAt: j.timestamp,
+      })),
+  );
+  const recent = sampled
+    .sort((a, b) => (b.createdAt ?? 0) - (a.createdAt ?? 0))
+    .slice(0, RECENT_LIMIT)
+    .map(({ createdAt: _createdAt, ...rest }) => rest);
   return {
     counts: {
       waiting: counts.waiting ?? 0,

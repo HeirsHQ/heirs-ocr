@@ -116,7 +116,6 @@ export const MfaSettings = ({
           />
         )}
       </div>
-
       <MfaSetupDialog
         open={showSetup}
         onOpenChange={setShowSetup}
@@ -125,7 +124,6 @@ export const MfaSettings = ({
         formatError={formatError}
         onEnrolled={() => toast.success("Two-factor authentication enabled")}
       />
-
       {/* Re-minted codes arrive outside the setup dialog, so they get their own reveal. */}
       <Dialog open={!!freshCodes} onOpenChange={(o) => !o && setFreshCodes(undefined)}>
         <DialogContent
@@ -141,7 +139,6 @@ export const MfaSettings = ({
           </div>
         </DialogContent>
       </Dialog>
-
       <Dialog open={!!reauth} onOpenChange={(o) => !o && !busy && closeReauth()}>
         <DialogContent
           title={reauth === "disable" ? "Turn off two-factor authentication" : "Generate new recovery codes"}

@@ -221,8 +221,8 @@ export const revokeApiKey = async (apiKey: string, audit: AuditContext = {}): Pr
 
 /**
  * All tenants in the registry, each paired with the sha256 key-hash that indexes
- * it. Backs `provision:tenant list`; the raw API key is unrecoverable by design,
- * so the hash is the only stable per-tenant identifier surfaced here.
+ * it. Backs the admin console's Tenants list; the raw API key is unrecoverable by
+ * design, so the hash is the only stable per-tenant identifier surfaced here.
  */
 export const listTenants = async (): Promise<Array<{ keyHash: string; tenant: Tenant }>> => {
   const { rows } = await query<TenantRow>(`SELECT * FROM tenants ORDER BY created_at ASC`);

@@ -50,10 +50,22 @@ vi.mock("bullmq", () => {
     async getJob(id: string) {
       return jobs.get(id);
     }
-    async getJobs(_states: string[], _start: number, _end: number) {
+    async getJobs(states: string[], _start: number, _end: number) {
       // BullMQ returns jobs grouped by state, not chronologically — insertion order
       // here stands in for that "arbitrary" ordering the store applies its own sort to.
-      return [...jobs.values()];
+      //
+      // The `states` filter is honoured rather than ignored: a caller asking for the
+      // wrong set of states is exactly the defect that left the console's recent-jobs
+      // table empty while its Completed tile read 1.
+      return [...jobs.values()].filter((job) => states.includes(job.state));
+    }
+    async getJobCounts(...states: string[]) {
+      const counts: Record<string, number> = Object.fromEntries(states.map((s) => [s, 0]));
+      for (const job of jobs.values()) {
+        // BullMQ reports delayed separately; the fake has no delayed state.
+        if (job.state in counts) counts[job.state] = (counts[job.state] ?? 0) + 1;
+      }
+      return counts;
     }
   }
   class Worker {
@@ -128,7 +140,7 @@ vi.mock("../src/db", () => ({
   closeDb: async () => {},
 }));
 
-import { ocrQueue, encodeJobError, type OcrJobData } from "../src/jobs/queue";
+import { ocrQueue, encodeJobError, getQueueStats, type OcrJobData } from "../src/jobs/queue";
 import { processJob } from "../src/jobs/worker";
 import type { OcrRequest } from "../src/pipeline";
 
@@ -312,5 +324,54 @@ describe("worker.processJob — runs the same pipeline off-request", () => {
     await processJob(jobData(), "job-a");
     await processJob(jobData(), "job-b");
     expect(recordDocumentUsage).toHaveBeenCalledTimes(2);
+  });
+});
+
+describe("getQueueStats — the admin console's queue panel", () => {
+  /** Enqueue a job and drive it to a terminal state, as the worker would. */
+  const seed = async (state: "waiting" | "active" | "completed" | "failed", fn = "TEXT_EXTRACTION") => {
+    const id = await ocrQueue.enqueue(jobData({}, fn));
+    jobs.get(id)!.state = state;
+    return id;
+  };
+
+  it("lists a completed job instead of showing an empty table beside a non-zero count", async () => {
+    // The reported bug: one completed job in the queue, the Completed tile read 1,
+    // and Recent jobs was empty — because the sample only fetched active/failed,
+    // which is every state a working queue is *not* usually in.
+    const id = await seed("completed");
+
+    const stats = await getQueueStats();
+    expect(stats.counts.completed).toBe(1);
+    expect(stats.recent).toHaveLength(1);
+    expect(stats.recent[0]).toMatchObject({ jobId: id, status: "completed", function: "TEXT_EXTRACTION" });
+  });
+
+  it("covers every state the counts do", async () => {
+    await seed("waiting");
+    await seed("active");
+    await seed("completed");
+    await seed("failed");
+
+    const stats = await getQueueStats();
+    expect(stats.recent).toHaveLength(4);
+    // Status comes from getState(), not inferred from timestamps — the old inference
+    // labelled everything that had not failed "active".
+    expect([...stats.recent].map((j) => j.status).sort()).toEqual(["active", "completed", "failed", "queued"]);
+  });
+
+  it("orders newest first, since BullMQ returns jobs grouped by state", async () => {
+    const oldest = await seed("completed");
+    const newest = await seed("waiting");
+
+    const stats = await getQueueStats();
+    expect(stats.recent.map((j) => j.jobId)).toEqual([newest, oldest]);
+  });
+
+  it("reports an empty sample on an empty queue rather than throwing", async () => {
+    await expect(getQueueStats()).resolves.toMatchObject({
+      counts: { waiting: 0, active: 0, completed: 0, failed: 0 },
+      recent: [],
+    });
   });
 });

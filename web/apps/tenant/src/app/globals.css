@@ -109,6 +109,19 @@
   --hairline: oklch(0.915 0.005 250);
   --surface-strong: oklch(0.94 0.006 245);
   --canvas-soft: oklch(0.978 0.004 240);
+
+  /* Syntax highlighting (light)
+     Hues follow the chart ramp, petrol → amber, so a snippet sits in the same
+     colour world as the rest of the app. Primary red is deliberately absent:
+     a keyword must never read as a destructive action. */
+  --syntax-comment: oklch(0.58 0.012 250);
+  --syntax-punctuation: oklch(0.46 0.01 250);
+  --syntax-keyword: oklch(0.47 0.13 288);
+  --syntax-string: oklch(0.47 0.1 155);
+  --syntax-number: oklch(0.53 0.13 55);
+  --syntax-function: oklch(0.5 0.12 240);
+  --syntax-type: oklch(0.5 0.09 195);
+  --syntax-variable: oklch(0.3 0.01 250);
 }
 
 .dark {
@@ -152,6 +165,17 @@
   --hairline: oklch(1 0 0 / 11%);
   --surface-strong: oklch(0.28 0.015 250);
   --canvas-soft: oklch(0.225 0.014 250);
+
+  /* Syntax highlighting (dark) — same hues lifted into the light end of the
+     scale, since the ink now sits on a 0.2-lightness surface. */
+  --syntax-comment: oklch(0.62 0.012 245);
+  --syntax-punctuation: oklch(0.74 0.01 245);
+  --syntax-keyword: oklch(0.78 0.11 292);
+  --syntax-string: oklch(0.78 0.11 158);
+  --syntax-number: oklch(0.83 0.12 65);
+  --syntax-function: oklch(0.78 0.1 235);
+  --syntax-type: oklch(0.82 0.09 190);
+  --syntax-variable: oklch(0.93 0.004 240);
 }
 
 @layer base {
@@ -388,5 +412,97 @@
   }
   100% {
     transform: translateX(100%);
+  }
+}
+
+/*
+ * Prism token colours.
+ *
+ * Prism's stock themes are hardcoded hex that ignores the theme switch, so the
+ * grammar is imported without one and the token classes are mapped onto the
+ * `--syntax-*` tokens above instead. Categories are deliberately coarse — six
+ * colours a reader can hold in their head beat thirty they cannot.
+ *
+ * The `font-family` rule is load-bearing: the global `* { font-family: … }`
+ * reset in @layer base matches the token spans directly, which beats inheriting
+ * the mono stack from the enclosing `pre`.
+ */
+@layer base {
+  pre code,
+  pre code .token {
+    font-family: var(--font-mono);
+  }
+
+  code[class*="language-"] .token.comment,
+  code[class*="language-"] .token.prolog,
+  code[class*="language-"] .token.doctype,
+  code[class*="language-"] .token.cdata {
+    color: var(--syntax-comment);
+    font-style: italic;
+  }
+
+  code[class*="language-"] .token.punctuation,
+  code[class*="language-"] .token.operator,
+  code[class*="language-"] .token.entity,
+  code[class*="language-"] .token.url {
+    color: var(--syntax-punctuation);
+  }
+
+  code[class*="language-"] .token.keyword,
+  code[class*="language-"] .token.atrule,
+  code[class*="language-"] .token.rule,
+  code[class*="language-"] .token.important {
+    color: var(--syntax-keyword);
+  }
+
+  code[class*="language-"] .token.string,
+  code[class*="language-"] .token.char,
+  code[class*="language-"] .token.regex,
+  code[class*="language-"] .token.attr-value,
+  code[class*="language-"] .token.inserted {
+    color: var(--syntax-string);
+  }
+
+  code[class*="language-"] .token.number,
+  code[class*="language-"] .token.boolean,
+  code[class*="language-"] .token.constant,
+  code[class*="language-"] .token.symbol {
+    color: var(--syntax-number);
+  }
+
+  code[class*="language-"] .token.function,
+  code[class*="language-"] .token.method,
+  code[class*="language-"] .token.selector {
+    color: var(--syntax-function);
+  }
+
+  code[class*="language-"] .token.class-name,
+  code[class*="language-"] .token.builtin,
+  code[class*="language-"] .token.tag,
+  code[class*="language-"] .token.annotation {
+    color: var(--syntax-type);
+  }
+
+  code[class*="language-"] .token.property,
+  code[class*="language-"] .token.attr-name,
+  code[class*="language-"] .token.variable,
+  code[class*="language-"] .token.parameter {
+    color: var(--syntax-variable);
+  }
+
+  code[class*="language-"] .token.deleted {
+    color: var(--destructive);
+  }
+
+  code[class*="language-"] .token.namespace {
+    opacity: 0.7;
+  }
+
+  code[class*="language-"] .token.bold {
+    font-weight: 600;
+  }
+
+  code[class*="language-"] .token.italic {
+    font-style: italic;
   }
 }

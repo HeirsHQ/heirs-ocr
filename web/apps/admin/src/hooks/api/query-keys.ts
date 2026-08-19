@@ -51,6 +51,7 @@ export const adminKeys = {
   metrics: [...root, "metrics"] as const,
   usage: [...root, "usage"] as const,
   usageList: (params?: unknown) => [...root, "usage", "list", params] as const,
+  usageByFunctionList: (params?: unknown) => [...root, "usage", "by-function", params] as const,
   functions: [...root, "functions"] as const,
 
   documents: [...root, "documents"] as const,

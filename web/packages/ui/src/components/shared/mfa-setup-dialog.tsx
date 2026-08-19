@@ -9,6 +9,7 @@ import { Button } from "../ui/button";
 import { Input } from "../ui/input";
 import { QrCode } from "./qr-code";
 import { Field } from "./field";
+import { OtpInput } from "./otp-input";
 
 /** What the backend hands back from `POST /security/mfa` — the pending enrolment. */
 export type MfaEnrolment = { secret: string; otpauthUri: string };
@@ -163,19 +164,13 @@ export const MfaSetupDialog = ({
                   <Loader className="size-5 animate-spin text-muted-foreground" />
                 </div>
               )}
-
               <Field label="Verification code" className="w-full" error={error}>
-                <Input
-                  inputMode="numeric"
-                  maxLength={6}
-                  placeholder="123456"
-                  autoComplete="one-time-code"
+                <OtpInput
                   value={code}
-                  onChange={(e) => setCode(e.target.value.replace(/\D/g, ""))}
+                  onChange={(value) => setCode(value)}
                   onKeyDown={(e) => e.key === "Enter" && code.length === 6 && !busy && submit()}
                 />
               </Field>
-
               <div className="flex w-full justify-end gap-2">
                 <Button variant="ghost" onClick={() => onOpenChange(false)} disabled={busy}>
                   Cancel

@@ -2,18 +2,31 @@
 
 import { CircleCheck } from "lucide-react";
 
-import { useHealth, useQueueStats } from "@/hooks/api/use-admin-metrics";
 import { EmptyState, ErrorState, PageLayout, Skeleton, StatTile, StatusBadge } from "@/components/shared";
+import { useHealth, useQueueStats } from "@/hooks/api/use-admin-metrics";
+import type { JobStatus } from "@/types/metrics";
 import { getErrorMessage } from "@heirs/api-client";
+import type { StatusTone } from "@heirs/ui";
+
+/**
+ * A queued job is waiting, not succeeding — it reads as pending alongside `active`
+ * rather than green. Only `completed` earns the healthy tone.
+ */
+const JOB_TONE: Record<JobStatus, StatusTone> = {
+  queued: "pending",
+  active: "pending",
+  completed: "healthy",
+  failed: "failed",
+};
 
 /** A dependency reads as reachable or not; the label names the dependency itself. */
 const StatusPill = ({ label, ok }: { label: string; ok: boolean }) => (
-  <StatusBadge tone={ok ? "healthy" : "failed"} label={`${label} · ${ok ? "up" : "down"}`} className="normal-case" />
+  <StatusBadge tone={ok ? "healthy" : "failed"} label={`${label} · ${ok ? "Up" : "Down"}`} className="normal-case" />
 );
 
 const Page = () => {
-  const health = useHealth();
   const queue = useQueueStats();
+  const health = useHealth();
 
   const h = health.data;
   const q = queue.data;
@@ -40,6 +53,7 @@ const Page = () => {
                 <StatusPill label="Tesseract" ok={h.providers.tesseract} />
                 <StatusPill label="Azure OpenAI" ok={h.providers.azureOpenAI} />
                 <StatusPill label="GLM" ok={h.providers.glm} />
+                <StatusPill label="Blob Storage" ok={h.providers.blobStorage} />
                 <span className="ml-auto text-xs text-muted-foreground">
                   status: {h.status} · v{h.version}
                 </span>
@@ -77,8 +91,8 @@ const Page = () => {
                 {q.recent.length === 0 ? (
                   <EmptyState
                     icon={CircleCheck}
-                    title="Queue is clear"
-                    description="Nothing is waiting, running, or failed right now. Jobs appear here while they move through the worker."
+                    title="No jobs yet"
+                    description="Large documents are processed in the background. Once one is queued it appears here and stays listed after it completes."
                   />
                 ) : (
                   <div className="overflow-x-auto rounded-md border">
@@ -97,12 +111,7 @@ const Page = () => {
                             <td className="px-3 py-2 font-mono text-xs">{job.jobId}</td>
                             <td className="px-3 py-2">
                               <span className="inline-flex items-center gap-1.5">
-                                <StatusBadge
-                                  tone={
-                                    job.status === "failed" ? "failed" : job.status === "active" ? "pending" : "healthy"
-                                  }
-                                  label={job.status}
-                                />
+                                <StatusBadge tone={JOB_TONE[job.status]} label={job.status} />
                               </span>
                             </td>
                             <td className="px-3 py-2">{job.function}</td>

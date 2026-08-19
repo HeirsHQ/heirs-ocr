@@ -1,13 +1,32 @@
 "use client";
 
+import { useMemo, useState } from "react";
 import { Check, Copy } from "lucide-react";
-import { useState } from "react";
 import { toast } from "sonner";
+import Prism from "prismjs";
+
+/*
+ * Prism's core already carries markup, css, clike and javascript; every other
+ * grammar is imported by hand so the bundle holds only what the docs render.
+ * Order matters — each file attaches itself to the Prism instance the core
+ * import created, and php reads its placeholders from markup-templating.
+ */
+import "prismjs/components/prism-bash";
+import "prismjs/components/prism-json";
+import "prismjs/components/prism-typescript";
+import "prismjs/components/prism-python";
+import "prismjs/components/prism-go";
+import "prismjs/components/prism-ruby";
+import "prismjs/components/prism-markup-templating";
+import "prismjs/components/prism-php";
+import "prismjs/components/prism-java";
+import "prismjs/components/prism-csharp";
+import "prismjs/components/prism-rust";
 
 import { Button, cn } from "@heirs/ui";
 
 /**
- * A copyable snippet.
+ * A copyable, syntax-highlighted snippet.
  *
  * Every block on the API reference is something a developer is meant to paste, so
  * copying is the primary action rather than an afterthought — selecting wrapped shell
@@ -19,11 +38,18 @@ export const CodeBlock = ({
   className,
 }: {
   code: string;
-  /** Shown as a label in the corner; purely informational, no highlighting. */
-  language?: string;
+  /** Prism grammar id (`typescript`, `bash`, …). Doubles as the corner label. */
+  language: string;
   className?: string;
 }) => {
   const [copied, setCopied] = useState(false);
+
+  // Null for a grammar Prism doesn't know: highlight() throws on an undefined
+  // grammar, and a snippet nobody can read is worse than an unpainted one.
+  const highlighted = useMemo(() => {
+    const grammar = Prism.languages[language];
+    return grammar ? Prism.highlight(code, grammar, language) : null;
+  }, [code, language]);
 
   const copy = async () => {
     try {
@@ -57,7 +83,13 @@ export const CodeBlock = ({
           language && "pt-7",
         )}
       >
-        <code>{code}</code>
+        {highlighted === null ? (
+          <code>{code}</code>
+        ) : (
+          // Prism escapes every character it did not emit itself, so this markup is
+          // its own <span> scaffolding wrapped around escaped source text.
+          <code className={`language-${language}`} dangerouslySetInnerHTML={{ __html: highlighted }} />
+        )}
       </pre>
     </div>
   );

@@ -123,14 +123,11 @@ Keys map to **tenants** held in Postgres. New keys use a readable
 `hok_test_<uuid>` / `hok_live_<uuid>` prefix so operators can distinguish
 environments, tenant-minted keys may carry an expiry date, and only the sha256 of
 each key is stored, so a database dump can't be replayed as credentials.
-Provision and revoke at runtime with no redeploy (or from the admin console /
-tenant portal):
 
-```bash
-pnpm provision:tenant create acme --rate 120 --functions RECEIPT_PARSING,TEXT_EXTRACTION
-#   → prints the raw API key ONCE (store it now; it can't be recovered)
-pnpm provision:tenant revoke <api-key>
-```
+Tenants and their keys are provisioned and revoked at runtime with no redeploy, from
+the **admin console** (Tenants) or the **tenant portal** (API Keys). Either way the
+raw key is shown **once** at creation — only its hash is stored, so a lost key is
+replaced rather than recovered.
 
 CORS is **default-closed** (backend callers ignore CORS; no browser origin is allowed
 unless explicitly listed in `CORS_ALLOWED_ORIGINS` — the wildcard `*` is never used).
@@ -234,7 +231,7 @@ src/
   http/           routes (ocr, admin, tenant), error envelope, middleware
   jobs/           BullMQ queue + worker for async requests
   observability/  logger (redaction), metrics, tracing, usage
-  scripts/        provision-tenant / provision-admin CLIs
+  scripts/        provision-admin CLI (admin lockout recovery only)
 web/              Next.js frontend (admin dashboard + tenant portal)
 ```
 

@@ -1,6 +1,6 @@
 import { Counter, Histogram, Registry, collectDefaultMetrics } from "prom-client";
 
-import { getAllFunctionUsage } from "./usage";
+import { getAllFunctionUsage, getAllTenantUsage } from "./usage";
 import type { OcrFunctionKey } from "../functions/define";
 
 /**
@@ -150,6 +150,12 @@ export type MetricsSummary = {
   errorRate: number;
   totalTokens: number;
   providerFallbacks: number;
+  /**
+   * Requests the per-function rollup actually covers. Below {@link totalRequests}
+   * whenever traffic predates `function_usage`, which the console uses to caption
+   * the breakdown rather than letting the two look contradictory.
+   */
+  functionRequests: number;
   /** Per-function request/error/token rollup, plus the low-confidence ratio. */
   byFunction: Array<{
     function: string;
@@ -175,18 +181,30 @@ export type MetricsSummary = {
  * rendering a confident page of zeroes.
  */
 export const getMetricsSummary = async (): Promise<MetricsSummary> => {
-  const usage = await getAllFunctionUsage();
+  const [tenants, usage] = await Promise.all([getAllTenantUsage(), getAllFunctionUsage()]);
 
-  const sum = (pick: (u: (typeof usage)[number]) => number): number => usage.reduce((acc, u) => acc + pick(u), 0);
-  const totalRequests = sum((u) => u.requests);
-  const errorRequests = sum((u) => u.errors);
+  const sumTenants = (pick: (u: (typeof tenants)[number]) => number): number =>
+    tenants.reduce((acc, u) => acc + pick(u), 0);
+  const sumFunctions = (pick: (u: (typeof usage)[number]) => number): number =>
+    usage.reduce((acc, u) => acc + pick(u), 0);
+
+  // Headline totals come from `tenant_usage`, which has counted every request since
+  // the service began. `function_usage` arrived later, so summing it reported a
+  // total that silently omitted everything processed before it existed — the console
+  // showed 1 request against a tenant with 22. The per-function breakdown below is
+  // still the narrower record; `functionRequests` reports how much it covers so the
+  // page can say so rather than presenting the two as if they agreed.
+  const totalRequests = sumTenants((u) => u.requests);
+  const errorRequests = sumTenants((u) => u.errors);
 
   return {
     totalRequests,
     errorRequests,
     errorRate: totalRequests ? errorRequests / totalRequests : 0,
-    totalTokens: sum((u) => u.tokens),
-    providerFallbacks: sum((u) => u.fallbacks),
+    totalTokens: sumTenants((u) => u.tokens),
+    // Only `function_usage` records fallbacks, so this tile carries its narrower window.
+    providerFallbacks: sumFunctions((u) => u.fallbacks),
+    functionRequests: sumFunctions((u) => u.requests),
     // `getAllFunctionUsage` already sorts busiest-first.
     byFunction: usage.map((u) => ({
       function: u.function,

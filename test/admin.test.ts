@@ -527,6 +527,11 @@ describe("per-function usage", () => {
   });
 
   it("getMetricsSummary rolls the durable rows up, surviving a process restart", async () => {
+    // Headline totals come from tenant_usage, the per-function breakdown from
+    // function_usage, so both are seeded here.
+    recordTenantUsage("t1", { outcome: "success", tokensUsed: 100 });
+    recordTenantUsage("t1", { outcome: "success", tokensUsed: 100 });
+    recordTenantUsage("t2", { outcome: "error", tokensUsed: 20 });
     recordFunctionUsage("RECEIPT_PARSING", { outcome: "success", tokensUsed: 100, lowConfidence: true });
     recordFunctionUsage("RECEIPT_PARSING", { outcome: "success", tokensUsed: 100, lowConfidence: false });
     recordFunctionUsage("RESUME_PARSING", { outcome: "error", tokensUsed: 20, fellBack: true });
@@ -537,7 +542,9 @@ describe("per-function usage", () => {
       totalRequests: 3,
       errorRequests: 1,
       totalTokens: 220,
+      // Only function_usage records fallbacks, so this one keeps its narrower source.
       providerFallbacks: 1,
+      functionRequests: 3,
     });
     expect(summary.errorRate).toBeCloseTo(1 / 3);
     expect(summary.byFunction[0]).toMatchObject({
@@ -549,6 +556,20 @@ describe("per-function usage", () => {
     });
     // A function nobody has scored reads as 0, never NaN from a 0/0 divide.
     expect(summary.byFunction[1]).toMatchObject({ function: "RESUME_PARSING", lowConfidenceRatio: 0 });
+  });
+
+  it("takes the headline total from tenant_usage when traffic predates the per-function rollup", async () => {
+    // The case the console actually hit. tenant_usage had been counting for two
+    // weeks when function_usage was added, so summing the per-function rows showed
+    // "1 request" against a tenant that had made 22. The breakdown stays honest
+    // about its own coverage via functionRequests instead of inflating itself.
+    for (let i = 0; i < 22; i += 1) recordTenantUsage("converge-v2", { outcome: i < 4 ? "error" : "success" });
+    recordFunctionUsage("TEXT_EXTRACTION", { outcome: "success" });
+    await settle();
+
+    const summary = await getMetricsSummary();
+    expect(summary).toMatchObject({ totalRequests: 22, errorRequests: 4, functionRequests: 1 });
+    expect(summary.errorRate).toBeCloseTo(4 / 22);
   });
 
   it("reports an empty summary rather than dividing by zero on a fresh install", async () => {

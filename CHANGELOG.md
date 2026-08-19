@@ -54,6 +54,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Storage migrated from Redis to Postgres** for the tenant and admin registries
   (`src/db.ts`). Redis is retained for rate limiting, the extraction cache, and the
   BullMQ queue.
+- **`provision:admin` requires `--email` and `--password`.** They previously defaulted
+  to a literal pair in the script, so a bare `create` minted an **owner** whose
+  password was published in this repository. The command is now documented as a
+  lockout-recovery tool rather than the way to make an admin.
+
+### Removed
+
+- **`pnpm provision:tenant`.** Tenants and API keys are managed from the admin console
+  and the tenant portal, which also attribute each change to the signed-in admin
+  rather than to a `--actor` flag. The first console owner is seeded on boot by
+  `ensureBootstrapAdmin`, so neither CLI is part of normal setup any more.
 
 ### Notes
 

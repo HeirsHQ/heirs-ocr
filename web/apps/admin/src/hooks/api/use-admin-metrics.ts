@@ -2,7 +2,7 @@ import { useQuery } from "@tanstack/react-query";
 
 import { http, unwrap, type Paginated, type PaginatedParams } from "@heirs/api-client";
 import { adminKeys } from "./query-keys";
-import type { HealthStatus, MetricsSummary, QueueStats, TenantUsage } from "@/types/metrics";
+import type { HealthStatus, MetricsSummary, QueueStats, TenantFunctionUsage, TenantUsage } from "@/types/metrics";
 
 /** Admin observability reads (viewer+ on the backend), via the admin BFF proxy. */
 
@@ -39,6 +39,16 @@ export function useTenantUsage(params?: PaginatedParams) {
   return useQuery({
     queryKey: adminKeys.usageList(params),
     queryFn: () => http.get<Paginated<TenantUsage>>("/api/admin/usage", params).then(unwrap),
+    retry: false,
+    refetchInterval: 30_000,
+  });
+}
+
+/** Tenant x function volume, from the retained request log. See TenantFunctionUsage. */
+export function useTenantFunctionUsage(params?: PaginatedParams) {
+  return useQuery({
+    queryKey: adminKeys.usageByFunctionList(params),
+    queryFn: () => http.get<Paginated<TenantFunctionUsage>>("/api/admin/usage/by-function", params).then(unwrap),
     retry: false,
     refetchInterval: 30_000,
   });
