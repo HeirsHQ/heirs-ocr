@@ -61,13 +61,6 @@ const Page = () => {
           <section className="space-y-2">
             <div className="space-y-0.5">
               <p className="text-sm font-medium">By Function</p>
-              {unattributed > 0 && (
-                <p className="text-xs text-muted-foreground text-pretty">
-                  Covers {num(m.functionRequests)} of {num(m.totalRequests)} requests. The other {num(unattributed)} ran
-                  before per-function counters existed and are included in the totals above, but cannot be attributed to
-                  a function.
-                </p>
-              )}
             </div>
             {allRows.length === 0 ? (
               <EmptyState
@@ -110,11 +103,6 @@ const Page = () => {
         <section className="space-y-2">
           <div className="space-y-0.5">
             <p className="text-sm font-medium">By Tenant &amp; Function</p>
-            <p className="text-xs text-muted-foreground text-pretty">
-              From the request log, so this is a rolling window rather than a lifetime total, and it counts calls that
-              were refused before reaching the pipeline — over quota, rate limited, unsupported file type. Expect it to
-              disagree with the totals above in both directions.
-            </p>
           </div>
           {tenantFn.isPending && <Skeleton skeleton="table" columns={4} rows={5} />}
           {tenantFn.isError && (

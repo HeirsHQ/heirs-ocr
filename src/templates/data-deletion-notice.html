@@ -10,7 +10,7 @@
   <meta name="x-apple-disable-message-reformatting" />
   <meta name="color-scheme" content="light" />
   <meta name="supported-color-schemes" content="light" />
-  <title>Your Heirs OCR trial has ended</title>
+  <title>Documents on your workspace are scheduled for deletion</title>
   <!--[if mso]>
       <noscript><xml><o:OfficeDocumentSettings>
         <o:PixelsPerInch>96</o:PixelsPerInch>
@@ -132,7 +132,7 @@
   <!-- Preheader: inbox preview text, hidden in the body -->
   <div style="display: none; max-height: 0; overflow: hidden; mso-hide: all; font-size: 1px;
     line-height: 1px; color: #f4f6f9;">
-    Choose a plan to keep your API keys serving requests.
+    {{DocumentCount}} documents will be deleted on {{DeletionDate}}.
     &#8199;&#847;&#8199;&#847;&#8199;&#847;&#8199;&#847;&#8199;&#847;&#8199;&#847;&#8199;&#847;&#8199;&#847;&#8199;&#847;&#8199;&#847;&#8199;&#847;&#8199;&#847;
   </div>
 
@@ -162,20 +162,20 @@
                       <tr>
                         <td style="border: 1px solid #cdd5e0; border-radius: 3px; padding: 6px 14px;
                           font-family: 'Manrope', 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; font-size: 11px; font-weight: 700; letter-spacing: 1px;
-                          text-transform: uppercase; color: #78808f;">Trial ended</td>
+                          text-transform: uppercase; color: #78808f;">Retention notice</td>
                       </tr>
                     </table>
                   </td>
                 </tr>
                 <tr>
                   <td align="center" class="sm-h1" style="font-family: 'Manrope', 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; font-size: 32px; line-height: 40px;
-                    font-weight: 800; letter-spacing: -0.5px; color: #2b3440; padding-bottom: 12px;">Your trial has
-                    ended</td>
+                    font-weight: 800; letter-spacing: -0.5px; color: #2b3440; padding-bottom: 12px;">Documents
+                    scheduled for deletion</td>
                 </tr>
                 <tr>
                   <td align="center" style="font-family: 'Manrope', 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; font-size: 15px; line-height: 24px;
-                    font-weight: 400; color: #5a6069; max-width: 430px;">API keys for this workspace have stopped
-                    authorizing new requests. Everything else is exactly where you left it.</td>
+                    font-weight: 400; color: #5a6069; max-width: 430px;">This is routine retention housekeeping, not a
+                    problem with your account &mdash; but it is permanent, so here is your notice.</td>
                 </tr>
               </table>
             </td>
@@ -188,10 +188,10 @@
           <tr>
             <td class="sm-px" style="padding: 36px 48px 0; font-family: 'Manrope', 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; font-size: 15px;
               line-height: 25px; color: #5a6069;">Hi <strong
-                style="color: #2b3440; font-weight: 700">{{FirstName}}</strong>, the trial for <strong
-                style="color: #2b3440; font-weight: 700">{{TenantName}}</strong> ended on <strong
-                style="color: #2b3440; font-weight: 700">{{TrialEndedAt}}</strong>. Here is what you processed while it
-              ran.</td>
+                style="color: #2b3440; font-weight: 700">{{FirstName}}</strong>, <strong
+                style="color: #2b3440; font-weight: 700">{{DocumentCount}} documents</strong> on the <strong
+                style="color: #2b3440; font-weight: 700">{{TenantName}}</strong> workspace reach the end of their
+              retention window on <strong style="color: #2b3440; font-weight: 700">{{DeletionDate}}</strong>.</td>
           </tr>
 
           <tr>
@@ -204,44 +204,53 @@
                       text-transform: uppercase; color: #78808f; padding-bottom: 16px;"><span
                         style="display:inline-block;width:14px;height:14px;vertical-align:middle;line-height:0"><img
                           src="https://converge-email-templates.s3.eu-west-1.amazonaws.com/remixicon/database-2-line.png"
-                          width="14" height="14" alt="" style="display:block;border:0"></span>&nbsp; Your trial in
-                      numbers</div>
+                          width="14" height="14" alt="" style="display:block;border:0"></span>&nbsp; What will be
+                      deleted</div>
                     <table role="presentation" cellpadding="0" cellspacing="0" border="0" width="100%"
                       style="width: 100%">
                       <tr>
                         <td class="sm-stack" width="190" valign="top" style="width: 190px; 
                           padding: 0 16px 12px 0; font-family: 'Manrope', 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; font-size: 12px; font-weight: 500;
-                          line-height: 20px; color: #78808f;">Trial window</td>
+                          line-height: 20px; color: #78808f;">Documents affected</td>
                         <td class="sm-stack" valign="top" style=" padding: 0 0 12px;
                           font-family: 'Manrope', 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; font-size: 14px; font-weight: 700; line-height: 21px; color: #2b3440;
-                          word-break: break-word;">{{TrialStartedAt}} &ndash; {{TrialEndedAt}}</td>
+                          word-break: break-word;">{{DocumentCount}}</td>
                       </tr>
 
                       <tr>
                         <td class="sm-stack" width="190" valign="top" style="width: 190px; border-top: 1px solid #eef1f5;
                           padding: 12px 16px 12px 0; font-family: 'Manrope', 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; font-size: 12px; font-weight: 500;
-                          line-height: 20px; color: #78808f;">Documents processed</td>
+                          line-height: 20px; color: #78808f;">Oldest document</td>
                         <td class="sm-stack" valign="top" style="border-top: 1px solid #eef1f5; padding: 12px 0 12px;
                           font-family: 'Manrope', 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; font-size: 14px; font-weight: 700; line-height: 21px; color: #2b3440;
-                          word-break: break-word;">{{DocumentsProcessed}} of {{IncludedDocuments}}</td>
+                          word-break: break-word;">{{OldestDocumentDate}}</td>
                       </tr>
 
                       <tr>
                         <td class="sm-stack" width="190" valign="top" style="width: 190px; border-top: 1px solid #eef1f5;
                           padding: 12px 16px 12px 0; font-family: 'Manrope', 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; font-size: 12px; font-weight: 500;
-                          line-height: 20px; color: #78808f;">Pages processed</td>
+                          line-height: 20px; color: #78808f;">Newest affected</td>
                         <td class="sm-stack" valign="top" style="border-top: 1px solid #eef1f5; padding: 12px 0 12px;
                           font-family: 'Manrope', 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; font-size: 14px; font-weight: 700; line-height: 21px; color: #2b3440;
-                          word-break: break-word;">{{PagesProcessed}}</td>
+                          word-break: break-word;">{{NewestAffectedDate}}</td>
                       </tr>
 
                       <tr>
                         <td class="sm-stack" width="190" valign="top" style="width: 190px; border-top: 1px solid #eef1f5;
                           padding: 12px 16px 12px 0; font-family: 'Manrope', 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; font-size: 12px; font-weight: 500;
-                          line-height: 20px; color: #78808f;">Functions used</td>
+                          line-height: 20px; color: #78808f;">Deletion date</td>
                         <td class="sm-stack" valign="top" style="border-top: 1px solid #eef1f5; padding: 12px 0 12px;
                           font-family: 'Manrope', 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; font-size: 14px; font-weight: 700; line-height: 21px; color: #2b3440;
-                          word-break: break-word;">{{FunctionsUsed}}</td>
+                          word-break: break-word;">{{DeletionDate}}</td>
+                      </tr>
+
+                      <tr>
+                        <td class="sm-stack" width="190" valign="top" style="width: 190px; border-top: 1px solid #eef1f5;
+                          padding: 12px 16px 12px 0; font-family: 'Manrope', 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; font-size: 12px; font-weight: 500;
+                          line-height: 20px; color: #78808f;">Retention policy</td>
+                        <td class="sm-stack" valign="top" style="border-top: 1px solid #eef1f5; padding: 12px 0 12px;
+                          font-family: 'Manrope', 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; font-size: 14px; font-weight: 700; line-height: 21px; color: #2b3440;
+                          word-break: break-word;">{{DataRetentionDays}} days ({{PlanName}} plan)</td>
                       </tr>
 
                     </table>
@@ -263,20 +272,12 @@
                       style="display:inline-block;width:15px;height:15px;vertical-align:middle;line-height:0"><img
                         src="https://converge-email-templates.s3.eu-west-1.amazonaws.com/remixicon/alarm-warning-line.png"
                         width="15" height="15" alt="" style="display:block;border:0"></span> <strong
-                      style="font-weight: 700">Your data is scheduled for deletion on {{DataDeletionDate}}.</strong>
-                    Documents and extraction results are kept for {{DataRetentionDays}} days after a trial ends. Pick a
-                    plan or export before then and nothing is lost.</td>
+                      style="font-weight: 700">Deletion is permanent.</strong> Stored files and their extraction results
+                    are removed and cannot be recovered by you or by us afterwards. Export anything you still need
+                    before {{DeletionDate}}.</td>
                 </tr>
               </table>
             </td>
-          </tr>
-
-          <tr>
-            <td class="sm-px" style="padding: 24px 48px 0; font-family: 'Manrope', 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; font-size: 14px;
-              line-height: 23px; color: #5a6069;">Requests now return <span
-                style="font-family: 'Courier New', Consolas, monospace; font-size: 13px; font-weight: 700; color: #2b3440;">402
-                payment_required</span>. Your API keys, webhook endpoints and team members are untouched &mdash;
-              choosing a plan brings the workspace straight back.</td>
           </tr>
 
           <tr>
@@ -285,110 +286,33 @@
                 <tr>
                   <td bgcolor="#c60000" align="center"
                     style="background-color: #c60000; border-radius: 4px; mso-padding-alt: 16px 40px;">
-                    <a href="{{UpgradeUrl}}" class="sm-btn" style="display: inline-block; padding: 16px 40px;
+                    <a href="{{ExportUrl}}" class="sm-btn" style="display: inline-block; padding: 16px 40px;
                       font-family: 'Manrope', 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; font-size: 15px; font-weight: 700; color: #ffffff;
-                      border-radius: 4px;">Choose a plan</a>
+                      border-radius: 4px;">Export before deletion</a>
                   </td>
                 </tr>
               </table>
               <div style="padding-top: 12px; font-family: 'Manrope', 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; font-size: 12px; line-height: 18px;
-                color: #78808f;">Plans start at pay-as-you-go. No minimum commitment.</div>
-            </td>
-          </tr>
-
-          <tr>
-            <td class="sm-px" style="padding: 44px 48px 0">
-              <div class="sm-h2" style="font-family: 'Manrope', 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; font-size: 21px; line-height: 29px;
-                font-weight: 800; letter-spacing: -0.3px; color: #2b3440; padding-bottom: 6px;">What you get on a paid
-                plan</div>
+                color: #78808f;">Builds a single archive of documents, results and logs.</div>
             </td>
           </tr>
 
           <tr>
             <td class="sm-px" style="padding: 12px 48px 0">
               <table role="presentation" cellpadding="0" cellspacing="0" border="0" width="100%"
-                style="width: 100%; border: 1px solid #e8ecf2; border-radius: 4px">
+                style="width: 100%; background-color: #eef4fb; border-radius: 4px;">
                 <tr>
-                  <td width="44" valign="top" style="padding: 16px 0 16px 16px; ">
-                    <table role="presentation" cellpadding="0" cellspacing="0" border="0">
-                      <tr>
-                        <td align="center" width="40" height="40" style="background-color: #eef1f5; width: 40px;
-                          height: 40px; border-radius: 4px; font-size: 19px; line-height: 40px;"><span
-                            style="display:inline-block;width:19px;height:19px;vertical-align:middle;line-height:0"><img
-                              src="https://converge-email-templates.s3.eu-west-1.amazonaws.com/remixicon/shield-user-line.png"
-                              width="19" height="19" alt="" style="display:block;border:0"></span></td>
-                      </tr>
-                    </table>
-                  </td>
-                  <td valign="middle" style="padding: 16px; ">
-                    <div style="font-family: 'Manrope', 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; font-size: 15px; font-weight: 700; color: #2b3440;
-                      padding-bottom: 3px;">PII and restricted functions</div>
-                    <div style="font-family: 'Manrope', 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; font-size: 13px; line-height: 20px;
-                      color: #78808f;">ID verification and other sensitive-document functions.</div>
-                  </td>
+                  <td bgcolor="#3a6ea5" width="3"
+                    style="background-color: #3a6ea5; width: 3px; font-size: 0; line-height: 0;">&nbsp;</td>
+                  <td style="padding: 14px 18px; font-family: 'Manrope', 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; font-size: 13px; line-height: 21px;
+                    color: #2b4a6f;"><span
+                      style="display:inline-block;width:15px;height:15px;vertical-align:middle;line-height:0"><img
+                        src="https://converge-email-templates.s3.eu-west-1.amazonaws.com/remixicon/shield-check-line.png"
+                        width="15" height="15" alt="" style="display:block;border:0"></span> <strong
+                      style="font-weight: 700">Why we do this.</strong> Holding documents no longer than your plan
+                    promises is part of how the service stays defensible &mdash; less retained data is less data to
+                    lose. Longer retention is available on higher tiers.</td>
                 </tr>
-
-                <tr>
-                  <td width="44" valign="top" style="padding: 16px 0 16px 16px; border-top: 1px solid #eef1f5;">
-                    <table role="presentation" cellpadding="0" cellspacing="0" border="0">
-                      <tr>
-                        <td align="center" width="40" height="40" style="background-color: #eef1f5; width: 40px;
-                          height: 40px; border-radius: 4px; font-size: 19px; line-height: 40px;"><span
-                            style="display:inline-block;width:19px;height:19px;vertical-align:middle;line-height:0"><img
-                              src="https://converge-email-templates.s3.eu-west-1.amazonaws.com/remixicon/hourglass-line.png"
-                              width="19" height="19" alt="" style="display:block;border:0"></span></td>
-                      </tr>
-                    </table>
-                  </td>
-                  <td valign="middle" style="padding: 16px; border-top: 1px solid #eef1f5;">
-                    <div style="font-family: 'Manrope', 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; font-size: 15px; font-weight: 700; color: #2b3440;
-                      padding-bottom: 3px;">Async jobs and priority processing</div>
-                    <div style="font-family: 'Manrope', 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; font-size: 13px; line-height: 20px;
-                      color: #78808f;">Queue large documents and jump ahead of standard-tier work.</div>
-                  </td>
-                </tr>
-
-                <tr>
-                  <td width="44" valign="top" style="padding: 16px 0 16px 16px; border-top: 1px solid #eef1f5;">
-                    <table role="presentation" cellpadding="0" cellspacing="0" border="0">
-                      <tr>
-                        <td align="center" width="40" height="40" style="background-color: #eef1f5; width: 40px;
-                          height: 40px; border-radius: 4px; font-size: 19px; line-height: 40px;"><span
-                            style="display:inline-block;width:19px;height:19px;vertical-align:middle;line-height:0"><img
-                              src="https://converge-email-templates.s3.eu-west-1.amazonaws.com/remixicon/database-2-line.png"
-                              width="19" height="19" alt="" style="display:block;border:0"></span></td>
-                      </tr>
-                    </table>
-                  </td>
-                  <td valign="middle" style="padding: 16px; border-top: 1px solid #eef1f5;">
-                    <div style="font-family: 'Manrope', 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; font-size: 15px; font-weight: 700; color: #2b3440;
-                      padding-bottom: 3px;">Extended retention</div>
-                    <div style="font-family: 'Manrope', 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; font-size: 13px; line-height: 20px;
-                      color: #78808f;">Keep results and extractions well past the trial&rsquo;s {{DataRetentionDays}}
-                      days.</div>
-                  </td>
-                </tr>
-
-                <tr>
-                  <td width="44" valign="top" style="padding: 16px 0 16px 16px; border-top: 1px solid #eef1f5;">
-                    <table role="presentation" cellpadding="0" cellspacing="0" border="0">
-                      <tr>
-                        <td align="center" width="40" height="40" style="background-color: #eef1f5; width: 40px;
-                          height: 40px; border-radius: 4px; font-size: 19px; line-height: 40px;"><span
-                            style="display:inline-block;width:19px;height:19px;vertical-align:middle;line-height:0"><img
-                              src="https://converge-email-templates.s3.eu-west-1.amazonaws.com/remixicon/customer-service-2-line.png"
-                              width="19" height="19" alt="" style="display:block;border:0"></span></td>
-                      </tr>
-                    </table>
-                  </td>
-                  <td valign="middle" style="padding: 16px; border-top: 1px solid #eef1f5;">
-                    <div style="font-family: 'Manrope', 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; font-size: 15px; font-weight: 700; color: #2b3440;
-                      padding-bottom: 3px;">SLA-backed support</div>
-                    <div style="font-family: 'Manrope', 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; font-size: 13px; line-height: 20px;
-                      color: #78808f;">Contractual response times on business and enterprise tiers.</div>
-                  </td>
-                </tr>
-
               </table>
             </td>
           </tr>
@@ -400,20 +324,21 @@
                 <tr>
                   <td style="padding: 32px">
                     <div style="font-family: 'Manrope', 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; font-size: 11px; font-weight: 700; letter-spacing: 1px;
-                      text-transform: uppercase; color: #78808f; padding-bottom: 10px;">Not ready to commit?</div>
+                      text-transform: uppercase; color: #78808f; padding-bottom: 10px;">Need to keep documents longer?
+                    </div>
                     <div class="sm-h2" style="font-family: 'Manrope', 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; font-size: 21px; line-height: 29px;
-                      font-weight: 800; letter-spacing: -0.3px; color: #2b3440; padding-bottom: 8px;">Tell us what you
-                      need</div>
+                      font-weight: 800; letter-spacing: -0.3px; color: #2b3440; padding-bottom: 8px;">Extended
+                      retention is a plan feature</div>
                     <div style="font-family: 'Manrope', 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; font-size: 14px; line-height: 22px; color: #5a6069;
-                      padding-bottom: 22px;">If your volumes are unusual, your documents are unusual, or you need terms
-                      we don&rsquo;t list &mdash; a short conversation is usually faster than a pricing page.</div>
+                      padding-bottom: 22px;">Business and enterprise tiers raise the retention window well past the
+                      {{DataRetentionDays}} days your current plan allows.</div>
                     <table role="presentation" cellpadding="0" cellspacing="0" border="0">
                       <tr>
                         <td align="center" bgcolor="#2b3440"
                           style="background-color: #2b3440; border-radius: 4px; mso-padding-alt: 13px 28px;">
-                          <a href="{{ContactUrl}}" class="sm-btn" style="display: inline-block; padding: 13px 28px;
+                          <a href="{{BillingUrl}}" class="sm-btn" style="display: inline-block; padding: 13px 28px;
                             font-family: 'Manrope', 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; font-size: 14px; font-weight: 700; color: #ffffff;
-                            border-radius: 4px;">Talk to us</a>
+                            border-radius: 4px;">Compare plans</a>
                         </td>
                       </tr>
                     </table>
@@ -451,8 +376,7 @@
                   style="color: #ffffff; font-weight: 800; text-decoration: underline">{{SupportEmail}}</a>
               </div>
               <div style="padding-top: 18px; font-family: 'Manrope', 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; font-size: 11px; line-height: 19px;
-                color: #ffffff;">You&rsquo;re receiving this because you administer billing for the {{TenantName}}
-                workspace.<br />
+                color: #ffffff;">You&rsquo;re receiving this because you administer the {{TenantName}} workspace.<br />
                 Heirs OCR is operated by Heirs Technologies.<br />
                 &copy; {{Year}} Heirs Technologies. All rights reserved. &middot;
                 <a href="{{PreferencesUrl}}" style="color: #ffffff; text-decoration: underline">Email preferences</a>
