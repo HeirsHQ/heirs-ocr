@@ -1,36 +1,68 @@
-# Production stack, used by scripts/deploy.sh on the EC2 host.
-#
-# Images are pulled from ECR, never built here — deploy.sh exports ECR_REGISTRY,
-# ECR_REPOSITORY and IMAGE_TAG, then runs:
-#
-#   docker compose -f docker-compose-prod.yml pull
-#   docker compose -f docker-compose-prod.yml up -d --remove-orphans
-#
-# Postgres, Redis and object storage are managed services here; their URLs come from
-# .env on the host (not in the repo — .env is gitignored).
-
 services:
+  redis:
+    image: redis:7-alpine
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 3s
+      retries: 5
+    restart: unless-stopped
+
   api:
     image: ${ECR_REGISTRY}/${ECR_REPOSITORY}:${IMAGE_TAG}
-    restart: unless-stopped
-    env_file: .env
+    depends_on:
+      redis:
+        condition: service_healthy
+    ports:
+      - "8080:8080"
     environment:
       NODE_ENV: production
       PORT: "8080"
-      # The `worker` service below runs the background work, so keep it off the
-      # request path here. Remove this line if the worker is ever dropped — the
-      # default is `true`, which makes a lone api container self-sufficient.
-      RUN_BACKGROUND_WORKERS: "false"
-    ports:
-      - "8080:8080"
+      REDIS_URL: redis://redis:6379
+      DATABASE_URL: ${DATABASE_URL:?set DATABASE_URL in your .env}
+      AUTH_ENABLED: ${AUTH_ENABLED:-true}
+      ADMIN_BOOTSTRAP_EMAIL: ${ADMIN_BOOTSTRAP_EMAIL:?set ADMIN_BOOTSTRAP_EMAIL in your .env}
+      ADMIN_BOOTSTRAP_PASSWORD: ${ADMIN_BOOTSTRAP_PASSWORD:?set ADMIN_BOOTSTRAP_PASSWORD in your .env}
+      ADMIN_SESSION_TTL_SECONDS: ${ADMIN_SESSION_TTL_SECONDS:-28800}
+      AZURE_OPENAI_ENABLED: ${AZURE_OPENAI_ENABLED:-false}
+      AZURE_OPENAI_API_KEY: ${AZURE_OPENAI_API_KEY:-}
+      AZURE_OPENAI_ENDPOINT: ${AZURE_OPENAI_ENDPOINT:-}
+      AZURE_OPENAI_API_VERSION: ${AZURE_OPENAI_API_VERSION:-}
+      AZURE_OPENAI_DEPLOYMENT_NAME: ${AZURE_OPENAI_DEPLOYMENT_NAME:-}
+      GLM_ENABLED: ${GLM_ENABLED:-false}
+      GLM_API_KEY: ${GLM_API_KEY:-}
+      OTEL_EXPORTER_OTLP_ENDPOINT: ${OTEL_EXPORTER_OTLP_ENDPOINT:-}
+      S3_ENDPOINT: ${S3_ENDPOINT:-}
+      S3_ACCESS_KEY: ${S3_ACCESS_KEY:-}
+      S3_SECRET_ACCESS_KEY: ${S3_SECRET_ACCESS_KEY:-}
+      S3_REGION: ${S3_REGION:-}
+      S3_BUCKET_NAME: ${S3_BUCKET_NAME:-}
+    restart: unless-stopped
 
-  # Drains the OCR queue, runs the retention sweep, and delivers webhooks. Without
-  # this container those never happen — queued documents sit unprocessed and webhook
-  # deliveries queue in the database without being sent.
   worker:
     image: ${ECR_REGISTRY}/${ECR_REPOSITORY}:${IMAGE_TAG}
     command: ["node", "build/worker.js"]
-    restart: unless-stopped
-    env_file: .env
+    depends_on:
+      redis:
+        condition: service_healthy
     environment:
       NODE_ENV: production
+      REDIS_URL: redis://redis:6379
+      DATABASE_URL: ${DATABASE_URL:?set DATABASE_URL in your .env}
+      ADMIN_BOOTSTRAP_EMAIL: ${ADMIN_BOOTSTRAP_EMAIL:?set ADMIN_BOOTSTRAP_EMAIL in your .env}
+      ADMIN_BOOTSTRAP_PASSWORD: ${ADMIN_BOOTSTRAP_PASSWORD:?set ADMIN_BOOTSTRAP_PASSWORD in your .env}
+      ADMIN_SESSION_TTL_SECONDS: ${ADMIN_SESSION_TTL_SECONDS:-28800}
+      AZURE_OPENAI_ENABLED: ${AZURE_OPENAI_ENABLED:-false}
+      AZURE_OPENAI_API_KEY: ${AZURE_OPENAI_API_KEY:-}
+      AZURE_OPENAI_ENDPOINT: ${AZURE_OPENAI_ENDPOINT:-}
+      AZURE_OPENAI_API_VERSION: ${AZURE_OPENAI_API_VERSION:-}
+      AZURE_OPENAI_DEPLOYMENT_NAME: ${AZURE_OPENAI_DEPLOYMENT_NAME:-}
+      GLM_ENABLED: ${GLM_ENABLED:-false}
+      GLM_API_KEY: ${GLM_API_KEY:-}
+      OTEL_EXPORTER_OTLP_ENDPOINT: ${OTEL_EXPORTER_OTLP_ENDPOINT:-}
+      S3_ENDPOINT: ${S3_ENDPOINT:-}
+      S3_ACCESS_KEY: ${S3_ACCESS_KEY:-}
+      S3_SECRET_ACCESS_KEY: ${S3_SECRET_ACCESS_KEY:-}
+      S3_REGION: ${S3_REGION:-}
+      S3_BUCKET_NAME: ${S3_BUCKET_NAME:-}
+    restart: unless-stopped
