@@ -52,8 +52,9 @@ export function main() {
   app.use("/v1/ocr", ocrRouter);
 
   // Admin console: static assets + JSON API, both under /admin. Same-origin (no
-  // CORS). Login is open; other /admin/api routes gate on session + role. The
-  // console is inert until an admin exists in Postgres (`pnpm provision:admin`).
+  // CORS). Login is open; other /admin/api routes gate on session + role. The first
+  // owner is seeded on boot by `ensureBootstrapAdmin` (src/auth/admins.ts) from
+  // ADMIN_BOOTSTRAP_EMAIL/_PASSWORD, so the console is usable on a fresh deploy.
   app.use("/admin", express.static(path.join(__dirname, "..", "public", "admin")));
   app.use("/admin", adminApiRouter);
 

@@ -2,18 +2,18 @@
 
 import { CircleCheck } from "lucide-react";
 
-import { useHealth, useQueueStats } from "@/hooks/api/use-admin-metrics";
 import { EmptyState, ErrorState, PageLayout, Skeleton, StatTile, StatusBadge } from "@/components/shared";
+import { useHealth, useQueueStats } from "@/hooks/api/use-admin-metrics";
 import { getErrorMessage } from "@heirs/api-client";
 
 /** A dependency reads as reachable or not; the label names the dependency itself. */
 const StatusPill = ({ label, ok }: { label: string; ok: boolean }) => (
-  <StatusBadge tone={ok ? "healthy" : "failed"} label={`${label} · ${ok ? "up" : "down"}`} className="normal-case" />
+  <StatusBadge tone={ok ? "healthy" : "failed"} label={`${label} · ${ok ? "Up" : "Down"}`} className="normal-case" />
 );
 
 const Page = () => {
-  const health = useHealth();
   const queue = useQueueStats();
+  const health = useHealth();
 
   const h = health.data;
   const q = queue.data;
@@ -40,6 +40,7 @@ const Page = () => {
                 <StatusPill label="Tesseract" ok={h.providers.tesseract} />
                 <StatusPill label="Azure OpenAI" ok={h.providers.azureOpenAI} />
                 <StatusPill label="GLM" ok={h.providers.glm} />
+                <StatusPill label="Blob Storage" ok={h.providers.blobStorage} />
                 <span className="ml-auto text-xs text-muted-foreground">
                   status: {h.status} · v{h.version}
                 </span>

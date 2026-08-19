@@ -35,6 +35,7 @@ import { createTenantUser, listTenantUsers } from "../../auth/tenant-users";
 import { recentLogs, type LogLevel } from "../../observability/log-buffer";
 import { getMetricsSummary } from "../../observability/metrics";
 import { pageParams, paginate, paginatedFrom } from "../pagination";
+import { getTenantFunctionUsage } from "../../observability/request-log";
 import { getAllTenantUsage } from "../../observability/usage";
 import { parsePlanInput } from "../../billing/plan-schema";
 import { listFunctions } from "../../functions/registry";
@@ -1098,6 +1099,17 @@ adminApiRouter.get(
   requireMinRole("viewer"),
   handler(async (req, res) => {
     res.json(paginate(await getAllTenantUsage(), pageParams(req.query)));
+  }),
+);
+
+// Tenant x function, from the request log — the only source carrying both
+// dimensions. Rolling window and includes refused calls; see getTenantFunctionUsage.
+adminApiRouter.get(
+  "/api/usage/by-function",
+  adminAuth,
+  requireMinRole("viewer"),
+  handler(async (req, res) => {
+    res.json(paginate(await getTenantFunctionUsage(), pageParams(req.query)));
   }),
 );
 

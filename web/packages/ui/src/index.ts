@@ -37,6 +37,7 @@ export * from "./components/shared/field";
 export * from "./components/shared/mfa-challenge-form";
 export * from "./components/shared/mfa-settings";
 export * from "./components/shared/mfa-setup-dialog";
+export * from "./components/shared/otp-input"
 export * from "./components/shared/page-layout";
 export * from "./components/shared/qr-code";
 export * from "./components/shared/pagination";

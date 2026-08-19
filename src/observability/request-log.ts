@@ -168,3 +168,55 @@ export const purgeRequestLogsOlderThan = async (retentionDays: number): Promise<
   const { rowCount } = await query(`DELETE FROM request_logs WHERE created_at < $1`, [cutoff]);
   return rowCount ?? 0;
 };
+
+/** One tenant's volume on one function, over the retained log window. */
+export type TenantFunctionUsage = {
+  tenantId: string;
+  functionKey: string;
+  requests: number;
+  errors: number;
+};
+
+/**
+ * Requests per tenant per function, busiest first.
+ *
+ * Sourced from `request_logs` because it is the only place carrying both dimensions:
+ * `tenant_usage` is keyed by tenant and `function_usage` by function, and neither can
+ * be crossed after the fact. Two consequences the console has to state rather than
+ * hide:
+ *
+ *  - **It is a rolling window, not a lifetime total.** These rows age out with the
+ *    retention sweep (`purgeRequestLogsOlderThan`), so this will read lower than the
+ *    lifetime counters once logs start expiring.
+ *  - **It counts refused calls.** The log is written above `auth` in the chain, so a
+ *    429 or a 402 that never reached the pipeline is a row here but was never a
+ *    request as far as `tenant_usage` is concerned. That is the point of the table —
+ *    it is what someone debugging an integration needs — but it means this can read
+ *    *higher* than the lifetime counters over the same period.
+ *
+ * `function_key IS NULL` rows are dropped: the catalog and job-status endpoints are
+ * not function runs and would otherwise appear as a nameless row per tenant.
+ */
+export const getTenantFunctionUsage = async (): Promise<TenantFunctionUsage[]> => {
+  const { rows } = await query<{
+    tenant_id: string;
+    function_key: string;
+    requests: string;
+    errors: string;
+  }>(
+    `SELECT tenant_id,
+            function_key,
+            COUNT(*)::text                                  AS requests,
+            COUNT(*) FILTER (WHERE status_code >= 400)::text AS errors
+       FROM request_logs
+      WHERE function_key IS NOT NULL
+      GROUP BY tenant_id, function_key
+      ORDER BY COUNT(*) DESC, tenant_id ASC, function_key ASC`,
+  );
+  return rows.map((r) => ({
+    tenantId: r.tenant_id,
+    functionKey: r.function_key,
+    requests: Number(r.requests),
+    errors: Number(r.errors),
+  }));
+};

@@ -22,7 +22,6 @@
     "start": "node build/index.js",
     "worker": "node build/worker.js",
     "worker:dev": "ts-node src/worker.ts",
-    "provision:tenant": "ts-node src/scripts/provision-tenant.ts",
     "provision:admin": "ts-node src/scripts/provision-admin.ts"
   },
   "keywords": [],

@@ -9,7 +9,7 @@ import { publicApiUrl } from "@/lib/ocr";
  */
 const Page = () => (
   <PageLayout title="API Reference" subtitle="Integrate with the OCR API directly from your own systems.">
-    <div className="max-w-3xl">
+    <div className="w-full">
       <ApiReferenceContent functions={<LiveFunctionCatalog />} host={publicApiUrl()} />
     </div>
   </PageLayout>

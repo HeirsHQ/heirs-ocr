@@ -1,10 +1,10 @@
 "use client";
 
-import { useState } from "react";
 import { Loader } from "lucide-react";
+import { useState } from "react";
 
+import { OtpInput } from "./otp-input";
 import { Button } from "../ui/button";
-import { Input } from "../ui/input";
 import { Field } from "./field";
 
 /**
@@ -52,15 +52,11 @@ export const MfaChallengeForm = ({
         }}
       >
         <Field label="Verification code" htmlFor="mfa-code" error={error}>
-          <Input
-            id="mfa-code"
-            autoFocus
-            autoComplete="one-time-code"
-            placeholder="123456"
+          <OtpInput
             aria-invalid={!!error}
             value={code}
-            onChange={(e) => setCode(e.target.value)}
-            className="font-mono tracking-widest"
+            onChange={(value) => setCode(value)}
+            disabled={pending}
           />
         </Field>
 

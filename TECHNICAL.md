@@ -423,8 +423,8 @@ lives in Redis.
   key; newly minted keys are prefixed `hok_test_` or `hok_live_` for environment
   clarity, while auth still accepts legacy opaque keys. A record carries
   `allowedFunctions`, `rateLimit`, `allowedOrigins`, optional `expiresAt`, and a
-  `disabled` flag. Keys are provisioned/revoked at runtime (CLI, admin console, or
-  tenant portal); expired keys remain listable but cannot authenticate.
+  `disabled` flag. Keys are provisioned/revoked at runtime (admin console or tenant
+  portal); expired keys remain listable but cannot authenticate.
 - **Admin users** (`src/auth/admins.ts`) — platform operators with roles `owner` > `manager` >
   `viewer`, passwords hashed with argon2id, sessions in Redis (`admin-session.ts`). The first
   owner is seeded from `ADMIN_BOOTSTRAP_EMAIL`/`_PASSWORD` at startup (idempotent — never
@@ -543,7 +543,7 @@ cause:
 | `PROVIDER_UNAVAILABLE` (503)                       | Enqueue failed → Redis unreachable, or a provider timed out                      | Check Redis connectivity first. Retryable.                                   |
 | `RATE_LIMITED` / `QUOTA_EXCEEDED` (429)            | Tenant over its window / plan allowance                                          | Expected; raise `--rate` or upgrade the plan if legitimate.                  |
 | `PAYMENT_REQUIRED` (402)                           | Subscription expired/canceled/suspended                                          | Reactivate or add a payment method (admin console).                          |
-| `UNAUTHORIZED` / `FORBIDDEN` (401/403)             | Bad/revoked key, or key/plan not scoped to the function                          | Verify with `provision:tenant list`; re-provision if needed.                 |
+| `UNAUTHORIZED` / `FORBIDDEN` (401/403)             | Bad/revoked key, or key/plan not scoped to the function                          | Check the tenant's keys in the admin console; re-issue if needed.            |
 | `PAGE_LIMIT_EXCEEDED` / `FILE_TOO_LARGE` (422/413) | Input exceeds `maxPages` / size cap                                              | Caller-side; adjust limits only deliberately.                                |
 
 **Redis down** — cache/queue/rate-limit/sessions affected: `PROVIDER_UNAVAILABLE` on enqueue,
@@ -568,18 +568,36 @@ failed job keeps a typed code recoverable via `GET /v1/ocr/jobs/:id`.
   boot (`CREATE TABLE IF NOT EXISTS`, no destructive migrations), so redeploying the prior image
   is safe and loses no durable Postgres data. Re-check that any changed env var is reverted too.
 
-### Tenant management (CLI)
+### Tenant and admin management
+
+Both are console operations, not CLI ones. Tenants and their API keys are managed from
+the **admin console** (Tenants) or by the tenant themselves in the **tenant portal**
+(API Keys); admins are managed from the console's Users page. Creating a key shows the
+raw value **once** — only its sha256 is stored — and every change emits a
+`tenant.provisioned` / `tenant.revoked` audit line attributed to the signed-in admin.
+
+The **first owner** needs no command either: `ensureBootstrapAdmin` seeds it from
+`ADMIN_BOOTSTRAP_EMAIL` / `ADMIN_BOOTSTRAP_PASSWORD` on every boot, and is a no-op once
+any admin row exists.
+
+### Admin lockout recovery
 
 ```
-pnpm provision:tenant create <tenantId> [--rate N] [--functions A,B] [--origins a,b] [--actor who]
-pnpm provision:tenant list
-pnpm provision:tenant revoke <apiKey> [--actor who]
-pnpm provision:admin  create --email a@x.com --role manager   # + list / delete
+pnpm provision:admin create --email a@x.com --password '<pw>' [--role owner|manager|viewer]
+pnpm provision:admin list
+pnpm provision:admin delete <email>
 ```
 
-`create` prints the raw key **once** (only its sha256 is stored). `create`/`revoke` emit a
-`tenant.provisioned` / `tenant.revoked` **audit line** to stdout (the log stream is the audit
-trail). Tag the operator with `--actor`.
+The one case the console cannot cover: a forgotten owner password or a lost MFA device.
+Restarting does not help, because the bootstrap seed only fires when the `admins` table
+is **completely empty** — any row blocks it, including a disabled one. `delete` the
+locked-out account and restart, and the seed runs again.
+
+Runs only from a source checkout: the production image ships `build/` with `--prod`
+dependencies and `ts-node` is a devDependency, so point `DATABASE_URL` at the
+environment you are recovering. `--email` and `--password` are required — this command
+creates an **owner** by default, and a defaulted password here would be a credential in
+version control.
 
 ### Known gaps
 
