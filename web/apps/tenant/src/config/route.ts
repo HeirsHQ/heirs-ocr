@@ -1,6 +1,7 @@
 import {
   BarChart2,
   Bell,
+  BookOpen,
   Box,
   Building2,
   ChartNetwork,
@@ -8,6 +9,7 @@ import {
   DollarSign,
   FileStack,
   HeartPulse,
+  History,
   KeyRound,
   ListChecks,
   Logs,
@@ -57,6 +59,13 @@ export const TENANT_ROUTES: RouteGroup[] = [
       { href: "/logs", label: "Request Logs", icon: Logs },
       { href: "/backup", label: "Backup", icon: DatabaseBackup },
       { href: "/security", label: "Security", icon: ShieldCheck },
+    ],
+  },
+  {
+    name: "developer",
+    routes: [
+      { href: "/developer/api-reference", label: "API Reference", icon: BookOpen },
+      { href: "/developer/changelog", label: "Changelog", icon: History },
     ],
   },
 ];

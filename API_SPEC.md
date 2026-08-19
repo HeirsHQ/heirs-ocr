@@ -251,8 +251,12 @@ When an upload exceeds `ASYNC_SIZE_THRESHOLD_BYTES` or `ASYNC_PAGE_THRESHOLD` pa
 **Response 202 (`POST /v1/ocr/:function`):**
 
 ```json
-{ "requestId": "req_…", "jobId": "job_…", "status": "queued", "statusUrl": "/v1/ocr/jobs/job_…" }
+{ "jobId": "1734", "statusUrl": "/v1/ocr/jobs/1734" }
 ```
+
+The accepted envelope carries only these two fields (`sendAccepted` in
+`src/http/respond.ts`) — there is no `requestId` or `status` on the 202, and the job id is
+the queue's own id rather than a prefixed one. Poll `statusUrl` for the status.
 
 A worker (`node build/worker.js`) runs the identical `runPipeline` off-request. `pii` and
 `restricted` files are **never enqueued** — they always run inline and are held only in memory.
