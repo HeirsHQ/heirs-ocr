@@ -4,6 +4,7 @@ import { ListTodo } from "lucide-react";
 import { useMemo, useState } from "react";
 
 import { useTenantJobs } from "@/hooks/api/use-tenant-jobs";
+import { useJobEvents } from "@/hooks/api/use-job-events";
 import { createJobColumns } from "@/config/columns/jobs";
 import { getErrorMessage } from "@heirs/api-client";
 import { usePagination } from "@heirs/ui";
@@ -22,7 +23,9 @@ const Page = () => {
   const { params, tableProps, reset } = usePagination();
   const [status, setStatus] = useState("");
 
-  const jobs = useTenantJobs(params);
+  // Live transitions arrive over SSE; the query below keeps a slow poll as its floor.
+  const { connected } = useJobEvents();
+  const jobs = useTenantJobs(params, { streaming: connected });
   const columns = useMemo(() => createJobColumns(), []);
 
   // Filtered client-side: the endpoint returns the queue's bounded recent window

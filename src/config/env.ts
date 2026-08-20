@@ -135,6 +135,35 @@ const schema = z
     // May carry credentials (redis://:password@host) — no default; supplied via env.
     REDIS_URL: z.string().min(1, "REDIS_URL is required"),
     VERSION: z.string().default("1.0.0"),
+    /**
+     * Transactional email (src/notification/mail).
+     *
+     * Off by default, and deliberately so: a half-configured mailer that throws on
+     * every send would take down the flows that *notify* about work rather than the
+     * work itself. With this off, senders no-op and log — signups, job completions
+     * and billing events all still succeed. Turn it on once SMTP is real.
+     */
+    MAIL_ENABLED: z.enum(["true", "false"]).default("false"),
+    SMTP_HOST: z.string().optional(),
+    SMTP_PORT: z.coerce.number().int().positive().default(587),
+    SMTP_USER: z.string().optional(),
+    SMTP_PASSWORD: z.string().optional(),
+    /**
+     * Implicit TLS. True is port 465; on 587 leave this false — nodemailer upgrades
+     * that connection with STARTTLS, and forcing `secure` there hangs the handshake.
+     */
+    SMTP_SECURE: z.enum(["true", "false"]).default("false"),
+    /** Envelope sender. Must be a domain the SMTP relay is authorised to send for. */
+    MAIL_FROM_ADDRESS: z.string().default(""),
+    MAIL_FROM_NAME: z.string().default("Heirs Technologies"),
+    /**
+     * Public base URL of the tenant console. Every template links back to it, so it
+     * must be the address a recipient can actually reach — not an internal hostname.
+     */
+    APP_BASE_URL: z.string().default("http://localhost:8080"),
+    /** Landing pages linked from the footer of every email. */
+    DOCS_URL: z.string().default("https://docs.heirstechnologies.com"),
+    SUPPORT_EMAIL: z.string().default("support@heirstechnologies.com"),
   })
   .refine((data) => data.AZURE_OPENAI_ENABLED !== "true" || !!data.AZURE_OPENAI_API_KEY, {
     message: "AZURE_OPENAI_API_KEY is required when AZURE_OPENAI_ENABLED is true",
@@ -147,6 +176,14 @@ const schema = z
   // Fail closed at boot: production must never run with auth or rate limiting
   // switched off. These bypasses exist for local dev only — a fat-fingered env var
   // must not be able to open the API in prod.
+  .refine((data) => data.MAIL_ENABLED !== "true" || !!data.SMTP_HOST, {
+    message: "SMTP_HOST is required when MAIL_ENABLED is true",
+    path: ["SMTP_HOST"],
+  })
+  .refine((data) => data.MAIL_ENABLED !== "true" || !!data.MAIL_FROM_ADDRESS, {
+    message: "MAIL_FROM_ADDRESS is required when MAIL_ENABLED is true",
+    path: ["MAIL_FROM_ADDRESS"],
+  })
   .refine((data) => data.NODE_ENV !== "production" || data.AUTH_ENABLED === "true", {
     message: "AUTH_ENABLED must be 'true' when NODE_ENV is 'production'",
     path: ["AUTH_ENABLED"],

@@ -1,16 +1,468 @@
-<!DOCTYPE html>
-<html lang="en" xmlns="http://www.w3.org/1999/xhtml" xmlns:v="urn:schemas-microsoft-com:vml"
-  xmlns:o="urn:schemas-microsoft-com:office:office">
+<!DOCTYPE html
+  PUBLIC "-//W3C//DTD XHTML 1.0 Transitional//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-transitional.dtd">
+<html xmlns="http://www.w3.org/1999/xhtml" xmlns:v="urn:schemas-microsoft-com:vml"
+  xmlns:o="urn:schemas-microsoft-com:office:office" lang="en">
 
 <head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <script src="https://cdn.jsdelivr.net/npm/@tailwindcss/browser@4"></script>
-  <title>Subscription Successful</title>
+  <meta charset="utf-8" />
+  <meta http-equiv="X-UA-Compatible" content="IE=edge" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <meta name="x-apple-disable-message-reformatting" />
+  <meta name="color-scheme" content="light" />
+  <meta name="supported-color-schemes" content="light" />
+  <title>Payment received &mdash; your Heirs OCR subscription is active</title>
+  <!--[if mso]>
+      <noscript><xml><o:OfficeDocumentSettings>
+        <o:PixelsPerInch>96</o:PixelsPerInch>
+      </o:OfficeDocumentSettings></xml></noscript>
+    <![endif]-->
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700;800&display=swap"
+    rel="stylesheet" />
+  <style type="text/css">
+    @import url("https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700;800&display=swap");
+
+    /* Light only - these surfaces are never inverted by the client */
+    :root {
+      color-scheme: light;
+      supported-color-schemes: light;
+    }
+
+    /* Client resets */
+    body,
+    table,
+    td,
+    a {
+      -webkit-text-size-adjust: 100%;
+      -ms-text-size-adjust: 100%;
+    }
+
+    table,
+    td {
+      mso-table-lspace: 0pt;
+      mso-table-rspace: 0pt;
+      border-collapse: collapse;
+    }
+
+    img {
+      -ms-interpolation-mode: bicubic;
+      border: 0;
+      outline: none;
+      text-decoration: none;
+      display: block;
+    }
+
+    body {
+      margin: 0 !important;
+      padding: 0 !important;
+      width: 100% !important;
+      background-color: #f4f6f9;
+    }
+
+    a {
+      text-decoration: none;
+    }
+
+    /* Prevent iOS/Gmail auto-linking dates, addresses and phone numbers */
+    .no-autolink a,
+    a[x-apple-data-detectors] {
+      color: inherit !important;
+      text-decoration: none !important;
+      font-size: inherit !important;
+      font-family: inherit !important;
+      font-weight: inherit !important;
+      line-height: inherit !important;
+    }
+
+    /* Outlook cannot load webfonts - force the fallback rather than Times */
+    /*[if mso]>
+      * { font-family: 'Segoe UI', Arial, sans-serif !important; }
+    <![endif]*/
+
+    @media screen and (max-width: 620px) {
+      .sm-full {
+        width: 100% !important;
+        max-width: 100% !important;
+      }
+
+      .sm-px {
+        padding-left: 24px !important;
+        padding-right: 24px !important;
+      }
+
+      .sm-py {
+        padding-top: 32px !important;
+        padding-bottom: 32px !important;
+      }
+
+      .sm-h1 {
+        font-size: 26px !important;
+        line-height: 34px !important;
+      }
+
+      .sm-h2 {
+        font-size: 20px !important;
+        line-height: 28px !important;
+      }
+
+      .sm-stack {
+        display: block !important;
+        width: 100% !important;
+        max-width: 100% !important;
+        text-align: left !important;
+      }
+
+      .sm-btn {
+        display: block !important;
+        width: 100% !important;
+        box-sizing: border-box !important;
+        text-align: center !important;
+      }
+
+      .sm-mb {
+        margin-bottom: 10px !important;
+      }
+    }
+  </style>
 </head>
 
-<body style="background: #fff; color: #000;">
-  <table></table>
+<body style="margin: 0; padding: 0; width: 100%; background-color: #f4f6f9;
+  font-family: 'Manrope', 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;">
+  <!-- Preheader: inbox preview text, hidden in the body -->
+  <div style="display: none; max-height: 0; overflow: hidden; mso-hide: all; font-size: 1px;
+    line-height: 1px; color: #f4f6f9;">
+    Receipt for {{Amount}}. {{PlanName}} is active until {{PeriodEnd}}.
+    &#8199;&#847;&#8199;&#847;&#8199;&#847;&#8199;&#847;&#8199;&#847;&#8199;&#847;&#8199;&#847;&#8199;&#847;&#8199;&#847;&#8199;&#847;&#8199;&#847;&#8199;&#847;
+  </div>
+
+  <table role="presentation" cellpadding="0" cellspacing="0" border="0" width="100%" style="background-color: #f4f6f9">
+    <tr>
+      <td align="center" style="padding: 32px 12px">
+        <!--[if mso]><table role="presentation" cellpadding="0" cellspacing="0" border="0" width="600"><tr><td><![endif]-->
+        <table role="presentation" cellpadding="0" cellspacing="0" border="0" width="600" class="sm-full" style="width: 600px; max-width: 600px; background-color: #ffffff; border: 1px solid #e3e8ef;
+          border-radius: 6px;">
+
+          <tr>
+            <td align="center" bgcolor="#eef1f5" class="sm-px sm-py"
+              style="background-color: #eef1f5; padding: 44px 48px 40px; border-radius: 6px 6px 0 0;">
+              <table role="presentation" cellpadding="0" cellspacing="0" border="0">
+                <tr>
+                  <td align="center" style="padding-bottom: 24px">
+                    <div style="font-family: 'Manrope', 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; font-size: 26px; line-height: 26px; font-weight: 800;
+                      letter-spacing: 4px; color: #c60000;">HEIRS</div>
+                    <div style="font-family: 'Manrope', 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; font-size: 10px; line-height: 16px; font-weight: 700;
+                      letter-spacing: 3.5px; text-transform: uppercase; color: #78808f; padding-top: 6px;">
+                      OCR Service</div>
+                  </td>
+                </tr>
+                <tr>
+                  <td align="center" style="padding-bottom: 18px">
+                    <table role="presentation" cellpadding="0" cellspacing="0" border="0">
+                      <tr>
+                        <td style="border: 1px solid #cdd5e0; border-radius: 3px; padding: 6px 14px;
+                          font-family: 'Manrope', 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; font-size: 11px; font-weight: 700; letter-spacing: 1px;
+                          text-transform: uppercase; color: #78808f;">Payment received</td>
+                      </tr>
+                    </table>
+                  </td>
+                </tr>
+                <tr>
+                  <td align="center" class="sm-h1" style="font-family: 'Manrope', 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; font-size: 32px; line-height: 40px;
+                    font-weight: 800; letter-spacing: -0.5px; color: #2b3440; padding-bottom: 12px;">You&rsquo;re
+                    subscribed to {{PlanName}}</td>
+                </tr>
+                <tr>
+                  <td align="center" style="font-family: 'Manrope', 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; font-size: 15px; line-height: 24px;
+                    font-weight: 400; color: #5a6069; max-width: 430px;">We received your payment and full entitlements
+                    are live on your API keys right now.</td>
+                </tr>
+              </table>
+            </td>
+          </tr>
+          <tr>
+            <td bgcolor="#c60000" height="3"
+              style="background-color: #c60000; height: 3px; line-height: 3px; font-size: 0">&nbsp;</td>
+          </tr>
+
+          <tr>
+            <td class="sm-px" style="padding: 36px 48px 0; font-family: 'Manrope', 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; font-size: 15px;
+              line-height: 25px; color: #5a6069;">Thanks, <strong
+                style="color: #2b3440; font-weight: 700">{{FirstName}}</strong>. Here is your receipt for <strong
+                style="color: #2b3440; font-weight: 700">{{TenantName}}</strong> &mdash; keep it for your records.</td>
+          </tr>
+
+          <tr>
+            <td class="sm-px" style="padding: 24px 48px 0">
+              <table role="presentation" cellpadding="0" cellspacing="0" border="0" width="100%"
+                style="width: 100%; background-color: #f7f9fc; border: 1px solid #e3e8ef; border-radius: 4px;">
+                <tr>
+                  <td class="no-autolink" style="padding: 24px">
+                    <div style="font-family: 'Manrope', 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; font-size: 11px; font-weight: 700; letter-spacing: 1px;
+                      text-transform: uppercase; color: #78808f; padding-bottom: 16px;"><span
+                        style="display:inline-block;width:14px;height:14px;vertical-align:middle;line-height:0"><img
+                          src="https://converge-email-templates.s3.eu-west-1.amazonaws.com/remixicon/money-dollar-circle-line.png"
+                          width="14" height="14" alt="" style="display:block;border:0"></span>&nbsp; Receipt</div>
+                    <table role="presentation" cellpadding="0" cellspacing="0" border="0" width="100%"
+                      style="width: 100%">
+                      <tr>
+                        <td class="sm-stack" width="190" valign="top" style="width: 190px; 
+                          padding: 0 16px 12px 0; font-family: 'Manrope', 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; font-size: 12px; font-weight: 500;
+                          line-height: 20px; color: #78808f;">Invoice</td>
+                        <td class="sm-stack" valign="top" style=" padding: 0 0 12px;
+                          font-family: 'Courier New', Consolas, monospace; font-size: 13px; font-weight: 700; line-height: 21px; color: #2b3440;
+                          word-break: break-word;">{{InvoiceNumber}}</td>
+                      </tr>
+
+                      <tr>
+                        <td class="sm-stack" width="190" valign="top" style="width: 190px; border-top: 1px solid #eef1f5;
+                          padding: 12px 16px 12px 0; font-family: 'Manrope', 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; font-size: 12px; font-weight: 500;
+                          line-height: 20px; color: #78808f;">Amount paid</td>
+                        <td class="sm-stack" valign="top" style="border-top: 1px solid #eef1f5; padding: 12px 0 12px;
+                          font-family: 'Manrope', 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; font-size: 14px; font-weight: 700; line-height: 21px; color: #2b3440;
+                          word-break: break-word;">{{Amount}}</td>
+                      </tr>
+
+                      <tr>
+                        <td class="sm-stack" width="190" valign="top" style="width: 190px; border-top: 1px solid #eef1f5;
+                          padding: 12px 16px 12px 0; font-family: 'Manrope', 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; font-size: 12px; font-weight: 500;
+                          line-height: 20px; color: #78808f;">Paid on</td>
+                        <td class="sm-stack" valign="top" style="border-top: 1px solid #eef1f5; padding: 12px 0 12px;
+                          font-family: 'Manrope', 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; font-size: 14px; font-weight: 700; line-height: 21px; color: #2b3440;
+                          word-break: break-word;">{{PaidAt}}</td>
+                      </tr>
+
+                      <tr>
+                        <td class="sm-stack" width="190" valign="top" style="width: 190px; border-top: 1px solid #eef1f5;
+                          padding: 12px 16px 12px 0; font-family: 'Manrope', 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; font-size: 12px; font-weight: 500;
+                          line-height: 20px; color: #78808f;">Payment method</td>
+                        <td class="sm-stack" valign="top" style="border-top: 1px solid #eef1f5; padding: 12px 0 12px;
+                          font-family: 'Manrope', 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; font-size: 14px; font-weight: 700; line-height: 21px; color: #2b3440;
+                          word-break: break-word;">{{PaymentMethod}}</td>
+                      </tr>
+
+                      <tr>
+                        <td class="sm-stack" width="190" valign="top" style="width: 190px; border-top: 1px solid #eef1f5;
+                          padding: 12px 16px 12px 0; font-family: 'Manrope', 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; font-size: 12px; font-weight: 500;
+                          line-height: 20px; color: #78808f;">Billing period</td>
+                        <td class="sm-stack" valign="top" style="border-top: 1px solid #eef1f5; padding: 12px 0 12px;
+                          font-family: 'Manrope', 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; font-size: 14px; font-weight: 700; line-height: 21px; color: #2b3440;
+                          word-break: break-word;">{{PeriodStart}} &ndash; {{PeriodEnd}}</td>
+                      </tr>
+
+                      <tr>
+                        <td class="sm-stack" width="190" valign="top" style="width: 190px; border-top: 1px solid #eef1f5;
+                          padding: 12px 16px 12px 0; font-family: 'Manrope', 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; font-size: 12px; font-weight: 500;
+                          line-height: 20px; color: #78808f;">Next charge</td>
+                        <td class="sm-stack" valign="top" style="border-top: 1px solid #eef1f5; padding: 12px 0 12px;
+                          font-family: 'Manrope', 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; font-size: 14px; font-weight: 700; line-height: 21px; color: #2b3440;
+                          word-break: break-word;">{{NextBillingDate}}</td>
+                      </tr>
+
+                    </table>
+                  </td>
+                </tr>
+              </table>
+            </td>
+          </tr>
+
+          <tr>
+            <td align="center" class="sm-px" style="padding: 32px 48px 0">
+              <table role="presentation" cellpadding="0" cellspacing="0" border="0" align="center">
+                <tr>
+                  <td bgcolor="#c60000" align="center"
+                    style="background-color: #c60000; border-radius: 4px; mso-padding-alt: 16px 40px;">
+                    <a href="{{InvoiceUrl}}" class="sm-btn" style="display: inline-block; padding: 16px 40px;
+                      font-family: 'Manrope', 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; font-size: 15px; font-weight: 700; color: #ffffff;
+                      border-radius: 4px;">View invoice</a>
+                  </td>
+                </tr>
+              </table>
+              <div style="padding-top: 12px; font-family: 'Manrope', 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; font-size: 12px; line-height: 18px;
+                color: #78808f;">A PDF copy is attached to your billing history.</div>
+            </td>
+          </tr>
+
+          <tr>
+            <td class="sm-px" style="padding: 44px 48px 0">
+              <div class="sm-h2" style="font-family: 'Manrope', 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; font-size: 21px; line-height: 29px;
+                font-weight: 800; letter-spacing: -0.3px; color: #2b3440; padding-bottom: 6px;">What {{PlanName}}
+                unlocks</div>
+              <div style="font-family: 'Manrope', 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; font-size: 14px; line-height: 22px; color: #78808f;
+                padding-bottom: 8px;">Live on every API key in this workspace.</div>
+            </td>
+          </tr>
+
+          <tr>
+            <td class="sm-px" style="padding: 12px 48px 0">
+              <table role="presentation" cellpadding="0" cellspacing="0" border="0" width="100%"
+                style="width: 100%; background-color: #f7f9fc; border: 1px solid #e3e8ef; border-radius: 4px;">
+                <tr>
+                  <td class="no-autolink" style="padding: 24px">
+                    <div style="font-family: 'Manrope', 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; font-size: 11px; font-weight: 700; letter-spacing: 1px;
+                      text-transform: uppercase; color: #78808f; padding-bottom: 16px;"><span
+                        style="display:inline-block;width:14px;height:14px;vertical-align:middle;line-height:0"><img
+                          src="https://converge-email-templates.s3.eu-west-1.amazonaws.com/remixicon/shield-check-line.png"
+                          width="14" height="14" alt="" style="display:block;border:0"></span>&nbsp; Entitlements</div>
+                    <table role="presentation" cellpadding="0" cellspacing="0" border="0" width="100%"
+                      style="width: 100%">
+                      <tr>
+                        <td class="sm-stack" width="190" valign="top" style="width: 190px; 
+                          padding: 0 16px 12px 0; font-family: 'Manrope', 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; font-size: 12px; font-weight: 500;
+                          line-height: 20px; color: #78808f;">Documents included</td>
+                        <td class="sm-stack" valign="top" style=" padding: 0 0 12px;
+                          font-family: 'Manrope', 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; font-size: 14px; font-weight: 700; line-height: 21px; color: #2b3440;
+                          word-break: break-word;">{{DocumentsIncluded}} per period</td>
+                      </tr>
+
+                      <tr>
+                        <td class="sm-stack" width="190" valign="top" style="width: 190px; border-top: 1px solid #eef1f5;
+                          padding: 12px 16px 12px 0; font-family: 'Manrope', 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; font-size: 12px; font-weight: 500;
+                          line-height: 20px; color: #78808f;">Overage</td>
+                        <td class="sm-stack" valign="top" style="border-top: 1px solid #eef1f5; padding: 12px 0 12px;
+                          font-family: 'Manrope', 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; font-size: 14px; font-weight: 700; line-height: 21px; color: #2b3440;
+                          word-break: break-word;">{{OverageRate}} per document</td>
+                      </tr>
+
+                      <tr>
+                        <td class="sm-stack" width="190" valign="top" style="width: 190px; border-top: 1px solid #eef1f5;
+                          padding: 12px 16px 12px 0; font-family: 'Manrope', 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; font-size: 12px; font-weight: 500;
+                          line-height: 20px; color: #78808f;">Rate limit</td>
+                        <td class="sm-stack" valign="top" style="border-top: 1px solid #eef1f5; padding: 12px 0 12px;
+                          font-family: 'Manrope', 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; font-size: 14px; font-weight: 700; line-height: 21px; color: #2b3440;
+                          word-break: break-word;">{{RateLimitPerMinute}} requests / minute</td>
+                      </tr>
+
+                      <tr>
+                        <td class="sm-stack" width="190" valign="top" style="width: 190px; border-top: 1px solid #eef1f5;
+                          padding: 12px 16px 12px 0; font-family: 'Manrope', 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; font-size: 12px; font-weight: 500;
+                          line-height: 20px; color: #78808f;">Max pages per document</td>
+                        <td class="sm-stack" valign="top" style="border-top: 1px solid #eef1f5; padding: 12px 0 12px;
+                          font-family: 'Manrope', 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; font-size: 14px; font-weight: 700; line-height: 21px; color: #2b3440;
+                          word-break: break-word;">{{MaxPagesPerDocument}}</td>
+                      </tr>
+
+                      <tr>
+                        <td class="sm-stack" width="190" valign="top" style="width: 190px; border-top: 1px solid #eef1f5;
+                          padding: 12px 16px 12px 0; font-family: 'Manrope', 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; font-size: 12px; font-weight: 500;
+                          line-height: 20px; color: #78808f;">Result retention</td>
+                        <td class="sm-stack" valign="top" style="border-top: 1px solid #eef1f5; padding: 12px 0 12px;
+                          font-family: 'Manrope', 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; font-size: 14px; font-weight: 700; line-height: 21px; color: #2b3440;
+                          word-break: break-word;">{{DataRetentionDays}} days</td>
+                      </tr>
+
+                      <tr>
+                        <td class="sm-stack" width="190" valign="top" style="width: 190px; border-top: 1px solid #eef1f5;
+                          padding: 12px 16px 12px 0; font-family: 'Manrope', 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; font-size: 12px; font-weight: 500;
+                          line-height: 20px; color: #78808f;">Features</td>
+                        <td class="sm-stack" valign="top" style="border-top: 1px solid #eef1f5; padding: 12px 0 12px;
+                          font-family: 'Manrope', 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; font-size: 14px; font-weight: 700; line-height: 21px; color: #2b3440;
+                          word-break: break-word;">{{PlanFeatures}}</td>
+                      </tr>
+
+                    </table>
+                  </td>
+                </tr>
+              </table>
+            </td>
+          </tr>
+
+          <tr>
+            <td class="sm-px" style="padding: 24px 48px 0">
+              <table role="presentation" cellpadding="0" cellspacing="0" border="0" width="100%"
+                style="width: 100%; background-color: #ecf7f0; border-radius: 4px;">
+                <tr>
+                  <td bgcolor="#1a7f42" width="3"
+                    style="background-color: #1a7f42; width: 3px; font-size: 0; line-height: 0;">&nbsp;</td>
+                  <td style="padding: 14px 18px; font-family: 'Manrope', 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; font-size: 13px; line-height: 21px;
+                    color: #175c33;"><span
+                      style="display:inline-block;width:15px;height:15px;vertical-align:middle;line-height:0"><img
+                        src="https://converge-email-templates.s3.eu-west-1.amazonaws.com/remixicon/check-double-line.png"
+                        width="15" height="15" alt="" style="display:block;border:0"></span> <strong
+                      style="font-weight: 700">Nothing to redeploy.</strong> Your existing API keys picked up the new
+                    entitlements immediately &mdash; no key rotation, no config change.</td>
+                </tr>
+              </table>
+            </td>
+          </tr>
+
+          <tr>
+            <td class="sm-px" style="padding: 32px 48px 0">
+              <table role="presentation" cellpadding="0" cellspacing="0" border="0" width="100%"
+                style="width: 100%; background-color: #eef1f5; border: 1px solid #e3e8ef; border-radius: 4px;">
+                <tr>
+                  <td style="padding: 32px">
+                    <div style="font-family: 'Manrope', 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; font-size: 11px; font-weight: 700; letter-spacing: 1px;
+                      text-transform: uppercase; color: #78808f; padding-bottom: 10px;">Billing admin</div>
+                    <div class="sm-h2" style="font-family: 'Manrope', 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; font-size: 21px; line-height: 29px;
+                      font-weight: 800; letter-spacing: -0.3px; color: #2b3440; padding-bottom: 8px;">Invoices, tax IDs
+                      and billing contacts</div>
+                    <div style="font-family: 'Manrope', 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; font-size: 14px; line-height: 22px; color: #5a6069;
+                      padding-bottom: 22px;">Add a VAT or TIN number, change the billing entity on future invoices, or
+                      add a finance contact who should receive them.</div>
+                    <table role="presentation" cellpadding="0" cellspacing="0" border="0">
+                      <tr>
+                        <td align="center" bgcolor="#2b3440"
+                          style="background-color: #2b3440; border-radius: 4px; mso-padding-alt: 13px 28px;">
+                          <a href="{{BillingUrl}}" class="sm-btn" style="display: inline-block; padding: 13px 28px;
+                            font-family: 'Manrope', 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; font-size: 14px; font-weight: 700; color: #ffffff;
+                            border-radius: 4px;">Manage billing details</a>
+                        </td>
+                      </tr>
+                    </table>
+                  </td>
+                </tr>
+              </table>
+            </td>
+          </tr>
+
+          <tr>
+            <td style="height: 44px; line-height: 44px; font-size: 0">&nbsp;</td>
+          </tr>
+          <tr>
+            <td align="center" bgcolor="#c60000" class="sm-px sm-py"
+              style="background-color: #c60000; padding: 36px 48px 34px; border-radius: 0 0 6px 6px;">
+              <div style="font-family: 'Manrope', 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; font-size: 15px; font-weight: 700; color: #ffffff;
+                padding-bottom: 16px;">Everything you need, one link away</div>
+              <table role="presentation" cellpadding="0" cellspacing="0" border="0" align="center">
+                <tr>
+                  <td class="sm-stack" style="padding: 0 5px">
+                    <a href="{{DashboardUrl}}" class="sm-btn sm-mb" style="display: inline-block; padding: 11px 22px;
+                      border: 1px solid #ffffff; border-radius: 4px; font-family: 'Manrope', 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; font-size: 14px;
+                      font-weight: 700; color: #ffffff;">Dashboard</a>
+                  </td>
+                  <td class="sm-stack" style="padding: 0 5px">
+                    <a href="{{DocsUrl}}" class="sm-btn" style="display: inline-block; padding: 11px 22px;
+                      border: 1px solid #ffffff; border-radius: 4px; font-family: 'Manrope', 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; font-size: 14px;
+                      font-weight: 700; color: #ffffff;">API reference</a>
+                  </td>
+                </tr>
+              </table>
+              <div style="padding-top: 24px; font-family: 'Manrope', 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; font-size: 13px; line-height: 21px;
+                color: #ffffff;">Questions?
+                <a href="mailto:{{SupportEmail}}"
+                  style="color: #ffffff; font-weight: 800; text-decoration: underline">{{SupportEmail}}</a>
+              </div>
+              <div style="padding-top: 18px; font-family: 'Manrope', 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; font-size: 11px; line-height: 19px;
+                color: #ffffff;">You&rsquo;re receiving this because you administer billing for the {{TenantName}}
+                workspace.<br />
+                Heirs OCR is operated by Heirs Technologies.<br />
+                &copy; {{Year}} Heirs Technologies. All rights reserved. &middot;
+                <a href="{{PreferencesUrl}}" style="color: #ffffff; text-decoration: underline">Email preferences</a>
+              </div>
+            </td>
+          </tr>
+
+        </table>
+        <!--[if mso]></td></tr></table><![endif]-->
+
+        <div style="padding-top: 18px; font-family: 'Manrope', 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+          font-size: 11px; color: #78808f;">
+          Heirs Technologies &middot; {{TenantName}}
+        </div>
+      </td>
+    </tr>
+  </table>
 </body>
 
 </html>

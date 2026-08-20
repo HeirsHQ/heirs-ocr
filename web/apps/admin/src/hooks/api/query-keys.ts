@@ -49,6 +49,7 @@ export const adminKeys = {
   health: [...root, "health"] as const,
   queue: [...root, "queue"] as const,
   metrics: [...root, "metrics"] as const,
+  metricsTimeseries: (hours: number) => [...root, "metrics", "timeseries", hours] as const,
   usage: [...root, "usage"] as const,
   usageList: (params?: unknown) => [...root, "usage", "list", params] as const,
   usageByFunctionList: (params?: unknown) => [...root, "usage", "by-function", params] as const,

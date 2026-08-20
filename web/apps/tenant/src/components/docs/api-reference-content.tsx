@@ -1,10 +1,10 @@
 "use client";
 
-import React, { useState } from "react";
+import React, { useMemo, useState } from "react";
 
 import { CodeBlock } from "@/components/shared/code-block";
 import { Prose, Section } from "./primitives";
-import { CODE_BLOCKS } from "./code-blocks";
+import { CODE_BLOCKS, QUICK_STARTS } from "./code-blocks";
 import { cn, TabPanel } from "@heirs/ui";
 
 /**
@@ -20,11 +20,6 @@ import { cn, TabPanel } from "@heirs/ui";
  * session-scoped endpoint. It is therefore a slot rather than a branch here — this
  * module has no opinion about who is reading it.
  */
-
-const quickstart = (host: string) => `curl -X POST ${host}/v1/ocr/TEXT_EXTRACTION \\
-  -H "Authorization: Bearer $HEIRS_API_KEY" \\
-  -F "file=@invoice.pdf" \\
-  -F 'args={"format":"markdown"}'`;
 
 const SUCCESS = `{
   "requestId": "req_01J...",
@@ -94,6 +89,8 @@ interface Props {
 
 export const ApiReferenceContent = ({ functions, host }: Props) => {
   const [selected, setSelected] = useState(LANGUAGES[0].value);
+  // Rebuilt only when the deployment's API host changes, not on every tab click.
+  const quickStarts = useMemo(() => QUICK_STARTS(host), [host]);
 
   return (
     <div className="space-y-10">
@@ -111,7 +108,25 @@ export const ApiReferenceContent = ({ functions, host }: Props) => {
           Send the document in the <code className="font-mono text-xs">file</code> field and any options as a JSON
           string in <code className="font-mono text-xs">args</code>. Exactly one file per request.
         </Prose>
-        <CodeBlock language="bash" code={quickstart(host)} />
+        <div className="flex items-center p-1 bg-muted rounded-md w-fit">
+          {LANGUAGES.map((lang) => (
+            <button
+              className={cn(
+                "text-sm px-3 py-1 rounded-md",
+                selected === lang.value ? "bg-primary text-white" : "text-muted-foreground",
+              )}
+              key={lang.value}
+              onClick={() => setSelected(lang.value)}
+            >
+              {lang.label}
+            </button>
+          ))}
+        </div>
+        {LANGUAGES.map((lang) => (
+          <TabPanel key={lang.value} selected={selected} value={lang.value}>
+            <CodeBlock language={selected} code={quickStarts[selected]} />
+          </TabPanel>
+        ))}
         <Prose>
           The file type is determined from the content, not the filename or the declared MIME type — a{" "}
           <code className="font-mono text-xs">.pdf</code> that is really a JPEG is processed as an image.

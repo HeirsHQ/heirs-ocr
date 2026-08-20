@@ -5,6 +5,7 @@ import { initTracing, shutdownTracing } from "./observability/otel";
 import { closeDb, ensureSchema } from "./db";
 import { closeRedis } from "./redis";
 import { startBackgroundWorkers, waitForStores } from "./boot";
+import { verify as verifyMailer } from "./notification/mail";
 import { ensureBootstrapAdmin } from "./auth/admins";
 import { seedPlans } from "./billing/plan-store";
 import { logger } from "./observability/logger";
@@ -60,6 +61,13 @@ const boot = async (): Promise<void> => {
       err: err instanceof Error ? err.message : String(err),
     });
   }
+
+  // Checks the SMTP relay once at boot so a bad credential or host surfaces as a
+  // startup log line instead of as notifications that silently never arrive.
+  // Deliberately not awaited: email is never a hard dependency of serving traffic,
+  // and a relay that hangs the TCP handshake must not hold the port closed.
+  // `verifyMailer` logs its own outcome and never rejects.
+  void verifyMailer();
 
   // Unless a dedicated worker process is deployed, this process runs the background
   // work too — otherwise a single-container deploy silently never processes queued

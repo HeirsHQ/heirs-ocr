@@ -35,7 +35,7 @@ import { createTenantUser, listTenantUsers } from "../../auth/tenant-users";
 import { recentLogs, type LogLevel } from "../../observability/log-buffer";
 import { getMetricsSummary } from "../../observability/metrics";
 import { pageParams, paginate, paginatedFrom } from "../pagination";
-import { getTenantFunctionUsage } from "../../observability/request-log";
+import { getRequestTimeseries, getTenantFunctionUsage } from "../../observability/request-log";
 import { getAllTenantUsage } from "../../observability/usage";
 import { parsePlanInput } from "../../billing/plan-schema";
 import { listFunctions } from "../../functions/registry";
@@ -1090,6 +1090,21 @@ adminApiRouter.get(
   requireMinRole("viewer"),
   handler(async (_req, res) => {
     res.json(await getMetricsSummary());
+  }),
+);
+
+// Request volume, error rate and latency bucketed over time — the only endpoint with
+// a time dimension. `hours` is clamped rather than rejected: this drives a chart whose
+// range control is a fixed set of presets, so an out-of-range value is a bug in the
+// caller, not something an operator should have to see an error page for.
+adminApiRouter.get(
+  "/api/metrics/timeseries",
+  adminAuth,
+  requireMinRole("viewer"),
+  handler(async (req, res) => {
+    const requested = Number(req.query.hours);
+    const hours = Number.isFinite(requested) ? Math.min(Math.max(Math.trunc(requested), 1), 720) : 24;
+    res.json(await getRequestTimeseries(hours));
   }),
 );
 

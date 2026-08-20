@@ -1,16 +1,502 @@
-<!DOCTYPE html>
-<html lang="en" xmlns="http://www.w3.org/1999/xhtml" xmlns:v="urn:schemas-microsoft-com:vml"
-  xmlns:o="urn:schemas-microsoft-com:office:office">
+<!DOCTYPE html
+  PUBLIC "-//W3C//DTD XHTML 1.0 Transitional//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-transitional.dtd">
+<html xmlns="http://www.w3.org/1999/xhtml" xmlns:v="urn:schemas-microsoft-com:vml"
+  xmlns:o="urn:schemas-microsoft-com:office:office" lang="en">
 
 <head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <script src="https://cdn.jsdelivr.net/npm/@tailwindcss/browser@4"></script>
+  <meta charset="utf-8" />
+  <meta http-equiv="X-UA-Compatible" content="IE=edge" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <meta name="x-apple-disable-message-reformatting" />
+  <meta name="color-scheme" content="light" />
+  <meta name="supported-color-schemes" content="light" />
   <title>Welcome to Heirs OCR</title>
+  <!--[if mso]>
+      <noscript><xml><o:OfficeDocumentSettings>
+        <o:PixelsPerInch>96</o:PixelsPerInch>
+      </o:OfficeDocumentSettings></xml></noscript>
+    <![endif]-->
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700;800&display=swap"
+    rel="stylesheet" />
+  <style type="text/css">
+    @import url("https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700;800&display=swap");
+
+    /* Light only - these surfaces are never inverted by the client */
+    :root {
+      color-scheme: light;
+      supported-color-schemes: light;
+    }
+
+    /* Client resets */
+    body,
+    table,
+    td,
+    a {
+      -webkit-text-size-adjust: 100%;
+      -ms-text-size-adjust: 100%;
+    }
+
+    table,
+    td {
+      mso-table-lspace: 0pt;
+      mso-table-rspace: 0pt;
+      border-collapse: collapse;
+    }
+
+    img {
+      -ms-interpolation-mode: bicubic;
+      border: 0;
+      outline: none;
+      text-decoration: none;
+      display: block;
+    }
+
+    body {
+      margin: 0 !important;
+      padding: 0 !important;
+      width: 100% !important;
+      background-color: #f4f6f9;
+    }
+
+    a {
+      text-decoration: none;
+    }
+
+    /* Prevent iOS/Gmail auto-linking dates, addresses and phone numbers */
+    .no-autolink a,
+    a[x-apple-data-detectors] {
+      color: inherit !important;
+      text-decoration: none !important;
+      font-size: inherit !important;
+      font-family: inherit !important;
+      font-weight: inherit !important;
+      line-height: inherit !important;
+    }
+
+    /* Outlook cannot load webfonts - force the fallback rather than Times */
+    /*[if mso]>
+      * { font-family: 'Segoe UI', Arial, sans-serif !important; }
+    <![endif]*/
+
+    @media screen and (max-width: 620px) {
+      .sm-full {
+        width: 100% !important;
+        max-width: 100% !important;
+      }
+
+      .sm-px {
+        padding-left: 24px !important;
+        padding-right: 24px !important;
+      }
+
+      .sm-py {
+        padding-top: 32px !important;
+        padding-bottom: 32px !important;
+      }
+
+      .sm-h1 {
+        font-size: 26px !important;
+        line-height: 34px !important;
+      }
+
+      .sm-h2 {
+        font-size: 20px !important;
+        line-height: 28px !important;
+      }
+
+      .sm-stack {
+        display: block !important;
+        width: 100% !important;
+        max-width: 100% !important;
+        text-align: left !important;
+      }
+
+      .sm-btn {
+        display: block !important;
+        width: 100% !important;
+        box-sizing: border-box !important;
+        text-align: center !important;
+      }
+
+      .sm-mb {
+        margin-bottom: 10px !important;
+      }
+    }
+  </style>
 </head>
 
-<body style="background: #fff; color: #000;">
-  <table></table>
+<body style="margin: 0; padding: 0; width: 100%; background-color: #f4f6f9;
+  font-family: 'Manrope', 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;">
+  <!-- Preheader: inbox preview text, hidden in the body -->
+  <div style="display: none; max-height: 0; overflow: hidden; mso-hide: all; font-size: 1px;
+    line-height: 1px; color: #f4f6f9;">
+    Your workspace is ready &mdash; create an API key and send your first document.
+    &#8199;&#847;&#8199;&#847;&#8199;&#847;&#8199;&#847;&#8199;&#847;&#8199;&#847;&#8199;&#847;&#8199;&#847;&#8199;&#847;&#8199;&#847;&#8199;&#847;&#8199;&#847;
+  </div>
+
+  <table role="presentation" cellpadding="0" cellspacing="0" border="0" width="100%" style="background-color: #f4f6f9">
+    <tr>
+      <td align="center" style="padding: 32px 12px">
+        <!--[if mso]><table role="presentation" cellpadding="0" cellspacing="0" border="0" width="600"><tr><td><![endif]-->
+        <table role="presentation" cellpadding="0" cellspacing="0" border="0" width="600" class="sm-full" style="width: 600px; max-width: 600px; background-color: #ffffff; border: 1px solid #e3e8ef;
+          border-radius: 6px;">
+
+          <tr>
+            <td align="center" bgcolor="#eef1f5" class="sm-px sm-py"
+              style="background-color: #eef1f5; padding: 44px 48px 40px; border-radius: 6px 6px 0 0;">
+              <table role="presentation" cellpadding="0" cellspacing="0" border="0">
+                <tr>
+                  <td align="center" style="padding-bottom: 24px">
+                    <div style="font-family: 'Manrope', 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; font-size: 26px; line-height: 26px; font-weight: 800;
+                      letter-spacing: 4px; color: #c60000;">HEIRS</div>
+                    <div style="font-family: 'Manrope', 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; font-size: 10px; line-height: 16px; font-weight: 700;
+                      letter-spacing: 3.5px; text-transform: uppercase; color: #78808f; padding-top: 6px;">
+                      OCR Service</div>
+                  </td>
+                </tr>
+                <tr>
+                  <td align="center" style="padding-bottom: 18px">
+                    <table role="presentation" cellpadding="0" cellspacing="0" border="0">
+                      <tr>
+                        <td style="border: 1px solid #cdd5e0; border-radius: 3px; padding: 6px 14px;
+                          font-family: 'Manrope', 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; font-size: 11px; font-weight: 700; letter-spacing: 1px;
+                          text-transform: uppercase; color: #78808f;">Workspace ready</td>
+                      </tr>
+                    </table>
+                  </td>
+                </tr>
+                <tr>
+                  <td align="center" class="sm-h1" style="font-family: 'Manrope', 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; font-size: 32px; line-height: 40px;
+                    font-weight: 800; letter-spacing: -0.5px; color: #2b3440; padding-bottom: 12px;">Welcome to Heirs
+                    Technologies, {{FirstName}}</td>
+                </tr>
+                <tr>
+                  <td align="center" style="font-family: 'Manrope', 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; font-size: 15px; line-height: 24px;
+                    font-weight: 400; color: #5a6069; max-width: 430px;">Your workspace is live. Documents in,
+                    structured data out &mdash; here is everything you need to send the first one.</td>
+                </tr>
+              </table>
+            </td>
+          </tr>
+          <tr>
+            <td bgcolor="#c60000" height="3"
+              style="background-color: #c60000; height: 3px; line-height: 3px; font-size: 0">&nbsp;</td>
+          </tr>
+
+          <tr>
+            <td class="sm-px" style="padding: 36px 48px 0; font-family: 'Manrope', 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; font-size: 15px;
+              line-height: 25px; color: #5a6069;">Hi <strong
+                style="color: #2b3440; font-weight: 700">{{FirstName}}</strong>, the <strong
+                style="color: #2b3440; font-weight: 700">{{TenantName}}</strong> workspace is provisioned on the
+              {{PlanName}} plan and ready for traffic.</td>
+          </tr>
+
+          <tr>
+            <td class="sm-px" style="padding: 24px 48px 0">
+              <table role="presentation" cellpadding="0" cellspacing="0" border="0" width="100%"
+                style="width: 100%; background-color: #f7f9fc; border: 1px solid #e3e8ef; border-radius: 4px;">
+                <tr>
+                  <td class="no-autolink" style="padding: 24px">
+                    <div style="font-family: 'Manrope', 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; font-size: 11px; font-weight: 700; letter-spacing: 1px;
+                      text-transform: uppercase; color: #78808f; padding-bottom: 16px;"><span
+                        style="display:inline-block;width:14px;height:14px;vertical-align:middle;line-height:0"><img
+                          src="https://converge-email-templates.s3.eu-west-1.amazonaws.com/remixicon/shield-user-line.png"
+                          width="14" height="14" alt="" style="display:block;border:0"></span>&nbsp; Your workspace
+                    </div>
+                    <table role="presentation" cellpadding="0" cellspacing="0" border="0" width="100%"
+                      style="width: 100%">
+                      <tr>
+                        <td class="sm-stack" width="190" valign="top" style="width: 190px; 
+                          padding: 0 16px 12px 0; font-family: 'Manrope', 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; font-size: 12px; font-weight: 500;
+                          line-height: 20px; color: #78808f;">Workspace</td>
+                        <td class="sm-stack" valign="top" style=" padding: 0 0 12px;
+                          font-family: 'Manrope', 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; font-size: 14px; font-weight: 700; line-height: 21px; color: #2b3440;
+                          word-break: break-word;">{{TenantName}}</td>
+                      </tr>
+
+                      <tr>
+                        <td class="sm-stack" width="190" valign="top" style="width: 190px; border-top: 1px solid #eef1f5;
+                          padding: 12px 16px 12px 0; font-family: 'Manrope', 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; font-size: 12px; font-weight: 500;
+                          line-height: 20px; color: #78808f;">Plan</td>
+                        <td class="sm-stack" valign="top" style="border-top: 1px solid #eef1f5; padding: 12px 0 12px;
+                          font-family: 'Manrope', 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; font-size: 14px; font-weight: 700; line-height: 21px; color: #2b3440;
+                          word-break: break-word;">{{PlanName}}</td>
+                      </tr>
+
+                      <tr>
+                        <td class="sm-stack" width="190" valign="top" style="width: 190px; border-top: 1px solid #eef1f5;
+                          padding: 12px 16px 12px 0; font-family: 'Manrope', 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; font-size: 12px; font-weight: 500;
+                          line-height: 20px; color: #78808f;">Documents included</td>
+                        <td class="sm-stack" valign="top" style="border-top: 1px solid #eef1f5; padding: 12px 0 12px;
+                          font-family: 'Manrope', 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; font-size: 14px; font-weight: 700; line-height: 21px; color: #2b3440;
+                          word-break: break-word;">{{DocumentsIncluded}} per period</td>
+                      </tr>
+
+                      <tr>
+                        <td class="sm-stack" width="190" valign="top" style="width: 190px; border-top: 1px solid #eef1f5;
+                          padding: 12px 16px 12px 0; font-family: 'Manrope', 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; font-size: 12px; font-weight: 500;
+                          line-height: 20px; color: #78808f;">Rate limit</td>
+                        <td class="sm-stack" valign="top" style="border-top: 1px solid #eef1f5; padding: 12px 0 12px;
+                          font-family: 'Manrope', 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; font-size: 14px; font-weight: 700; line-height: 21px; color: #2b3440;
+                          word-break: break-word;">{{RateLimitPerMinute}} requests / minute</td>
+                      </tr>
+
+                      <tr>
+                        <td class="sm-stack" width="190" valign="top" style="width: 190px; border-top: 1px solid #eef1f5;
+                          padding: 12px 16px 12px 0; font-family: 'Manrope', 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; font-size: 12px; font-weight: 500;
+                          line-height: 20px; color: #78808f;">Result retention</td>
+                        <td class="sm-stack" valign="top" style="border-top: 1px solid #eef1f5; padding: 12px 0 12px;
+                          font-family: 'Manrope', 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; font-size: 14px; font-weight: 700; line-height: 21px; color: #2b3440;
+                          word-break: break-word;">{{DataRetentionDays}} days</td>
+                      </tr>
+
+                    </table>
+                    <div style="font-family: 'Manrope', 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; font-size: 12px; font-weight: 500; color: #78808f;
+                      padding-top: 18px; padding-bottom: 6px;">API base URL</div>
+                    <table role="presentation" cellpadding="0" cellspacing="0" border="0" width="100%"
+                      style="width: 100%; margin-top: 0px">
+                      <tr>
+                        <td style="background-color: #ffffff; border: 1px solid #d5dce6; border-radius: 4px;
+                          padding: 14px 16px; font-family: 'Courier New', Consolas, monospace; font-size: 13px; font-weight: 700; line-height: 22px; color: #2b3440;
+                          word-break: break-word;">{{ApiBaseUrl}}</td>
+                      </tr>
+                    </table>
+
+                    <table role="presentation" cellpadding="0" cellspacing="0" border="0" width="100%"
+                      style="width: 100%; margin-top: 18px; background-color: #eef4fb; border-radius: 4px;">
+                      <tr>
+                        <td bgcolor="#3a6ea5" width="3"
+                          style="background-color: #3a6ea5; width: 3px; font-size: 0; line-height: 0;">&nbsp;</td>
+                        <td style="padding: 12px 16px; font-family: 'Manrope', 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; font-size: 13px; line-height: 21px;
+                          color: #2b4a6f;"><span
+                            style="display:inline-block;width:15px;height:15px;vertical-align:middle;line-height:0"><img
+                              src="https://converge-email-templates.s3.eu-west-1.amazonaws.com/remixicon/shield-check-line.png"
+                              width="15" height="15" alt="" style="display:block;border:0"></span> <strong
+                            style="font-weight: 700">Keys are shown once.</strong> The secret is displayed only at
+                          creation &mdash; store it in your secret manager, never in source control or a client bundle.
+                        </td>
+                      </tr>
+                    </table>
+
+                  </td>
+                </tr>
+              </table>
+            </td>
+          </tr>
+
+          <tr>
+            <td align="center" class="sm-px" style="padding: 32px 48px 0">
+              <table role="presentation" cellpadding="0" cellspacing="0" border="0" align="center">
+                <tr>
+                  <td bgcolor="#c60000" align="center"
+                    style="background-color: #c60000; border-radius: 4px; mso-padding-alt: 16px 40px;">
+                    <a href="{{DashboardUrl}}" class="sm-btn" style="display: inline-block; padding: 16px 40px;
+                      font-family: 'Manrope', 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; font-size: 15px; font-weight: 700; color: #ffffff;
+                      border-radius: 4px;">Create your first API key</a>
+                  </td>
+                </tr>
+              </table>
+              <div style="padding-top: 12px; font-family: 'Manrope', 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; font-size: 12px; line-height: 18px;
+                color: #78808f;">You&rsquo;ll be asked to sign in first.</div>
+            </td>
+          </tr>
+
+          <tr>
+            <td class="sm-px" style="padding: 44px 48px 0">
+              <div class="sm-h2" style="font-family: 'Manrope', 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; font-size: 21px; line-height: 29px;
+                font-weight: 800; letter-spacing: -0.3px; color: #2b3440; padding-bottom: 6px;">Three steps to your
+                first result</div>
+              <div style="font-family: 'Manrope', 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; font-size: 14px; line-height: 22px; color: #78808f;
+                padding-bottom: 8px;">Extraction is shared across the catalog; interpretation is per function.</div>
+            </td>
+          </tr>
+
+          <tr>
+            <td class="sm-px" style="padding: 12px 48px 0">
+              <table role="presentation" cellpadding="0" cellspacing="0" border="0" width="100%"
+                style="width: 100%; border: 1px solid #e8ecf2; border-radius: 4px">
+                <tr>
+                  <td width="44" valign="top" style="padding: 16px 0 16px 16px; ">
+                    <table role="presentation" cellpadding="0" cellspacing="0" border="0">
+                      <tr>
+                        <td align="center" width="40" height="40" style="background-color: #eef1f5; width: 40px;
+                          height: 40px; border-radius: 4px; font-size: 19px; line-height: 40px;"><span
+                            style="display:inline-block;width:19px;height:19px;vertical-align:middle;line-height:0"><img
+                              src="https://converge-email-templates.s3.eu-west-1.amazonaws.com/remixicon/key-2-line.png"
+                              width="19" height="19" alt="" style="display:block;border:0"></span></td>
+                      </tr>
+                    </table>
+                  </td>
+                  <td valign="middle" style="padding: 16px; ">
+                    <div style="font-family: 'Manrope', 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; font-size: 15px; font-weight: 700; color: #2b3440;
+                      padding-bottom: 3px;">Create an API key</div>
+                    <div style="font-family: 'Manrope', 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; font-size: 13px; line-height: 20px;
+                      color: #78808f;">Dashboard &rarr; Keys &rarr; New key. Scope it to the functions that key needs.
+                    </div>
+                  </td>
+                </tr>
+
+                <tr>
+                  <td width="44" valign="top" style="padding: 16px 0 16px 16px; border-top: 1px solid #eef1f5;">
+                    <table role="presentation" cellpadding="0" cellspacing="0" border="0">
+                      <tr>
+                        <td align="center" width="40" height="40" style="background-color: #eef1f5; width: 40px;
+                          height: 40px; border-radius: 4px; font-size: 19px; line-height: 40px;"><span
+                            style="display:inline-block;width:19px;height:19px;vertical-align:middle;line-height:0"><img
+                              src="https://converge-email-templates.s3.eu-west-1.amazonaws.com/remixicon/file-text-line.png"
+                              width="19" height="19" alt="" style="display:block;border:0"></span></td>
+                      </tr>
+                    </table>
+                  </td>
+                  <td valign="middle" style="padding: 16px; border-top: 1px solid #eef1f5;">
+                    <div style="font-family: 'Manrope', 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; font-size: 15px; font-weight: 700; color: #2b3440;
+                      padding-bottom: 3px;">Send a document</div>
+                    <div style="font-family: 'Manrope', 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; font-size: 13px; line-height: 20px;
+                      color: #78808f;">POST a file to any function in the catalog &mdash; PDF, image or DOCX.</div>
+                  </td>
+                </tr>
+
+                <tr>
+                  <td width="44" valign="top" style="padding: 16px 0 16px 16px; border-top: 1px solid #eef1f5;">
+                    <table role="presentation" cellpadding="0" cellspacing="0" border="0">
+                      <tr>
+                        <td align="center" width="40" height="40" style="background-color: #eef1f5; width: 40px;
+                          height: 40px; border-radius: 4px; font-size: 19px; line-height: 40px;"><span
+                            style="display:inline-block;width:19px;height:19px;vertical-align:middle;line-height:0"><img
+                              src="https://converge-email-templates.s3.eu-west-1.amazonaws.com/remixicon/database-2-line.png"
+                              width="19" height="19" alt="" style="display:block;border:0"></span></td>
+                      </tr>
+                    </table>
+                  </td>
+                  <td valign="middle" style="padding: 16px; border-top: 1px solid #eef1f5;">
+                    <div style="font-family: 'Manrope', 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; font-size: 15px; font-weight: 700; color: #2b3440;
+                      padding-bottom: 3px;">Collect the result</div>
+                    <div style="font-family: 'Manrope', 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; font-size: 13px; line-height: 20px;
+                      color: #78808f;">Structured JSON back in the response, with per-request cost and latency in
+                      Reports.</div>
+                  </td>
+                </tr>
+
+              </table>
+            </td>
+          </tr>
+
+          <tr>
+            <td class="sm-px" style="padding: 36px 48px 0">
+              <div class="sm-h2" style="font-family: 'Manrope', 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; font-size: 21px; line-height: 29px;
+                font-weight: 800; letter-spacing: -0.3px; color: #2b3440; padding-bottom: 6px;">Your first request
+              </div>
+            </td>
+          </tr>
+
+          <tr>
+            <td class="sm-px" style="padding: 12px 48px 0">
+              <table role="presentation" cellpadding="0" cellspacing="0" border="0" width="100%"
+                style="width: 100%; background-color: #f7f9fc; border: 1px solid #e3e8ef; border-radius: 4px;">
+                <tr>
+                  <td class="no-autolink" style="padding: 24px">
+                    <div style="font-family: 'Manrope', 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; font-size: 11px; font-weight: 700; letter-spacing: 1px;
+                      text-transform: uppercase; color: #78808f; padding-bottom: 16px;"><span
+                        style="display:inline-block;width:14px;height:14px;vertical-align:middle;line-height:0"><img
+                          src="https://converge-email-templates.s3.eu-west-1.amazonaws.com/remixicon/flask-line.png"
+                          width="14" height="14" alt="" style="display:block;border:0"></span>&nbsp; cURL</div>
+
+                    <table role="presentation" cellpadding="0" cellspacing="0" border="0" width="100%"
+                      style="width: 100%; margin-top: 0px">
+                      <tr>
+                        <td style="background-color: #ffffff; border: 1px solid #d5dce6; border-radius: 4px;
+                          padding: 14px 16px; font-family: 'Courier New', Consolas, monospace; font-size: 13px; font-weight: 700; line-height: 22px; color: #2b3440;
+                          word-break: break-word;">curl -X POST {{ApiBaseUrl}}/v1/ocr/text_extraction
+                          \<br />&nbsp;&nbsp;-H &quot;X-API-Key: $HEIRS_OCR_API_KEY&quot; \<br />&nbsp;&nbsp;-F
+                          &quot;file=@invoice.pdf&quot;</td>
+                      </tr>
+                    </table>
+
+                  </td>
+                </tr>
+              </table>
+            </td>
+          </tr>
+
+          <tr>
+            <td class="sm-px" style="padding: 32px 48px 0">
+              <table role="presentation" cellpadding="0" cellspacing="0" border="0" width="100%"
+                style="width: 100%; background-color: #eef1f5; border: 1px solid #e3e8ef; border-radius: 4px;">
+                <tr>
+                  <td style="padding: 32px">
+                    <div style="font-family: 'Manrope', 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; font-size: 11px; font-weight: 700; letter-spacing: 1px;
+                      text-transform: uppercase; color: #78808f; padding-bottom: 10px;">New to the API?</div>
+                    <div class="sm-h2" style="font-family: 'Manrope', 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; font-size: 21px; line-height: 29px;
+                      font-weight: 800; letter-spacing: -0.3px; color: #2b3440; padding-bottom: 8px;">Read the
+                      quickstart</div>
+                    <div style="font-family: 'Manrope', 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; font-size: 14px; line-height: 22px; color: #5a6069;
+                      padding-bottom: 22px;">The full function catalog, request and response shapes, error codes and
+                      rate-limit headers &mdash; with copy-paste examples in cURL, TypeScript and Python.</div>
+                    <table role="presentation" cellpadding="0" cellspacing="0" border="0">
+                      <tr>
+                        <td align="center" bgcolor="#2b3440"
+                          style="background-color: #2b3440; border-radius: 4px; mso-padding-alt: 13px 28px;">
+                          <a href="{{DocsUrl}}" class="sm-btn" style="display: inline-block; padding: 13px 28px;
+                            font-family: 'Manrope', 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; font-size: 14px; font-weight: 700; color: #ffffff;
+                            border-radius: 4px;">Open the API reference</a>
+                        </td>
+                      </tr>
+                    </table>
+                  </td>
+                </tr>
+              </table>
+            </td>
+          </tr>
+
+          <tr>
+            <td style="height: 44px; line-height: 44px; font-size: 0">&nbsp;</td>
+          </tr>
+          <tr>
+            <td align="center" bgcolor="#c60000" class="sm-px sm-py"
+              style="background-color: #c60000; padding: 36px 48px 34px; border-radius: 0 0 6px 6px;">
+              <div style="font-family: 'Manrope', 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; font-size: 15px; font-weight: 700; color: #ffffff;
+                padding-bottom: 16px;">Everything you need, one link away</div>
+              <table role="presentation" cellpadding="0" cellspacing="0" border="0" align="center">
+                <tr>
+                  <td class="sm-stack" style="padding: 0 5px">
+                    <a href="{{DashboardUrl}}" class="sm-btn sm-mb" style="display: inline-block; padding: 11px 22px;
+                      border: 1px solid #ffffff; border-radius: 4px; font-family: 'Manrope', 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; font-size: 14px;
+                      font-weight: 700; color: #ffffff;">Dashboard</a>
+                  </td>
+                  <td class="sm-stack" style="padding: 0 5px">
+                    <a href="{{DocsUrl}}" class="sm-btn" style="display: inline-block; padding: 11px 22px;
+                      border: 1px solid #ffffff; border-radius: 4px; font-family: 'Manrope', 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; font-size: 14px;
+                      font-weight: 700; color: #ffffff;">API reference</a>
+                  </td>
+                </tr>
+              </table>
+              <div style="padding-top: 24px; font-family: 'Manrope', 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; font-size: 13px; line-height: 21px;
+                color: #ffffff;">Questions?
+                <a href="mailto:{{SupportEmail}}"
+                  style="color: #ffffff; font-weight: 800; text-decoration: underline">{{SupportEmail}}</a>
+              </div>
+              <div style="padding-top: 18px; font-family: 'Manrope', 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; font-size: 11px; line-height: 19px;
+                color: #ffffff;">You&rsquo;re receiving this because an account was created for you on the
+                {{TenantName}} workspace.<br />
+                Heirs OCR is operated by Heirs Technologies.<br />
+                &copy; {{Year}} Heirs Technologies. All rights reserved. &middot;
+                <a href="{{PreferencesUrl}}" style="color: #ffffff; text-decoration: underline">Email preferences</a>
+              </div>
+            </td>
+          </tr>
+
+        </table>
+        <!--[if mso]></td></tr></table><![endif]-->
+
+        <div style="padding-top: 18px; font-family: 'Manrope', 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+          font-size: 11px; color: #78808f;">
+          Heirs Technologies &middot; {{TenantName}}
+        </div>
+      </td>
+    </tr>
+  </table>
 </body>
 
 </html>

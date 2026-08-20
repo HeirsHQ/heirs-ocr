@@ -1,31 +1,51 @@
 "use client";
 
-import { Building2, ChartColumn } from "lucide-react";
+import { useState } from "react";
+import { Building2, ChartColumn, Clock } from "lucide-react";
 
-import { DataTable, EmptyState, ErrorState, PageLayout, Skeleton, StatTile } from "@/components/shared";
-import { useMetricsSummary, useTenantFunctionUsage, useTenantUsage } from "@/hooks/api/use-admin-metrics";
-import { functionColumns, tenantFunctionColumns, usageColumns } from "@/config/columns/analytics";
+import { EmptyState, ErrorState, PageLayout, Shimmer, Skeleton, StatTile, cn } from "@/components/shared";
+import {
+  FunctionVolumeChart,
+  LatencyErrorChart,
+  RequestsOverTimeChart,
+  TenantVolumeChart,
+} from "@/components/admin/analytics-charts";
+import { useMetricsSummary, useMetricsTimeseries, useTenantUsage } from "@/hooks/api/use-admin-metrics";
 import { getErrorMessage } from "@heirs/api-client";
-import { usePagination } from "@heirs/ui";
 
 const pct = (ratio: number): string => `${(ratio * 100).toFixed(1)}%`;
 const num = (n: number): string => n.toLocaleString();
 
+/**
+ * Presets rather than a free date picker: the buckets the endpoint returns are chosen
+ * from the window (hourly up to 48h, daily beyond), so an arbitrary range would let a
+ * reader pick one that renders as a thousand unreadable hour ticks.
+ */
+const RANGES = [
+  { label: "24h", hours: 24 },
+  { label: "7d", hours: 24 * 7 },
+  { label: "30d", hours: 24 * 30 },
+] as const;
+
+/** The top tenants by request volume — the usage list is already sorted busiest-first. */
+const TENANT_LIMIT = 10;
+
+const Card = ({ title, children }: { title: string; children: React.ReactNode }) => (
+  <div className="space-y-4 rounded-lg border p-4">
+    <p className="text-sm font-medium">{title}</p>
+    {children}
+  </div>
+);
+
 const Page = () => {
+  const [hours, setHours] = useState<number>(RANGES[0].hours);
+
   const metrics = useMetricsSummary();
-  const { params, tableProps } = usePagination();
-  const usage = useTenantUsage(params);
-  const byTenantFn = usePagination();
-  const tenantFn = useTenantFunctionUsage(byTenantFn.params);
-  // The per-function rollup arrives whole (one row per catalog function), so it pages
-  // in the browser. It still needs *some* page state: DataTable renders a pagination
-  // bar whenever `total` exceeds the page size, and without handlers that bar was
-  // inert — it claimed "1–10 of 12" while all 12 rows were on screen.
-  const fn = usePagination();
+  const usage = useTenantUsage({ page: 1, pageSize: TENANT_LIMIT });
+  const series = useMetricsTimeseries(hours);
 
   const m = metrics.data;
-  const allRows = m?.byFunction ?? [];
-  const rows = allRows.slice((fn.params.page - 1) * fn.params.pageSize, fn.params.page * fn.params.pageSize);
+  const byFunction = m?.byFunction ?? [];
   const tenants = usage.data?.items ?? [];
   // Requests that ran before the per-function rollup existed. They are counted in the
   // headline totals (which come from tenant_usage) but cannot be attributed to a
@@ -35,7 +55,7 @@ const Page = () => {
 
   return (
     <PageLayout title="Analytics" subtitle="Request volume, errors, and token usage across the service.">
-      <div className=" space-y-6">
+      <div className="space-y-6">
         {metrics.isPending && <Skeleton skeleton="statistics" numberOfCards={4} />}
         {metrics.isError && (
           <ErrorState
@@ -57,89 +77,102 @@ const Page = () => {
             />
           </div>
         )}
-        {m && (
-          <section className="space-y-2">
-            <div className="space-y-0.5">
-              <p className="text-sm font-medium">By Function</p>
-              {unattributed > 0 && (
-                <p className="text-xs text-muted-foreground text-pretty">
-                  Covers {num(m.functionRequests)} of {num(m.totalRequests)} requests. The other {num(unattributed)} ran
-                  before per-function counters existed and are included in the totals above, but cannot be attributed to
-                  a function.
-                </p>
-              )}
-            </div>
-            {allRows.length === 0 ? (
-              <EmptyState
-                icon={ChartColumn}
-                title="No requests recorded yet"
-                description="Once tenants start running documents through the API, per-function volume and error rates appear here."
+
+        <section className="grid gap-6 lg:grid-cols-2">
+          <Card title="By Function">
+            {metrics.isPending && <Shimmer className="h-72.5 w-full rounded-md" />}
+            {m &&
+              (byFunction.length === 0 ? (
+                <EmptyState
+                  icon={ChartColumn}
+                  title="No requests recorded yet"
+                  description="Once tenants start running documents through the API, per-function volume and error rates appear here."
+                />
+              ) : (
+                <FunctionVolumeChart data={byFunction} />
+              ))}
+          </Card>
+
+          <Card title="By Tenant">
+            {usage.isPending && <Shimmer className="h-72.5 w-full rounded-md" />}
+            {usage.isError && (
+              <ErrorState
+                title="Couldn't load tenant usage"
+                description={getErrorMessage(usage.error)}
+                onRetry={() => usage.refetch()}
+                retrying={usage.isFetching}
               />
-            ) : (
-              <DataTable columns={functionColumns} data={rows} total={allRows.length} {...fn.tableProps} />
             )}
-          </section>
-        )}
-        <section className="space-y-2">
-          <p className="text-sm font-medium">By Tenant</p>
-          {usage.isPending && <Skeleton skeleton="table" columns={4} rows={5} />}
-          {usage.isError && (
-            <ErrorState
-              title="Couldn't load tenant usage"
-              description={getErrorMessage(usage.error)}
-              onRetry={() => usage.refetch()}
-              retrying={usage.isFetching}
-            />
-          )}
-          {usage.data && tenants.length === 0 ? (
-            <EmptyState
-              icon={Building2}
-              title="No tenant usage yet"
-              description="Usage is attributed per tenant as they call the API. Provision a tenant and run a document to see it here."
-            />
-          ) : (
-            <DataTable
-              columns={usageColumns}
-              data={usage.data?.items ?? []}
-              total={usage.data?.total ?? 0}
-              {...tableProps}
-            />
-          )}
+            {usage.data &&
+              (tenants.length === 0 ? (
+                <EmptyState
+                  icon={Building2}
+                  title="No tenant usage yet"
+                  description="Usage is attributed per tenant as they call the API. Provision a tenant and run a document to see it here."
+                />
+              ) : (
+                <TenantVolumeChart data={tenants} />
+              ))}
+          </Card>
         </section>
 
-        <section className="space-y-2">
-          <div className="space-y-0.5">
-            <p className="text-sm font-medium">By Tenant &amp; Function</p>
-            <p className="text-xs text-muted-foreground text-pretty">
-              From the request log, so this is a rolling window rather than a lifetime total, and it counts calls that
-              were refused before reaching the pipeline — over quota, rate limited, unsupported file type. Expect it to
-              disagree with the totals above in both directions.
-            </p>
-          </div>
-          {tenantFn.isPending && <Skeleton skeleton="table" columns={4} rows={5} />}
-          {tenantFn.isError && (
-            <ErrorState
-              title="Couldn't load per-function usage"
-              description={getErrorMessage(tenantFn.error)}
-              onRetry={() => tenantFn.refetch()}
-              retrying={tenantFn.isFetching}
-            />
-          )}
-          {tenantFn.data &&
-            (tenantFn.data.items.length === 0 ? (
-              <EmptyState
-                icon={ChartColumn}
-                title="No per-function activity yet"
-                description="Each API call is logged with the function it targeted. Once tenants start calling the API, the split appears here."
-              />
-            ) : (
-              <DataTable
-                columns={tenantFunctionColumns}
-                data={tenantFn.data.items}
-                total={tenantFn.data.total}
-                {...byTenantFn.tableProps}
-              />
+        <div className="flex items-center justify-between gap-4">
+          <p className="text-muted-foreground text-xs">
+            Over time, from the request log — a rolling window that ages out with retention, and one that counts calls
+            refused before they reached the pipeline. It will not tie out against the lifetime totals above.
+          </p>
+          <div className="bg-muted flex w-fit shrink-0 items-center rounded-md p-1">
+            {RANGES.map((range) => (
+              <button
+                key={range.hours}
+                onClick={() => setHours(range.hours)}
+                aria-pressed={hours === range.hours}
+                className={cn(
+                  "rounded-md px-3 py-1 text-sm",
+                  hours === range.hours ? "bg-primary text-white" : "text-muted-foreground",
+                )}
+              >
+                {range.label}
+              </button>
             ))}
+          </div>
+        </div>
+        <section className="grid gap-6 lg:grid-cols-2">
+          <Card title="Function Latency & Error">
+            {series.isPending && <Shimmer className="h-72.5 w-full rounded-md" />}
+            {series.isError && (
+              <ErrorState
+                title="Couldn't load latency"
+                description={getErrorMessage(series.error)}
+                onRetry={() => series.refetch()}
+                retrying={series.isFetching}
+              />
+            )}
+            {series.data &&
+              (series.data.points.every((p) => p.requests === 0) ? (
+                <EmptyState
+                  icon={Clock}
+                  title="No requests in this window"
+                  description="Latency and error rate are read from the request log. Widen the range, or send a request to see the series fill in."
+                />
+              ) : (
+                <LatencyErrorChart data={series.data} />
+              ))}
+          </Card>
+
+          <Card title="Requests over Time">
+            {series.isPending && <Shimmer className="h-72.5 w-full rounded-md" />}
+            {series.data &&
+              (series.data.points.every((p) => p.requests === 0) ? (
+                <EmptyState
+                  icon={Clock}
+                  title="No requests in this window"
+                  description="Nothing has been called in the selected range. Widen the range to look further back."
+                />
+              ) : (
+                <RequestsOverTimeChart data={series.data} />
+              ))}
+          </Card>
         </section>
       </div>
     </PageLayout>

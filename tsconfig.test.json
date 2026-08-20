@@ -1,0 +1,21 @@
+{
+  // Type-checks the sources plus the test files listed below.
+  //
+  // The base config scopes `include` to src/ so `tsc` emits only the shippable tree,
+  // which leaves test/ unchecked — vitest transpiles without type-checking. That
+  // matters for test/mail-templates.test.ts, which encodes an invariant as a type:
+  // its fixtures are annotated `{ [K in TemplateName]: TemplateArgs[K] }`, so a
+  // template argument added to the HTML but not to messages.ts (or the reverse) is a
+  // compile error rather than a surprise at send time.
+  //
+  // `include` names test files individually and deliberately. Widening it to
+  // test/**/* surfaces a backlog of pre-existing type errors in the older suites
+  // (boot, glm, webhook-delivery, …) that has nothing to do with email; add files
+  // here as they are made type-clean.
+  "extends": "./tsconfig.json",
+  "compilerOptions": {
+    "noEmit": true,
+    "rootDir": "."
+  },
+  "include": ["src/**/*", "test/mail-templates.test.ts"]
+}

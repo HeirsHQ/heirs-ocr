@@ -10,6 +10,7 @@ import type { ApiIntegrationSettings } from "@/types/admin-console";
 import { getErrorMessage } from "@heirs/api-client";
 import { Checkbox } from "@heirs/ui";
 import { useValues } from "@/hooks";
+import { randomId } from "@/lib/id";
 import { Button } from "@heirs/ui";
 import { Input } from "@heirs/ui";
 
@@ -57,7 +58,7 @@ const Page = () => {
       integrations: [
         ...draft.integrations,
         {
-          id: crypto.randomUUID(),
+          id: randomId(),
           name: name.trim(),
           kind,
           url: url.trim(),

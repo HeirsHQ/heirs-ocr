@@ -4,6 +4,7 @@ import { initTracing, shutdownTracing } from "./observability/otel";
 import { closeDb, ensureSchema } from "./db";
 import { closeRedis } from "./redis";
 import { startBackgroundWorkers, waitForStores } from "./boot";
+import { verify as verifyMailer } from "./notification/mail";
 import { seedPlans } from "./billing/plan-store";
 import { logger } from "./observability/logger";
 
@@ -39,6 +40,10 @@ const boot = async (): Promise<void> => {
       err: err instanceof Error ? err.message : String(err),
     });
   }
+  // Same rationale as the web entrypoint: the worker sends job-complete and
+  // job-failure mail, so it needs the relay checked here too. Not awaited.
+  void verifyMailer();
+
   stopBackgroundWorkers = startBackgroundWorkers();
   logger.info("ocr worker started");
 };

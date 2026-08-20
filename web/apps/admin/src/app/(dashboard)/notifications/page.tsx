@@ -7,6 +7,7 @@ import { toast } from "sonner";
 import { useNotifications, useSaveNotifications } from "@/hooks/api/use-admin-console";
 import type { NotificationChannel, NotificationSettings } from "@/types/admin-console";
 import { EmptyState, ErrorState, PageLayout, Skeleton } from "@/components/shared";
+import { randomId } from "@/lib/id";
 import { getErrorMessage } from "@heirs/api-client";
 import { SelectOption, type Option } from "@heirs/ui";
 import { Checkbox } from "@heirs/ui";
@@ -64,7 +65,7 @@ const Page = () => {
     if (!target.trim()) return;
     setDraft({
       ...draft,
-      channels: [...draft.channels, { id: crypto.randomUUID(), type, target: target.trim(), enabled: true }],
+      channels: [...draft.channels, { id: randomId(), type, target: target.trim(), enabled: true }],
     });
     setTarget("");
   };
