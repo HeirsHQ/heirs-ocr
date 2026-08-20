@@ -46,6 +46,7 @@
   --radius-2xl: calc(var(--radius) * 1.8);
   --radius-3xl: calc(var(--radius) * 2.2);
   --radius-4xl: calc(var(--radius) * 2.6);
+  --color-errors: var(--color-errors);
 }
 
 :root {
@@ -86,6 +87,7 @@
   --hairline: oklch(0.922 0 0);
   --surface-strong: oklch(0.94 0 0);
   --canvas-soft: oklch(0.985 0 0);
+  --color-errors: oklch(42.442% 0.17167 28.903);
 }
 
 .dark {
@@ -125,6 +127,7 @@
   --hairline: oklch(1 0 0 / 10%);
   --surface-strong: oklch(0.27 0 0);
   --canvas-soft: oklch(0.225 0 0);
+   --color-errors: oklch(42.442% 0.17167 28.903);
 }
 
 @layer base {
