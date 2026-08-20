@@ -2,8 +2,8 @@
 
 import { useEffect, useState } from "react";
 
-import { useInvalidateAfterOcrRun } from "@/hooks/api/use-tenant-documents";
 import { PageLayout, SchemaForm, cleanArgs, defaultArgs, hasArgsForm, type ArgValues } from "@/components/shared";
+import { useInvalidateAfterOcrRun } from "@/hooks/api/use-tenant-documents";
 import { Field, ScrollArea, SelectOption, StatusBadge } from "@heirs/ui";
 import { Textarea } from "@heirs/ui";
 import { Button } from "@heirs/ui";
@@ -80,18 +80,18 @@ const Page = () => {
   // renders, so the polling effect below can depend on it without re-subscribing.
   const refreshAfterRun = useInvalidateAfterOcrRun();
   const [functions, setFunctions] = useState<OcrCatalogEntry[]>([]);
+  const [result, setResult] = useState<RunResult | null>(null);
   const [catalogLoading, setCatalogLoading] = useState(true);
-  const [selectedKey, setSelectedKey] = useState("");
-  const [file, setFile] = useState<File | null>(null);
   const [argValues, setArgValues] = useState<ArgValues>({});
+  const [error, setError] = useState<string | null>(null);
+  const [file, setFile] = useState<File | null>(null);
+  const [selectedKey, setSelectedKey] = useState("");
   const [argsText, setArgsText] = useState("{}");
   const [running, setRunning] = useState(false);
-  const [result, setResult] = useState<RunResult | null>(null);
-  const [error, setError] = useState<string | null>(null);
 
   // Set when the backend queues the document (202) instead of processing inline.
-  const [jobId, setJobId] = useState<string | null>(null);
   const [jobStatus, setJobStatus] = useState<OcrJobStatus | null>(null);
+  const [jobId, setJobId] = useState<string | null>(null);
 
   // Load the live function catalog via the same-origin proxy.
   useEffect(() => {
@@ -304,7 +304,6 @@ const Page = () => {
               options={functions.map((f) => ({ label: f.key.replace(/_/g, " "), value: f.key }))}
             />
           </Field>
-
           <Field
             label="Document"
             renderControl={(id) => (
@@ -341,8 +340,6 @@ const Page = () => {
             {busy ? "Running…" : "Run document"}
           </Button>
         </div>
-
-        {/* Response */}
         <div className="bg-card border-hairline space-y-4 rounded-lg border p-5">
           {error && (
             <div className="rounded-md border border-destructive/40 bg-destructive/10 px-3 py-2 text-sm text-destructive">

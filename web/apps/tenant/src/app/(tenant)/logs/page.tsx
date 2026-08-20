@@ -3,11 +3,12 @@
 import { ScrollText } from "lucide-react";
 import { useMemo, useState } from "react";
 
+import { DataTable, EmptyState, ErrorState, PageLayout, Skeleton } from "@/components/shared";
+import { getErrorMessage, TenantRequestLog } from "@heirs/api-client";
 import { useTenantLogs } from "@/hooks/api/use-tenant-logs";
 import { createLogColumns } from "@/config/columns/logs";
-import { getErrorMessage } from "@heirs/api-client";
 import { SelectOption, usePagination } from "@heirs/ui";
-import { DataTable, EmptyState, ErrorState, PageLayout, Skeleton } from "@/components/shared";
+import { ViewLog } from "@/components/shared";
 
 const OUTCOMES = [
   { label: "All requests", value: "" },
@@ -16,6 +17,7 @@ const OUTCOMES = [
 ];
 
 const Page = () => {
+  const [log, setLog] = useState<TenantRequestLog | null>(null);
   const { params, tableProps, reset } = usePagination();
   const [outcome, setOutcome] = useState("");
 
@@ -23,7 +25,7 @@ const Page = () => {
     ...params,
     outcome: outcome === "success" || outcome === "error" ? outcome : undefined,
   });
-  const columns = useMemo(() => createLogColumns(), []);
+  const columns = useMemo(() => createLogColumns((log) => setLog(log)), []);
 
   const onOutcomeChange = (next: string) => {
     setOutcome(next);
@@ -63,7 +65,6 @@ const Page = () => {
         Requests refused before processing — over quota, rate limited, unsupported file — appear here but not under
         Documents. Quote a request ID to support to have a specific call looked up.
       </p>
-
       {logs.isPending ? (
         <Skeleton skeleton="table" />
       ) : (logs.data?.total ?? 0) === 0 ? (
@@ -77,6 +78,7 @@ const Page = () => {
       ) : (
         <DataTable columns={columns} data={logs.data?.items ?? []} total={logs.data?.total ?? 0} {...tableProps} />
       )}
+      {log && <ViewLog log={log} onOpenChange={(open) => !open && setLog(null)} open={log !== null} />}
     </PageLayout>
   );
 };

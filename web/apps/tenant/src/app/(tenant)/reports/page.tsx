@@ -83,7 +83,6 @@ const Page = () => {
             />
             <StatTile label="Volume" value={formatSize(totals?.bytes ?? 0)} hint="uploaded" />
           </div>
-
           {/* Retention stated on the page: a history that stops at 90 days looks like
               data loss unless the reason is visible next to the chart. */}
           {data?.retention && (
@@ -127,7 +126,6 @@ const Page = () => {
                   </AreaChart>
                 </ChartContainer>
               </section>
-
               <section className="border-hairline bg-card rounded-lg border p-4">
                 <h2 className="mb-4 text-sm font-semibold">By function</h2>
                 <ChartContainer

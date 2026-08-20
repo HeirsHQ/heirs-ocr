@@ -117,7 +117,7 @@ const GROUP_WIDTH = BAR_SIZE * 3 + 2 * 2 + 28;
 export const FunctionVolumeChart = ({ data }: { data: FunctionMetric[] }) => (
   <div className="w-full overflow-x-auto">
     <div style={{ minWidth: data.length * GROUP_WIDTH }}>
-      <ChartContainer config={functionConfig} className="aspect-auto h-[290px] w-full">
+      <ChartContainer config={functionConfig} className="aspect-auto h-72.5 w-full">
         <BarChart accessibilityLayer data={data} barGap={2} margin={{ left: 4, right: 8 }}>
           <CartesianGrid {...gridProps} />
           {/* Horizontal labels: the plot scrolls, so there is room for them and no
@@ -150,7 +150,7 @@ export const FunctionVolumeChart = ({ data }: { data: FunctionMetric[] }) => (
 export const TenantVolumeChart = ({ data }: { data: TenantUsage[] }) => (
   <div className="w-full overflow-x-auto">
     <div style={{ minWidth: data.length * GROUP_WIDTH }}>
-      <ChartContainer config={tenantConfig} className="aspect-auto h-[290px] w-full">
+      <ChartContainer config={tenantConfig} className="aspect-auto h-72.5 w-full">
         <BarChart accessibilityLayer data={data} barGap={2} margin={{ left: 4, right: 8 }}>
           <CartesianGrid {...gridProps} />
           <XAxis dataKey="tenantId" {...axisProps} tickFormatter={tenantLabel} interval={0} height={28} />
@@ -209,7 +209,7 @@ const latencyConfig = {
  * a fixed 0–100% domain so its shape never rescales to look more dramatic than it is.
  */
 export const LatencyErrorChart = ({ data }: { data: MetricsTimeseries }) => (
-  <ChartContainer config={latencyConfig} className="aspect-auto h-[290px] w-full">
+  <ChartContainer config={latencyConfig} className="aspect-auto h-72.5 w-full">
     <LineChart accessibilityLayer data={data.points} margin={{ left: 4, right: 4 }}>
       <CartesianGrid {...gridProps} />
       <XAxis dataKey="ts" {...axisProps} tickFormatter={tickTime(data.bucket)} minTickGap={24} />
@@ -246,7 +246,7 @@ export const LatencyErrorChart = ({ data }: { data: MetricsTimeseries }) => (
 export const RequestsOverTimeChart = ({ data }: { data: MetricsTimeseries }) => (
   <ChartContainer
     config={{ requests: { label: "Requests", color: "var(--chart-1)" } }}
-    className="aspect-auto h-[286px] w-full"
+    className="aspect-auto h-71.5 w-full"
   >
     <AreaChart accessibilityLayer data={data.points} margin={{ left: 4, right: 8 }}>
       <defs>

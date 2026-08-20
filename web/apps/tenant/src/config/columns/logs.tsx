@@ -3,7 +3,7 @@ import type { TenantRequestLog } from "@heirs/api-client";
 import { createColumns, DateTimeCell, TextCell } from "./core";
 
 /** `RECEIPT_PARSING` → `Receipt parsing`. The catalog key is an id, not a label. */
-const humanize = (key: string): string => {
+export const humanizeFunctionKey = (key: string): string => {
   const words = key.toLowerCase().split("_").join(" ");
   return words.charAt(0).toUpperCase() + words.slice(1);
 };
@@ -14,13 +14,13 @@ const humanize = (key: string): string => {
  * 4xx is amber, not red: those are the caller's own mistakes — over quota, wrong file
  * type — which are actionable by the tenant. 5xx is red because it is ours.
  */
-const statusTone = (status: number): string => {
+export const statusTone = (status: number): string => {
   if (status >= 500) return "text-destructive";
   if (status >= 400) return "text-warning";
   return "text-success";
 };
 
-export function createLogColumns() {
+export function createLogColumns(onView: (log: TenantRequestLog) => void) {
   return createColumns<TenantRequestLog>({
     columns: [
       {
@@ -40,7 +40,9 @@ export function createLogColumns() {
       {
         accessorKey: "functionKey",
         header: "Function",
-        cell: ({ row }) => <TextCell value={row.original.functionKey ? humanize(row.original.functionKey) : "—"} />,
+        cell: ({ row }) => (
+          <TextCell value={row.original.functionKey ? humanizeFunctionKey(row.original.functionKey) : "—"} />
+        ),
       },
       {
         accessorKey: "statusCode",
@@ -70,5 +72,6 @@ export function createLogColumns() {
         ),
       },
     ],
+    onRowClick: (row) => onView(row.original),
   });
 }
