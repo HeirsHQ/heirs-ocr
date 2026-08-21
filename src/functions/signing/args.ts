@@ -5,6 +5,14 @@ export const signingArgsSchema = z.object({
   geometryOnly: z.boolean().default(false),
   /** Signature-block cue phrases to correlate against nearby image blocks. */
   signatureCues: z.array(z.string()).default(["Signature", "Signed by", "For and on behalf of", "Witness", "Director"]),
+  /**
+   * Page budget for the whole-page vision fallback, which runs one vision call per
+   * page and is therefore far costlier than the cropped path. Only consulted when
+   * extraction came from a provider without `seals`; the region path ignores it.
+   * Pages carrying a cue phrase are preferred, latest first (execution pages sit at
+   * the end of a contract).
+   */
+  maxVisionPages: z.number().int().min(1).max(10).default(3),
 });
 
 export type SigningArgs = z.infer<typeof signingArgsSchema>;

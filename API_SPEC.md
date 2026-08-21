@@ -78,9 +78,11 @@ keeps the surface area small and makes new capabilities additive.
 
 **Environment gating.** LLM-backed functions run only when Azure OpenAI is configured
 (`AZURE_OPENAI_ENABLED=true`); otherwise they return a clear configuration error.
-`TEXT_EXTRACTION` and `DOCUMENT_AUTHENTICITY` require no LLM. `SIGNING` (and any function
-requiring `layout`/`seals`) requires the GLM-OCR provider (`GLM_ENABLED=true`); when GLM is
-off, image/scanned-PDF extraction falls back to Tesseract and `SIGNING` cannot be served.
+`TEXT_EXTRACTION` and `DOCUMENT_AUTHENTICITY` require no LLM. `SIGNING` is served best by the
+GLM-OCR provider (`GLM_ENABLED=true`), whose `seals` capability lets it locate signature
+regions and judge each from its own crop. With GLM off, image/scanned-PDF extraction falls
+back to Tesseract and `SIGNING` still runs, via a whole-page vision pass that returns
+`confidence: "low"`, a warning, and blocks without `bbox` — see the function notes below.
 
 ### Intended audience
 
@@ -665,8 +667,28 @@ The live `GET /v1/ocr/functions` response is authoritative. Summary of the thirt
 | `LOAN_REVIEW`             | Borrower financials + deterministic affordability recommendation.      | pdf, image             | yes    | **pii**     |
 | `BANK_STATEMENT_ANALYSIS` | Transactions/balances + inflow/outflow reconciliation.                 | pdf, image             | yes    | **pii**     |
 
-`SIGNING` requires the GLM-OCR provider (`layout`, `seals` capabilities). `pii` functions are
-never cached or queued and always run inline.
+`pii` functions are never cached or queued and always run inline.
+
+### `SIGNING` — two detection paths
+
+`SIGNING` requires `layout`, and *prefers* a provider that also offers `seals` (GLM-OCR).
+Which path ran is reported on every response, and callers should branch on it rather than
+reading `fullyExecuted` alone:
+
+| Path            | When                            | `confidence` | `bbox`  | Cost                |
+| --------------- | ------------------------------- | ------------ | ------- | ------------------- |
+| Region crops    | provider offers `seals`         | `high`       | present | one crop per slot   |
+| Whole-page      | provider lacks `seals`          | `low`        | absent  | one call per page   |
+
+The whole-page path exists so signature checking survives a GLM outage or a deliberate
+`GLM_ENABLED=false`. It cannot locate regions, so it hands whole page images to the vision
+model, which both finds and judges the blocks. It is less reliable and reports so: expect
+`confidence: "low"` and a `warnings` entry naming the degraded path. `geometryOnly` has no
+meaning on this path and returns no blocks plus an explanatory warning.
+
+Its page budget is `maxVisionPages` (default 3). Pages whose text carries one of
+`signatureCues` are scanned, latest first; a document with no cue text falls back to its last
+page. When candidates exceed the budget a warning names the pages actually examined.
 
 ## Deployment topology
 

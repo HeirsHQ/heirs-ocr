@@ -1,8 +1,8 @@
 import sharp from "sharp";
 import { z } from "zod";
 
+import { buildSigningJudgmentPrompt, buildWholePageSigningPrompt } from "./prompt";
 import type { LayoutBlock } from "../../providers/types";
-import { buildSigningJudgmentPrompt } from "./prompt";
 import type { SigningResult } from "./result";
 import type { OcrContext } from "../define";
 import type { SigningArgs } from "./args";
@@ -15,6 +15,11 @@ const CORRELATION_THRESHOLD = 0.25;
 /** Padding (fraction of the page) added around a crop so the mark isn't clipped. */
 const CROP_PADDING = 0.02;
 
+const DEGRADED_WARNING =
+  "Extraction ran on a provider without `seals`, so signature regions could not be located. " +
+  "Judged from whole-page images instead: block geometry is absent and detection is less reliable. " +
+  "Treat `fullyExecuted` as indicative, not authoritative.";
+
 /** The model reports only the raw judgment; execution status is derived here. */
 const signingJudgmentSchema = z.object({
   signed: z.boolean(),
@@ -24,24 +29,41 @@ const signingJudgmentSchema = z.object({
 });
 type SigningJudgment = z.infer<typeof signingJudgmentSchema>;
 
+/** One whole-page pass returns every block it can see, since nothing pre-located them. */
+const wholePageJudgmentSchema = z.object({
+  blocks: z.array(signingJudgmentSchema.extend({ label: z.string() })),
+});
+type WholePageJudgment = z.infer<typeof wholePageJudgmentSchema>;
+
 /** A correlated (cue label, signature image) pairing — an expected signature slot. */
 type Slot = { label: string; page: number; bbox: Bbox; image: LayoutBlock | null; context: string };
 
 /**
  * Determines whether an executed document is fully signed, where, and by whom.
- * Detection is geometric + contextual: find `image` blocks, correlate each
- * against nearby cue text, then crop the region and send it to the vision model
- * for signed/seal judgments. Depends on GLM-OCR's seal strength (the router only
- * reaches here with a `seals`-capable provider); Tesseract is not a viable
- * fallback — fail closed rather than degrade.
+ *
+ * Two strategies, picked from what the extraction provider actually offered:
+ *
+ *  - **Region detection** (`seals`-capable provider, i.e. GLM-OCR): find `image`
+ *    blocks, correlate each against nearby cue text, crop the region and send it to
+ *    the vision model. Precise geometry, one cheap crop per slot → `confidence: "high"`.
+ *  - **Whole-page vision** (any other provider): no `image` blocks exist to correlate,
+ *    so rasterize the candidate pages and let the vision model both locate and judge.
+ *    Costlier, no geometry, less reliable → `confidence: "low"` plus a warning.
+ *
+ * The fallback exists so SIGNING still answers when GLM is off or down. It degrades
+ * loudly: the alternative — running region detection against a provider that emits no
+ * `image` blocks — reports a fully executed contract as entirely unsigned, with
+ * nothing in the response to say the detector was blind.
  */
 export const executeSigning = async (ctx: OcrContext, args: SigningArgs): Promise<SigningResult> => {
+  if (!ctx.capabilities.includes("seals")) return executeWholePage(ctx, args);
+
   const slots = correlateSlots(ctx.doc.blocks, args.signatureCues);
 
   // Geometry-only probe: report the located slots, skip the vision (and LLM) pass.
   if (args.geometryOnly) {
     const blocks = slots.map((slot) => toBlock(slot, { signed: false, hasSeal: false }));
-    return assemble(blocks);
+    return assemble(blocks, "high", []);
   }
 
   // Rasterize each page that carries a detected signature image, once.
@@ -72,14 +94,96 @@ export const executeSigning = async (ctx: OcrContext, args: SigningArgs): Promis
     blocks.push(toBlock(slot, data));
   }
 
-  return assemble(blocks);
+  return assemble(blocks, "high", []);
 };
 
+/**
+ * Whole-page fallback: one vision call per candidate page, no region detection.
+ * Always `confidence: "low"` — the caller must be able to tell this ran.
+ */
+const executeWholePage = async (ctx: OcrContext, args: SigningArgs): Promise<SigningResult> => {
+  const warnings = [DEGRADED_WARNING];
+
+  // Locating regions is exactly what this path cannot do, so a geometry probe has
+  // no honest answer to give. Say so rather than returning word boxes as if they
+  // were signature blocks.
+  if (args.geometryOnly) {
+    warnings.push("`geometryOnly` requires a `seals`-capable provider; no block geometry was produced.");
+    return assemble([], "low", warnings);
+  }
+
+  const { pages, truncated } = selectVisionPages(ctx, args);
+  if (truncated) {
+    warnings.push(
+      `More candidate pages than the \`maxVisionPages\` budget of ${args.maxVisionPages}; ` +
+        `scanned pages ${pages.join(", ")} only. Raise \`maxVisionPages\` to widen the scan.`,
+    );
+  }
+
+  const pageImages = await rasterizePages(ctx.file, new Set(pages));
+
+  const blocks: SignatureBlock[] = [];
+  for (const page of pages) {
+    const pageImage = pageImages.get(page);
+    if (!pageImage) {
+      warnings.push(`Page ${page} could not be rasterized and was not examined.`);
+      continue;
+    }
+    const { system, user } = buildWholePageSigningPrompt(pageText(ctx, page));
+    const { data } = await ctx.llm.complete<WholePageJudgment>({
+      system,
+      user,
+      images: [`data:image/png;base64,${pageImage.toString("base64")}`],
+      schema: wholePageJudgmentSchema,
+      schemaName: "SIGNING_whole_page",
+    });
+    for (const judged of data.blocks) {
+      blocks.push({
+        label: judged.label,
+        page,
+        signed: judged.signed,
+        hasSeal: judged.hasSeal,
+        ...(judged.signatoryName ? { signatoryName: judged.signatoryName } : {}),
+        ...(judged.signedDate ? { signedDate: judged.signedDate } : {}),
+      });
+    }
+  }
+
+  if (blocks.length === 0) {
+    warnings.push("No signature blocks were identified on the scanned pages.");
+  }
+  return assemble(blocks, "low", warnings);
+};
+
+/**
+ * Chooses which pages the whole-page pass should rasterize. Pages whose OCR text
+ * carries a cue phrase are the candidates; failing that, the last page, where
+ * execution blocks usually sit. Later pages win when the budget binds, for the
+ * same reason.
+ */
+const selectVisionPages = (ctx: OcrContext, args: SigningArgs): { pages: number[]; truncated: boolean } => {
+  const lastPage = Math.max(1, ctx.doc.pageCount);
+  const cued = ctx.doc.pages.filter((p) => matchCue(p.markdown, args.signatureCues) !== null).map((p) => p.page);
+  const candidates = cued.length > 0 ? cued : [lastPage];
+
+  if (candidates.length <= args.maxVisionPages) return { pages: candidates, truncated: false };
+  return { pages: candidates.slice(-args.maxVisionPages), truncated: true };
+};
+
+const pageText = (ctx: OcrContext, page: number): string =>
+  (ctx.doc.pages.find((p) => p.page === page)?.markdown ?? "").slice(0, 4000);
+
 /** fullyExecuted only when there is at least one slot and every slot is signed. */
-const assemble = (blocks: SignatureBlock[]): SigningResult => ({
+const assemble = (
+  blocks: SignatureBlock[],
+  confidence: SigningResult["confidence"],
+  warnings: string[],
+): SigningResult => ({
   fullyExecuted: blocks.length > 0 && blocks.every((b) => b.signed),
   blocks,
   unsignedBlocks: blocks.filter((b) => !b.signed).map((b) => b.label),
+  confidence,
+  warnings,
 });
 
 /**

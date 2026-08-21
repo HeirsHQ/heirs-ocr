@@ -100,13 +100,27 @@ their metadata:
 | `FORM_DATA_EXTRACTION`    | yes (dynamic schema) | `text`               | standard    |
 | `RESUME_PARSING`          | yes                  | `text`               | standard    |
 | `ID_VERIFICATION`         | yes + MRZ            | `text`               | **pii**     |
-| `SIGNING`                 | vision               | `layout`, `seals`    | standard    |
+| `SIGNING`                 | vision               | `layout` (+`seals`)  | standard    |
 | `DOCUMENT_AUTHENTICITY`   | no (raw bytes)       | — (`skipExtraction`) | standard    |
 | `AUTO_EXTRACTION`         | yes (classify+route) | `text`               | **pii**     |
 | `BUDGET_ANALYSIS`         | yes                  | `text`               | standard    |
 | `EXPENSE_CLAIM`           | yes                  | `text`               | standard    |
 | `LOAN_REVIEW`             | yes                  | `text`               | **pii**     |
 | `BANK_STATEMENT_ANALYSIS` | yes                  | `text`               | **pii**     |
+
+`SIGNING`'s `requires` is a floor, not a guarantee: it needs `layout`, and takes a more
+precise path when the provider also offers `seals`. Declaring `seals` as *required* meant
+every `SIGNING` request failed routing — a 500 — whenever `GLM_ENABLED=false`. It now routes
+to Tesseract in that case and `execute` reads `ctx.capabilities` to pick its strategy:
+region crops when `seals` is present, whole-page vision otherwise. The degraded path is
+always labelled (`confidence: "low"` + a warning) and feeds `confidenceOf`, so a GLM outage
+shows up on the `ocr_low_confidence_ratio` SLI instead of silently changing answers.
+
+`ctx.capabilities` carries the capabilities of the provider that *actually ran*, resolved by
+name after any fallback. It exists for exactly this shape of decision — a function that can
+degrade should be able to tell that it is degrading. Deriving the same thing from block
+labels does not work: "no `image` blocks" cannot distinguish an unsigned document from a
+provider that never emits `image` blocks at all.
 
 `sensitivity: "pii"` is declarative and drives middleware centrally, where it can't be
 bypassed per call site: no raw text in logs (`createRedactingLogger`), no trace body capture,
