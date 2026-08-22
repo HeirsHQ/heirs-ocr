@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 
 import { providerSatisfies, routeProvider } from "../src/providers/router";
 import { defaultProviderPolicy } from "../src/config/providers";
+import { signing } from "../src/functions/signing";
 import type {
   Capability,
   DocumentInput,
@@ -108,5 +109,34 @@ describe("routeProvider", () => {
     expect(() =>
       routeProvider(noSeals, { group: "image", required: ["seals"], fn: "SIGNING", policy: defaultProviderPolicy }),
     ).toThrow(/No provider satisfies/);
+  });
+
+  // Regression: SIGNING declared `requires: ["layout", "seals"]`, so with GLM
+  // disabled nothing satisfied it and every request 500'd on the routing throw.
+  // Its `requires` is now a floor — the function degrades to whole-page vision —
+  // so routing must succeed on Tesseract while still preferring GLM when present.
+  describe("SIGNING routes with GLM disabled", () => {
+    it("prefers GLM when it is registered", () => {
+      const { provider } = routeProvider(registry, {
+        group: "image",
+        required: signing.requires,
+        fn: signing.key,
+        policy: defaultProviderPolicy,
+      });
+      expect(provider.name).toBe("glm-ocr");
+    });
+
+    it("falls back to tesseract instead of throwing when GLM is absent", () => {
+      const noGlm = [plainText, pdfText, mammoth, tesseract];
+      for (const group of ["image", "pdf"] as const) {
+        const { provider } = routeProvider(noGlm, {
+          group,
+          required: signing.requires,
+          fn: signing.key,
+          policy: defaultProviderPolicy,
+        });
+        expect(provider.name).toBe("tesseract");
+      }
+    });
   });
 });

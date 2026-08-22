@@ -32,6 +32,15 @@ export type Sensitivity = "standard" | "pii" | "restricted";
 /** Everything a function's `execute` receives. Extraction is already done. */
 export type OcrContext = {
   doc: RecognizedDocument;
+  /**
+   * Capabilities of the provider that actually produced `doc` — resolved *after*
+   * any fallback, so this reflects what ran, not what was preferred. A function
+   * whose `requires` are a floor rather than a guarantee (SIGNING, which is far
+   * more precise with `seals` but must still answer without it) reads this to pick
+   * its strategy and flag a degraded run, instead of silently emitting a confident
+   * wrong answer off missing block labels.
+   */
+  capabilities: readonly Capability[];
   /** Raw uploaded bytes — needed by functions that analyze the container itself (tamper detection). */
   file: { sha256: string; mimeGroup: MimeGroup; sizeBytes: number; originalName: string; buffer: Buffer };
   requestId: string;

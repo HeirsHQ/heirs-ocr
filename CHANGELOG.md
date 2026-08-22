@@ -51,6 +51,22 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- **`SIGNING` no longer requires the `seals` capability, and runs without GLM-OCR.**
+  It declared `requires: ["layout", "seals"]`, which only GLM satisfies, so with
+  `GLM_ENABLED=false` every request failed provider routing and returned `500`.
+  `requires` is now `["layout"]` — a floor, not a guarantee. GLM is still preferred
+  and still takes the precise path (locate signature regions, judge each from its own
+  crop, `confidence: "high"`). Without `seals`, `execute` switches to a whole-page
+  vision pass that both locates and judges blocks, reporting `confidence: "low"`, a
+  warning naming the degraded path, and blocks with no `bbox`. Bounded by the new
+  `maxVisionPages` arg (default 3).
+- **`signingResultSchema` gains `confidence` and `warnings`**, matching the rest of the
+  catalog, and `blocks[].bbox` is now **optional** (absent on the whole-page path).
+  Callers reading `bbox` unconditionally must handle `undefined`. `SIGNING` also gains
+  `confidenceOf`, so degraded runs surface on the `ocr_low_confidence_ratio` SLI.
+- **`OcrContext` gains `capabilities`** — the capabilities of the provider that actually
+  ran, resolved after any fallback. Lets a function detect a degraded extraction path
+  and adapt instead of emitting a confident wrong answer off missing block labels.
 - **Storage migrated from Redis to Postgres** for the tenant and admin registries
   (`src/db.ts`). Redis is retained for rate limiting, the extraction cache, and the
   BullMQ queue.

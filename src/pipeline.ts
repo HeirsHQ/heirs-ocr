@@ -121,8 +121,16 @@ export const runPipeline = async <TArgs, TResult>(
     const isSensitive = def.sensitivity !== "standard";
     const requestLogger = deps.logger.child({ requestId: req.requestId, function: def.key });
 
+    // `doc` is a mutable `let` (the error path reads it), so narrowing does not
+    // survive into the closure below; bind it once here.
+    const recognized = doc;
+
     const ctx: OcrContext = {
-      doc,
+      doc: recognized,
+      // Resolved by name from the injected registry so this tracks the provider that
+      // actually ran (`doc.provider` is set by the fallback chain, not the router's
+      // first choice). Empty for `skipExtraction` functions, which have no provider.
+      capabilities: deps.providers.find((p) => p.name === recognized.provider)?.capabilities ?? [],
       file: {
         sha256: input.sha256,
         mimeGroup: input.mimeGroup,
