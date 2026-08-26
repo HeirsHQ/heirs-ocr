@@ -5,13 +5,21 @@ import type { WebhookDelivery, WebhookEndpoint } from "@heirs/api-client";
 import { createColumns, DateTimeCell, NumberCell, StatusCell, TextCell } from "./core";
 
 interface EndpointHandlers {
+  /**
+   * Whether the org's plan includes webhooks. Mirrors the server, which gates test,
+   * update and rotate-secret behind `requireTenantFeature("webhooks")` but leaves
+   * delete open (src/http/tenant/routes.ts) — a tenant who downgrades has to be able
+   * to take their endpoints down. Offering the gated three anyway would put three
+   * menu items on screen whose only outcome is a 403 toast.
+   */
+  entitled: boolean;
   onTest: (endpoint: WebhookEndpoint) => void;
   onRotate: (endpoint: WebhookEndpoint) => void;
   onToggle: (endpoint: WebhookEndpoint) => void;
   onDelete: (endpoint: WebhookEndpoint) => void;
 }
 
-export function createWebhookColumns({ onTest, onRotate, onToggle, onDelete }: EndpointHandlers) {
+export function createWebhookColumns({ entitled, onTest, onRotate, onToggle, onDelete }: EndpointHandlers) {
   return createColumns<WebhookEndpoint>({
     columns: [
       {
@@ -49,9 +57,20 @@ export function createWebhookColumns({ onTest, onRotate, onToggle, onDelete }: E
       },
     ],
     actions: (endpoint) => [
-      { label: "Send test event", icon: Send, onClick: () => onTest(endpoint) },
-      { label: endpoint.enabled ? "Disable" : "Enable", icon: Power, onClick: () => onToggle(endpoint) },
-      { label: "Rotate secret", icon: KeyRound, variant: "warning", onClick: () => onRotate(endpoint) },
+      { label: "Send test event", icon: Send, hidden: !entitled, onClick: () => onTest(endpoint) },
+      {
+        label: endpoint.enabled ? "Disable" : "Enable",
+        icon: Power,
+        hidden: !entitled,
+        onClick: () => onToggle(endpoint),
+      },
+      {
+        label: "Rotate secret",
+        icon: KeyRound,
+        variant: "warning",
+        hidden: !entitled,
+        onClick: () => onRotate(endpoint),
+      },
       { label: "Delete", icon: Trash2, variant: "destructive", onClick: () => onDelete(endpoint) },
     ],
   });
