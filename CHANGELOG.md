@@ -69,6 +69,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   *not* blocked — that is an ordinary transient the retry path already handles.
 - **Provisioning CLIs**: `pnpm provision:tenant` and `pnpm provision:admin` for runtime
   create/revoke.
+- **Readiness probe**: `GET /readyz` checks Redis (`PING`), Postgres (`SELECT 1`) and blob
+  storage, answering `503` with a per-dependency breakdown when either hard dependency is
+  unreachable so the instance leaves rotation instead of accepting traffic it can only
+  fail. Blob storage is reported but does not gate — it is optional, and reports healthy
+  when switched off. `GET /healthz` stays dependency-free on purpose: a liveness probe that
+  consults Redis restarts every pod into the same outage.
 - **Configuration** validated at startup via Zod (`src/config/env.ts`), loaded through
   `dotenv`; `.env.example` documents every variable.
 

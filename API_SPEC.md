@@ -274,11 +274,12 @@ error code on failure).
 | -------------- | -------------------- | ------------------------------------ | -------------------------------- |
 | `GET /`        | Service banner       | none                                 | `{ "message": "Heirs OCR API" }` |
 | `GET /healthz` | Liveness             | none                                 | `{ "status": "ok" }`             |
-| `GET /readyz`  | Readiness (see note) | none                                 | `{ "status": "ok" }`             |
+| `GET /readyz`  | Readiness            | none                                 | `{ "status": "ok", … }`          |
 | `GET /metrics` | Prometheus scrape    | bearer (`METRICS_AUTH_TOKEN`) if set | Prometheus text format           |
 
-> **Note:** `/readyz` currently returns a static `ok` and does not yet probe Redis or vendor
-> reachability. Do not treat it as a dependency-health gate. See TECHNICAL.md § Known gaps.
+> **Note:** `/readyz` probes Redis (`PING`), Postgres (`SELECT 1`) and blob storage, and answers
+> `503` with a per-dependency breakdown when Redis or Postgres is unreachable. Blob storage is
+> reported but does not gate readiness — it is optional, and reports healthy when switched off.
 
 ## Security
 
