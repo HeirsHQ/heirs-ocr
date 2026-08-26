@@ -577,10 +577,10 @@ the org's event stream, so adding one is a data-egress decision) subscribed to
 **Plan-gated.** Webhooks are a plan feature (`business` and `enterprise`); the routes that create
 or widen delivery — create, update, rotate-secret, test — answer `403 NOT_ENTITLED` without it,
 and dispatch checks entitlement too, so a downgrade stops delivery rather than leaving
-grandfathered endpoints firing. List, read and delete stay open on every plan: a tenant who
-downgrades must still be able to see what they have and take it down. A tenant with no
-subscription row at all is unlimited, as everywhere else. `503 PROVIDER_UNAVAILABLE` if the
-billing store cannot be read — the gate fails closed.
+grandfathered endpoints firing. List, the delivery log and delete stay open on every plan:
+a tenant who downgrades must still be able to see what they have and take it down. A tenant
+with no subscription row at all is unlimited, as everywhere else. `503 PROVIDER_UNAVAILABLE`
+if the billing store cannot be read — the gate fails closed.
 
 **Destination guard.** In production a webhook URL may not point at a private, loopback,
 link-local (including `169.254.169.254`), CGNAT or multicast address, whether given as an IP

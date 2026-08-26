@@ -65,8 +65,14 @@ export type BillingKind = BillingModel["kind"];
 
 /**
  * Boolean capabilities a plan unlocks, beyond raw function access. Checked with
- * `canAccessFeature` so a gated path (async jobs, PII, webhooks) fails with a clear
- * typed error instead of silently doing less.
+ * `hasFeature`/`requireFeature` (src/billing/entitlements.ts) when the caller already
+ * holds a subscription, or `tenantHasFeature` (src/billing/feature-access.ts) when it
+ * has only a tenant id, so a gated path fails with a clear typed error instead of
+ * silently doing less.
+ *
+ * Only `webhooks` is enforced today. The rest describe the plan catalog and are not
+ * checked anywhere yet — and PII access is gated by the plan's `maxSensitivity`
+ * ceiling in `canUseFunction`, not by `pii_functions`.
  */
 export type Feature =
   /** Submit large/multi-page work to the async job queue (`GET /v1/ocr/jobs/:id`). */

@@ -43,10 +43,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Webhooks are plan-gated** (`business`, `enterprise`): create, update, rotate-secret
   and test answer `403 NOT_ENTITLED` without the feature, and dispatch re-checks
   entitlement, so a downgrade stops delivery rather than leaving grandfathered endpoints
-  firing. List, read and delete stay open on every plan — a tenant who downgrades must
-  still be able to see what they have and take it down. A tenant with no subscription row
-  is unlimited, as everywhere else; the gate fails closed (`503 PROVIDER_UNAVAILABLE`) if
-  the billing store cannot be read.
+  firing. List, the delivery log and delete stay open on every plan — a tenant who
+  downgrades must still be able to see what they have and take it down. A tenant with no
+  subscription row is unlimited, as everywhere else; the gate fails closed
+  (`503 PROVIDER_UNAVAILABLE`) if the billing store cannot be read.
 - **Admin console** (`/admin`): session-cookie authentication with argon2id password
   hashing, role-based access control, and a first-party dashboard (`public/admin`) for
   managing tenants and admins. Bootstrap admin is seeded from env at startup.

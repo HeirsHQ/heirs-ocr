@@ -423,11 +423,12 @@ at boot, after which the DB is the source of truth and admins edit plans via the
 - `requireTenantFeature` is the capability twin on the **tenant-portal** routes, where the
   question is not "is there quota left?" but "does this plan include the feature at all?"
   (`src/http/middleware/require-tenant-feature.ts`). Webhooks use it: create, update,
-  rotate-secret and test require the `webhooks` feature → `403 NOT_ENTITLED`; list, read and
-  delete stay open so a downgraded tenant can still remove what they registered. `dispatch`
-  re-checks the same feature per event, so a downgrade stops delivery instead of leaving
-  grandfathered endpoints firing. It fails **closed** on a billing-store fault (`503`), unlike
-  the fail-open rate limiter — serving through a billing outage would ungate every tenant at once.
+  rotate-secret and test require the `webhooks` feature → `403 NOT_ENTITLED`; list, the delivery
+  log and delete stay open so a downgraded tenant can still remove what they registered.
+  `dispatch` re-checks the same feature per event, so a downgrade stops delivery instead of
+  leaving grandfathered endpoints firing. It fails **closed** on a billing-store fault (`503`),
+  unlike the fail-open rate limiter — serving through a billing outage would ungate every
+  tenant at once.
 - **No subscription = unlimited** (backward-compatible) — only an explicit subscription gates.
 - `quoteDocument` prices a processed document under the current model (trial coverage and
   within-allowance monthly documents are free). `recordDocumentUsage` meters period usage +
