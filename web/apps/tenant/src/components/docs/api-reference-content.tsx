@@ -198,6 +198,12 @@ export const ApiReferenceContent = ({ functions, host }: Props) => {
           <strong>Always verify the signature</strong> before trusting a payload, and respond 2xx quickly. Anything else
           is retried with exponential backoff up to six attempts, then marked dead.
         </Prose>
+        <Prose>
+          Webhooks are part of the <strong>Business</strong> and <strong>Enterprise</strong> plans, and an organisation
+          may register up to <strong>10</strong> endpoints. Each URL must be{" "}
+          <code className="font-mono text-xs">https</code> and resolve to a public address — one pointed at a private,
+          loopback or link-local host is refused when you save it, and re-checked before every delivery.
+        </Prose>
         <div className="flex items-center p-1 bg-muted rounded-md w-fit">
           {LANGUAGES.map((lang) => (
             <button

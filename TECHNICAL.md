@@ -420,6 +420,15 @@ at boot, after which the DB is the source of truth and admins edit plans via the
   `canUseFunction` (function + sensitivity ceiling) → `checkDocumentQuota`, and publishes the
   plan's `rateLimitPerMinute` onto the rate limiter. A denial maps to the HTTP layer:
   `SUBSCRIPTION_INACTIVE`→402, `NOT_ENTITLED`/`SENSITIVITY_BLOCKED`→403, `QUOTA_EXCEEDED`→429.
+- `requireTenantFeature` is the capability twin on the **tenant-portal** routes, where the
+  question is not "is there quota left?" but "does this plan include the feature at all?"
+  (`src/http/middleware/require-tenant-feature.ts`). Webhooks use it: create, update,
+  rotate-secret and test require the `webhooks` feature → `403 NOT_ENTITLED`; list, the delivery
+  log and delete stay open so a downgraded tenant can still remove what they registered.
+  `dispatch` re-checks the same feature per event, so a downgrade stops delivery instead of
+  leaving grandfathered endpoints firing. It fails **closed** on a billing-store fault (`503`),
+  unlike the fail-open rate limiter — serving through a billing outage would ungate every
+  tenant at once.
 - **No subscription = unlimited** (backward-compatible) — only an explicit subscription gates.
 - `quoteDocument` prices a processed document under the current model (trial coverage and
   within-allowance monthly documents are free). `recordDocumentUsage` meters period usage +
@@ -526,7 +535,7 @@ vendor without its key throws.
 | Endpoint       | Auth                               | Use                                                                           |
 | -------------- | ---------------------------------- | ----------------------------------------------------------------------------- |
 | `GET /healthz` | none                               | Liveness — process is up.                                                     |
-| `GET /readyz`  | none                               | Readiness. **⚠️ Currently a static `ok`** — does not yet probe Redis/vendors. |
+| `GET /readyz`  | none                               | Readiness — probes Redis + Postgres (gating) and blob storage (reported).     |
 | `GET /metrics` | bearer if `METRICS_AUTH_TOKEN` set | Prometheus scrape. No tenant data in labels — keep on an internal net.        |
 
 ### Key metrics & suggested alerts
@@ -615,10 +624,11 @@ version control.
 
 ### Known gaps
 
-- **`/readyz` is a stub** — returns `ok` unconditionally; does not verify Redis/vendor
-  reachability. _Fix: probe `redis.ping()` (and a cheap vendor check) before it gates traffic._
 - The GLM provider is unvalidated against z.ai's **live** API — smoke-test with a real key before
   production traffic.
+- Vendor reachability is not part of readiness. `/readyz` gates on Redis and Postgres; a vendor
+  outage surfaces through the provider fallback chain and metrics instead, so a z.ai blip cannot
+  pull every replica out of the load balancer.
 
 ---
 
@@ -665,6 +675,7 @@ endpoint. This is one config change away, so it is written down.
 | Over-broad data to Azure | Azure gets extracted text, not raw files; sensitive-function redaction keeps it out of our logs    | `src/pipeline.ts`                           |
 | PII to queue/cache       | Async + extraction-cache gated to `standard` sensitivity                                           | `src/http/routes.ts`                        |
 | Runaway spend / abuse    | Per-tenant rate limit + plan quotas; bounded provider concurrency; token/cost metrics for alerting | rate-limit + billing + `src/providers/glm/` |
+| SSRF via webhook URLs    | Destination guard refuses private/loopback/link-local/CGNAT targets, at save and before each send  | `src/webhooks/url-guard.ts`                 |
 
 ### Vetting checklist (before GLM is on the PII path)
 
@@ -752,7 +763,6 @@ async, observability export, graceful shutdown — all wired and test-covered). 
 
 | Debt                                  | Where                                                         | Repayment trigger                                                         |
 | ------------------------------------- | ------------------------------------------------------------- | ------------------------------------------------------------------------- |
-| `/readyz` is a static stub            | `src/main.ts`                                                 | Probe `redis.ping()` (+ cheap vendor check) before it gates real traffic  |
 | GLM unvalidated against z.ai live API | `src/providers/glm/`                                          | Live-API smoke test + vendor DPA **before** any PII routes to GLM         |
 | Cost sign-off threshold unset         | governance ([§ 10](#10-governance-decisions-ownership--cost)) | Set the monthly figure → flip the ADR to `accepted`                       |
 | Deep tamper-forensics tier deferred   | `src/authenticity/`                                           | When corpus + `sharp`-class deps justify ELA/PRNU/copy-move + PDF diffing |

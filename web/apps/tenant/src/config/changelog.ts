@@ -25,6 +25,24 @@ export interface ChangelogEntry {
 
 export const CHANGELOG: ChangelogEntry[] = [
   {
+    date: "2026-08-26",
+    title: "Webhook plan requirement, endpoint limit and destination checks",
+    changes: [
+      {
+        kind: "improved",
+        text: "Webhooks now require a Business or Enterprise plan. Registering an endpoint, editing one, rotating its secret and sending a test all need the feature. If your plan stops including it, deliveries stop, but your endpoints stay listed so you can still remove them.",
+      },
+      {
+        kind: "improved",
+        text: "An organisation may register up to 10 webhook endpoints. Adding another is refused until you delete one — every endpoint multiplies the requests we make for each document you process.",
+      },
+      {
+        kind: "security",
+        text: "A webhook URL must resolve to a public address. An endpoint pointed at a private, loopback or link-local host is refused when you save it, and checked again before every delivery — so a hostname re-pointed inward later stops being delivered to rather than retried.",
+      },
+    ],
+  },
+  {
     date: "2026-08-19",
     title: "Webhooks, request logs, and data export",
     changes: [

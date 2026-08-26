@@ -34,6 +34,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Redis extraction cache** wired (fail-open): the extraction stage is cached by
   content hash so the same document across functions pays for extraction once; skipped
   for `sensitivity: "pii"`.
+- **Webhooks**: owners register `https` endpoints subscribed to `document.processed` /
+  `document.failed`; a background worker delivers them with an HMAC-SHA256 signature
+  (`X-Heirs-Signature`, timestamp inside the signed string), a delivery id stable across
+  retries so receivers can dedupe, bounded exponential-backoff retry, and a per-tenant
+  delivery log. Capped at **10 endpoints per org** (`409 LIMIT_REACHED`) — each one
+  multiplies the outbound fan-out of every document processed.
+- **Webhooks are plan-gated** (`business`, `enterprise`): create, update, rotate-secret
+  and test answer `403 NOT_ENTITLED` without the feature, and dispatch re-checks
+  entitlement, so a downgrade stops delivery rather than leaving grandfathered endpoints
+  firing. List, the delivery log and delete stay open on every plan — a tenant who
+  downgrades must still be able to see what they have and take it down. A tenant with no
+  subscription row is unlimited, as everywhere else; the gate fails closed
+  (`503 PROVIDER_UNAVAILABLE`) if the billing store cannot be read.
 - **Admin console** (`/admin`): session-cookie authentication with argon2id password
   hashing, role-based access control, and a first-party dashboard (`public/admin`) for
   managing tenants and admins. Bootstrap admin is seeded from env at startup.
@@ -44,8 +57,24 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   per-tenant rate limiting (fail-open), `pii` handling (log/trace redaction, `no-store`,
   no caching), default-closed CORS, magic-byte type sniffing, and untrusted-content
   guards against document-borne prompt injection.
+- **Webhook destination guard** (SSRF): a webhook URL is attacker-chosen input this
+  service then fetches from its own network position, so in production it may not point
+  at a private, loopback, link-local (including the cloud metadata address
+  `169.254.169.254`), CGNAT or multicast address — whether given as an IP literal or
+  reached by DNS. Rejected at registration (`400 INVALID_ARGS`) **and** re-resolved before
+  every send, because a hostname that resolved publicly when it was saved can be
+  re-pointed afterwards; a delivery blocked there is marked `dead` immediately rather than
+  retried. With `redirect: "manual"` in the worker this closes both the direct and the
+  redirect-based route to internal services. A host that fails to resolve is deliberately
+  *not* blocked — that is an ordinary transient the retry path already handles.
 - **Provisioning CLIs**: `pnpm provision:tenant` and `pnpm provision:admin` for runtime
   create/revoke.
+- **Readiness probe**: `GET /readyz` checks Redis (`PING`), Postgres (`SELECT 1`) and blob
+  storage, answering `503` with a per-dependency breakdown when either hard dependency is
+  unreachable so the instance leaves rotation instead of accepting traffic it can only
+  fail. Blob storage is reported but does not gate — it is optional, and reports healthy
+  when switched off. `GET /healthz` stays dependency-free on purpose: a liveness probe that
+  consults Redis restarts every pod into the same outage.
 - **Configuration** validated at startup via Zod (`src/config/env.ts`), loaded through
   `dotenv`; `.env.example` documents every variable.
 

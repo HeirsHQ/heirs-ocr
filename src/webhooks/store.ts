@@ -58,6 +58,26 @@ const toEndpoint = (r: EndpointRow): WebhookEndpoint => ({
  */
 export const generateSecret = (): string => `whsec_${randomBytes(32).toString("base64url")}`;
 
+/**
+ * How many endpoints one org may register.
+ *
+ * A cap exists because every endpoint multiplies the outbound fan-out of every
+ * document this tenant processes — a hundred endpoints turns one OCR call into a
+ * hundred third-party requests the worker has to make and retry. Ten is well past
+ * any legitimate routing need (prod, staging, and a couple of internal consumers)
+ * and far short of a number that hurts.
+ */
+export const MAX_ENDPOINTS_PER_TENANT = 10;
+
+/** How many endpoints an org already has. Used to enforce {@link MAX_ENDPOINTS_PER_TENANT}. */
+export const countEndpoints = async (tenantId: string): Promise<number> => {
+  const { rows } = await query<{ count: string }>(
+    `SELECT COUNT(*)::text AS count FROM webhook_endpoints WHERE tenant_id = $1`,
+    [tenantId],
+  );
+  return Number(rows[0]?.count ?? 0);
+};
+
 export const listEndpoints = async (tenantId: string): Promise<WebhookEndpoint[]> => {
   const { rows } = await query<EndpointRow>(
     `SELECT * FROM webhook_endpoints WHERE tenant_id = $1 ORDER BY created_at DESC`,

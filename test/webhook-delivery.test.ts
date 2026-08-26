@@ -10,7 +10,8 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
  * something to trade away for testability. What is exercised here is everything
  * built on top of it.
  */
-const { claimed, markDelivered, markFailed, reapOrphanedDeliveries } = vi.hoisted(() => ({
+const { assertSafeWebhookUrl, claimed, markDelivered, markFailed, reapOrphanedDeliveries } = vi.hoisted(() => ({
+  assertSafeWebhookUrl: vi.fn(async (_url: string) => {}),
   claimed: { value: [] as unknown[] },
   markDelivered: vi.fn(async () => {}),
   markFailed: vi.fn(async () => {}),
@@ -26,6 +27,16 @@ vi.mock("../src/webhooks/store", () => ({
 vi.mock("../src/observability/logger", () => ({
   logger: { info: vi.fn(), warn: vi.fn(), error: vi.fn(), debug: vi.fn() },
 }));
+
+/**
+ * The destination guard is stubbed, not run for real, because the real one is inert
+ * outside production (src/webhooks/url-guard.ts) — so against a live guard every case
+ * below would pass whether the worker consulted it or not, which is exactly the bug
+ * worth catching. The classifier it decides with is pinned separately in
+ * webhooks.test.ts. Default is "allowed", matching the real no-op, so the existing
+ * cases read unchanged.
+ */
+vi.mock("../src/webhooks/url-guard", () => ({ assertSafeWebhookUrl }));
 
 import { drainWebhookOutbox, MAX_ATTEMPTS } from "../src/webhooks/deliver";
 
@@ -45,6 +56,7 @@ const respondWith = (status: number) => vi.fn(async () => new Response(null, { s
 
 beforeEach(() => {
   claimed.value = [];
+  assertSafeWebhookUrl.mockReset(); // drops any unconsumed `...Once`, not just the call log
   markDelivered.mockClear();
   markFailed.mockClear();
   reapOrphanedDeliveries.mockClear();
@@ -159,5 +171,59 @@ describe("drainWebhookOutbox", () => {
     // Deliveries in a batch go to unrelated hosts, so they run concurrently.
     expect((await drainWebhookOutbox()).attempted).toBe(2);
     expect(markDelivered).toHaveBeenCalledTimes(2);
+  });
+});
+
+describe("destination re-check at send time", () => {
+  const blocked = () => new Error("10.0.0.5 is not a public address");
+
+  it("re-checks the destination on every attempt, not only at registration", async () => {
+    claimed.value = [due()];
+    vi.stubGlobal("fetch", respondWith(200));
+
+    await drainWebhookOutbox();
+    // The URL was already checked when the tenant saved it; checking it again here is
+    // what closes DNS rebinding, where the name resolved publicly then and privately now.
+    expect(assertSafeWebhookUrl).toHaveBeenCalledWith("https://example.test/hook");
+  });
+
+  it("does not send to a destination the guard refuses", async () => {
+    claimed.value = [due()];
+    assertSafeWebhookUrl.mockRejectedValueOnce(blocked());
+    const fetchMock = vi.fn(async () => new Response(null, { status: 200 }));
+    vi.stubGlobal("fetch", fetchMock);
+
+    await drainWebhookOutbox();
+    // The point of the guard: the request is never made at all.
+    expect(fetchMock).not.toHaveBeenCalled();
+    expect(markDelivered).not.toHaveBeenCalled();
+  });
+
+  it("marks a blocked delivery dead rather than retrying it", async () => {
+    claimed.value = [due({ attempts: 0 })];
+    assertSafeWebhookUrl.mockRejectedValueOnce(blocked());
+    vi.stubGlobal("fetch", respondWith(200));
+
+    await drainWebhookOutbox();
+    const call = markFailed.mock.calls[0]![0] as { id: string; retryAt?: Date; error: string };
+    expect(call.id).toBe("d1");
+    // Attempts are nowhere near exhausted, and it still must not come back: unlike a
+    // 502, a destination inside the network is not a condition that clears on the next
+    // tick, and each retry is another attempt to reach somewhere it must never reach.
+    expect(call.retryAt).toBeUndefined();
+    expect(call.error).toContain("not a public address");
+  });
+
+  it("blocks one delivery without stopping its neighbours", async () => {
+    claimed.value = [due({ id: "bad", url: "https://rebound.test/hook" }), due({ id: "good" })];
+    assertSafeWebhookUrl.mockImplementationOnce(async (url: string) => {
+      if (url === "https://rebound.test/hook") throw blocked();
+    });
+    vi.stubGlobal("fetch", respondWith(200));
+
+    // One tenant's bad destination is not an outage for everyone else in the batch.
+    expect((await drainWebhookOutbox()).attempted).toBe(2);
+    expect(markDelivered).toHaveBeenCalledTimes(1);
+    expect(markDelivered).toHaveBeenCalledWith("good", 200);
   });
 });

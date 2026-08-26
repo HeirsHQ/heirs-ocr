@@ -274,11 +274,12 @@ error code on failure).
 | -------------- | -------------------- | ------------------------------------ | -------------------------------- |
 | `GET /`        | Service banner       | none                                 | `{ "message": "Heirs OCR API" }` |
 | `GET /healthz` | Liveness             | none                                 | `{ "status": "ok" }`             |
-| `GET /readyz`  | Readiness (see note) | none                                 | `{ "status": "ok" }`             |
+| `GET /readyz`  | Readiness            | none                                 | `{ "status": "ok", … }`          |
 | `GET /metrics` | Prometheus scrape    | bearer (`METRICS_AUTH_TOKEN`) if set | Prometheus text format           |
 
-> **Note:** `/readyz` currently returns a static `ok` and does not yet probe Redis or vendor
-> reachability. Do not treat it as a dependency-health gate. See TECHNICAL.md § Known gaps.
+> **Note:** `/readyz` probes Redis (`PING`), Postgres (`SELECT 1`) and blob storage, and answers
+> `503` with a per-dependency breakdown when Redis or Postgres is unreachable. Blob storage is
+> reported but does not gate readiness — it is optional, and reports healthy when switched off.
 
 ## Security
 
@@ -573,6 +574,26 @@ the platform catalog, contains no credentials, and genuinely restores.
 A tenant may register endpoints (`/tenant/api/webhooks`, **owner only** — an endpoint receives
 the org's event stream, so adding one is a data-egress decision) subscribed to
 `document.processed` and `document.failed`. URLs must be `https` outside development.
+
+**Plan-gated.** Webhooks are a plan feature (`business` and `enterprise`); the routes that create
+or widen delivery — create, update, rotate-secret, test — answer `403 NOT_ENTITLED` without it,
+and dispatch checks entitlement too, so a downgrade stops delivery rather than leaving
+grandfathered endpoints firing. List, the delivery log and delete stay open on every plan:
+a tenant who downgrades must still be able to see what they have and take it down. A tenant
+with no subscription row at all is unlimited, as everywhere else. `503 PROVIDER_UNAVAILABLE`
+if the billing store cannot be read — the gate fails closed.
+
+**Destination guard.** In production a webhook URL may not point at a private, loopback,
+link-local (including `169.254.169.254`), CGNAT or multicast address, whether given as an IP
+literal or reached by DNS; `400 INVALID_ARGS` at registration. The same check runs again before
+every send, because a hostname that resolved publicly when it was saved can be re-pointed
+afterwards — a delivery blocked at that point is marked `dead` immediately rather than retried.
+A host that fails to resolve is *not* blocked: that is a normal transient condition the retry
+path already handles. Combined with `redirect: "manual"` in the worker, this closes both the
+direct and redirect-based routes to internal services.
+
+**At most 10 endpoints per org** (`409 LIMIT_REACHED`): every endpoint multiplies the outbound
+fan-out of every document processed.
 
 **Signing.** Every delivery carries `X-Heirs-Signature: t=<unix>,v1=<hmac>`, an HMAC-SHA256 over
 `<timestamp>.<body>` keyed by the endpoint's secret, plus `X-Heirs-Delivery` (stable across

@@ -31,6 +31,8 @@ import { requireTenantRole, tenantAuth } from "../middleware/tenant-auth";
 import { getTenantUsage } from "../../observability/usage";
 import { getDocumentById, getDocumentReport, listDocumentsPage } from "../../observability/documents";
 import {
+  MAX_ENDPOINTS_PER_TENANT,
+  countEndpoints,
   createEndpoint,
   deleteEndpoint,
   enqueueDelivery,
@@ -40,6 +42,8 @@ import {
   rotateSecret,
   updateEndpoint,
 } from "../../webhooks/store";
+import { UnsafeWebhookUrlError, assertSafeWebhookUrl } from "../../webhooks/url-guard";
+import { requireTenantFeature } from "../middleware/require-tenant-feature";
 import { WEBHOOK_EVENTS } from "../../webhooks/events";
 import { listRequestLogsPage } from "../../observability/request-log";
 import { assertPasswordPolicy } from "../../auth/password-policy";
@@ -689,6 +693,14 @@ tenantApiRouter.get(
 // ── Webhooks (owner only) ─────────────────────────────────────────────────────
 // Endpoint registration plus the delivery log. Owner-only: an endpoint receives the
 // org's event stream, so adding one is a data-egress decision.
+//
+// Two guards, answering different questions. `requireTenantRole("owner")` asks whether
+// this person may act; `requireTenantFeature("webhooks")` asks whether the org's plan
+// includes the capability at all. The plan gate is on the routes that *create or
+// widen* delivery — create, update, rotate, test — and deliberately not on list, read
+// or delete: a tenant who downgrades must still be able to see what they have and
+// take it down. Leaving those behind an upgrade wall would strand endpoints the
+// tenant can neither see nor remove.
 
 const webhookEventsSchema = z.array(z.enum(WEBHOOK_EVENTS)).min(1, "Subscribe to at least one event");
 
@@ -706,6 +718,27 @@ const webhookUrlSchema = z
     const protocol = new URL(value).protocol;
     return protocol === "https:" || (protocol === "http:" && env.NODE_ENV !== "production");
   }, "Webhook URLs must use https");
+
+/**
+ * Rejects a destination the service must not be pointed at (see
+ * src/webhooks/url-guard.ts). Returns `true` when it already answered the request.
+ *
+ * Async, so it cannot live in the zod schema beside the scheme rule: the check
+ * resolves DNS.
+ */
+const rejectedUnsafeUrl = async (res: Response, url: string | undefined): Promise<boolean> => {
+  if (!url) return false;
+  try {
+    await assertSafeWebhookUrl(url);
+    return false;
+  } catch (err) {
+    if (err instanceof UnsafeWebhookUrlError) {
+      sendError(res, 400, "INVALID_ARGS", err.message);
+      return true;
+    }
+    throw err;
+  }
+};
 
 const createWebhookSchema = z.object({
   url: webhookUrlSchema,
@@ -727,10 +760,25 @@ tenantApiRouter.post(
   "/api/webhooks",
   tenantAuth,
   requireTenantRole("owner"),
+  requireTenantFeature("webhooks"),
   handler(async (req, res) => {
     const parsed = createWebhookSchema.safeParse(req.body);
     if (!parsed.success) {
       sendError(res, 400, "INVALID_ARGS", parsed.error.issues[0]?.message ?? "Invalid webhook");
+      return;
+    }
+    if (await rejectedUnsafeUrl(res, parsed.data.url)) return;
+
+    // Checked before the insert rather than enforced with a constraint: the tenant
+    // gets told the limit and what they have, instead of a 500 from a violated index.
+    const existing = await countEndpoints(req.tenantUser!.tenantId);
+    if (existing >= MAX_ENDPOINTS_PER_TENANT) {
+      sendError(
+        res,
+        409,
+        "LIMIT_REACHED",
+        `You already have ${existing} webhook endpoints; the limit is ${MAX_ENDPOINTS_PER_TENANT}. Delete one to add another.`,
+      );
       return;
     }
 
@@ -760,12 +808,14 @@ tenantApiRouter.patch(
   "/api/webhooks/:id",
   tenantAuth,
   requireTenantRole("owner"),
+  requireTenantFeature("webhooks"),
   handler(async (req, res) => {
     const parsed = updateWebhookSchema.safeParse(req.body);
     if (!parsed.success) {
       sendError(res, 400, "INVALID_ARGS", parsed.error.issues[0]?.message ?? "Invalid webhook");
       return;
     }
+    if (await rejectedUnsafeUrl(res, parsed.data.url)) return;
 
     const updated = await updateEndpoint(req.tenantUser!.tenantId, String(req.params.id), parsed.data);
     if (!updated) {
@@ -810,6 +860,7 @@ tenantApiRouter.post(
   "/api/webhooks/:id/rotate-secret",
   tenantAuth,
   requireTenantRole("owner"),
+  requireTenantFeature("webhooks"),
   handler(async (req, res) => {
     const rotated = await rotateSecret(req.tenantUser!.tenantId, String(req.params.id));
     if (!rotated) {
@@ -837,6 +888,7 @@ tenantApiRouter.post(
   "/api/webhooks/:id/test",
   tenantAuth,
   requireTenantRole("owner"),
+  requireTenantFeature("webhooks"),
   handler(async (req, res) => {
     const tenantId = req.tenantUser!.tenantId;
     const endpoint = await getEndpoint(tenantId, String(req.params.id));
