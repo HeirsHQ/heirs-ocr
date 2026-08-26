@@ -1,3 +1,4 @@
+import { assertSafeWebhookUrl } from "./url-guard";
 import { SIGNATURE_HEADER, signPayload } from "./signing";
 import { claimDueDeliveries, markDelivered, markFailed, reapOrphanedDeliveries, type DueDelivery } from "./store";
 import { logger } from "../observability/logger";
@@ -45,6 +46,25 @@ export const backoffMs = (attempts: number): number => BASE_BACKOFF_MS * 2 ** Ma
 const isSuccess = (status: number): boolean => status >= 200 && status < 300;
 
 const attempt = async (delivery: DueDelivery): Promise<void> => {
+  // Re-checked here, not just at registration. A hostname that resolved to a public
+  // address when the tenant saved it can be re-pointed at an internal one afterwards,
+  // and this is the moment the request would actually be made.
+  try {
+    await assertSafeWebhookUrl(delivery.url);
+  } catch (err) {
+    // Dead immediately rather than retried: unlike a 502, a destination inside the
+    // network is not a condition that clears on the next tick, and retrying it five
+    // more times is five more attempts to reach somewhere it must never reach.
+    const reason = err instanceof Error ? err.message : String(err);
+    await markFailed({ id: delivery.id, error: reason });
+    logger.warn("webhook.delivery.blocked", {
+      deliveryId: delivery.id,
+      tenantId: delivery.tenantId,
+      reason,
+    });
+    return;
+  }
+
   const body = JSON.stringify(delivery.payload);
   const timestamp = Math.floor(Date.now() / 1000);
 

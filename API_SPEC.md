@@ -574,6 +574,26 @@ A tenant may register endpoints (`/tenant/api/webhooks`, **owner only** — an e
 the org's event stream, so adding one is a data-egress decision) subscribed to
 `document.processed` and `document.failed`. URLs must be `https` outside development.
 
+**Plan-gated.** Webhooks are a plan feature (`business` and `enterprise`); the routes that create
+or widen delivery — create, update, rotate-secret, test — answer `403 NOT_ENTITLED` without it,
+and dispatch checks entitlement too, so a downgrade stops delivery rather than leaving
+grandfathered endpoints firing. List, read and delete stay open on every plan: a tenant who
+downgrades must still be able to see what they have and take it down. A tenant with no
+subscription row at all is unlimited, as everywhere else. `503 PROVIDER_UNAVAILABLE` if the
+billing store cannot be read — the gate fails closed.
+
+**Destination guard.** In production a webhook URL may not point at a private, loopback,
+link-local (including `169.254.169.254`), CGNAT or multicast address, whether given as an IP
+literal or reached by DNS; `400 INVALID_ARGS` at registration. The same check runs again before
+every send, because a hostname that resolved publicly when it was saved can be re-pointed
+afterwards — a delivery blocked at that point is marked `dead` immediately rather than retried.
+A host that fails to resolve is *not* blocked: that is a normal transient condition the retry
+path already handles. Combined with `redirect: "manual"` in the worker, this closes both the
+direct and redirect-based routes to internal services.
+
+**At most 10 endpoints per org** (`409 LIMIT_REACHED`): every endpoint multiplies the outbound
+fan-out of every document processed.
+
 **Signing.** Every delivery carries `X-Heirs-Signature: t=<unix>,v1=<hmac>`, an HMAC-SHA256 over
 `<timestamp>.<body>` keyed by the endpoint's secret, plus `X-Heirs-Delivery` (stable across
 retries, so receivers can dedupe) and `X-Heirs-Event`. The timestamp is **inside** the signed

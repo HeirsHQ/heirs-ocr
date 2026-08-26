@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 /**
  * Webhook signing, dispatch, and delivery.
@@ -55,6 +55,17 @@ const { query, resetDb } = vi.hoisted(() => {
   return { query, resetDb };
 });
 
+/**
+ * The plan gate (src/billing/feature-access.ts) is stubbed rather than exercised
+ * against pg-mem: dispatch's job is deciding *what* to queue, and resolving a real
+ * subscription row here would test the billing store instead. Defaults to entitled —
+ * matching the "no subscription row = unlimited" rule the real function applies — so
+ * every dispatch case below reads as it did before the gate existed.
+ */
+const { tenantHasFeature } = vi.hoisted(() => ({ tenantHasFeature: vi.fn(async () => true) }));
+
+vi.mock("../src/billing/feature-access", () => ({ tenantHasFeature }));
+
 vi.mock("../src/db", () => ({
   query,
   ensureSchema: async () => {},
@@ -64,6 +75,8 @@ vi.mock("../src/db", () => ({
 
 import { signPayload, verifySignature, SIGNATURE_HEADER } from "../src/webhooks/signing";
 import {
+  MAX_ENDPOINTS_PER_TENANT,
+  countEndpoints,
   createEndpoint,
   deleteEndpoint,
   endpointsForEvent,
@@ -79,6 +92,7 @@ import {
 } from "../src/webhooks/store";
 import { dispatchDocumentEvent } from "../src/webhooks/dispatch";
 import { backoffMs, MAX_ATTEMPTS } from "../src/webhooks/deliver";
+import { isBlockedAddress } from "../src/webhooks/url-guard";
 
 beforeEach(resetDb);
 
@@ -183,6 +197,18 @@ describe("webhook endpoints", () => {
     expect(matched[0]!.enabled).toBe(true);
   });
 
+  it("counts only its own org's endpoints, so the cap is per tenant", async () => {
+    await createEndpoint({ tenantId: "acme", url: "https://a.test/h", events: ["document.processed"] });
+    await createEndpoint({ tenantId: "acme", url: "https://b.test/h", events: ["document.processed"] });
+    await createEndpoint({ tenantId: "globex", url: "https://c.test/h", events: ["document.processed"] });
+
+    expect(await countEndpoints("acme")).toBe(2);
+    expect(await countEndpoints("globex")).toBe(1);
+    expect(await countEndpoints("initech")).toBe(0);
+    // The limit the create route enforces against that count.
+    expect(MAX_ENDPOINTS_PER_TENANT).toBeGreaterThan(0);
+  });
+
   it("generates secrets with real entropy", () => {
     const secrets = new Set(Array.from({ length: 50 }, generateSecret));
     expect(secrets.size).toBe(50);
@@ -231,6 +257,28 @@ describe("webhook dispatch", () => {
 
   it("queues nothing when no endpoint subscribes", async () => {
     await dispatch();
+    expect(await deliveries()).toHaveLength(0);
+  });
+
+  it("queues nothing when the plan does not include webhooks", async () => {
+    // The endpoint exists and is subscribed — entitlement is the only thing stopping
+    // it. This is the downgrade case: the rows survive, the delivery does not.
+    await seedEndpoint(["document.processed"]);
+    tenantHasFeature.mockResolvedValueOnce(false);
+
+    await dispatch();
+
+    expect(await deliveries()).toHaveLength(0);
+    expect(tenantHasFeature).toHaveBeenCalledWith("acme", "webhooks");
+  });
+
+  it("does not fail the OCR request when the plan gate cannot be read", async () => {
+    // Same contract as a store failure: a billing outage must not turn into a failed
+    // extraction. The event is dropped, the caller never knows.
+    await seedEndpoint(["document.processed"]);
+    tenantHasFeature.mockRejectedValueOnce(new Error("billing store unavailable"));
+
+    await expect(dispatch()).resolves.toBeUndefined();
     expect(await deliveries()).toHaveLength(0);
   });
 
@@ -362,5 +410,103 @@ describe("delivery log retention", () => {
 
     expect(await purgeDeliveriesOlderThan(90)).toBe(1);
     expect((await listDeliveriesPage({ tenantId: "acme", page: 1, pageSize: 25 })).total).toBe(1);
+  });
+});
+
+describe("webhook destination guard", () => {
+  /**
+   * `assertSafeWebhookUrl` itself resolves DNS and is a no-op outside production, so
+   * what is worth pinning here is the address classifier it decides with — the part
+   * that is pure, and the part that is wrong in a way nobody notices until a tenant
+   * has read the instance metadata.
+   */
+  it("blocks the cloud metadata address", () => {
+    expect(isBlockedAddress("169.254.169.254")).toBe(true);
+  });
+
+  it("blocks loopback, RFC1918 and CGNAT ranges", () => {
+    for (const ip of ["127.0.0.1", "10.0.0.5", "172.16.4.1", "172.31.255.254", "192.168.1.1", "100.64.0.1"]) {
+      expect(isBlockedAddress(ip), ip).toBe(true);
+    }
+  });
+
+  it("allows ordinary public addresses", () => {
+    for (const ip of ["8.8.8.8", "1.1.1.1", "172.15.0.1", "172.32.0.1", "93.184.216.34"]) {
+      expect(isBlockedAddress(ip), ip).toBe(false);
+    }
+  });
+
+  it("sees through an IPv4-mapped IPv6 address", () => {
+    // ::ffff:127.0.0.1 reaches loopback; judging it by the v6 rules alone would let it past.
+    expect(isBlockedAddress("::ffff:127.0.0.1")).toBe(true);
+    expect(isBlockedAddress("::ffff:169.254.169.254")).toBe(true);
+    expect(isBlockedAddress("::ffff:8.8.8.8")).toBe(false);
+  });
+
+  it("blocks IPv6 loopback, unique-local and link-local", () => {
+    for (const ip of ["::1", "::", "fc00::1", "fd12:3456::1", "fe80::1"]) {
+      expect(isBlockedAddress(ip), ip).toBe(true);
+    }
+  });
+
+  it("allows a public IPv6 address", () => {
+    expect(isBlockedAddress("2606:4700:4700::1111")).toBe(false);
+  });
+
+  it("refuses anything that is not an address at all", () => {
+    // Fail closed: input the classifier did not understand is not evidence of safety.
+    for (const value of ["", "not-an-ip", "10.0.0", "999.1.1.1"]) {
+      expect(isBlockedAddress(value), value).toBe(true);
+    }
+  });
+
+  /**
+   * `assertSafeWebhookUrl` reads `env.NODE_ENV`, which is parsed once at module load —
+   * so switching it means stubbing the variable and re-importing the module, not
+   * assigning to `env`. Worth the ceremony: "enforced in production" is the one
+   * property of this guard that every other test in the suite silently assumes and
+   * none of them would notice losing, because outside production it is a no-op.
+   *
+   * IP literals only, so nothing here touches DNS.
+   */
+  const guardUnder = async (nodeEnv: string) => {
+    vi.stubEnv("NODE_ENV", nodeEnv);
+    // Both are required to be "true" when NODE_ENV is production, or config/env
+    // refuses to parse at all.
+    vi.stubEnv("AUTH_ENABLED", "true");
+    vi.stubEnv("RATE_LIMIT_ENABLED", "true");
+    vi.resetModules();
+    return import("../src/webhooks/url-guard");
+  };
+
+  afterEach(() => {
+    vi.unstubAllEnvs();
+    vi.resetModules();
+  });
+
+  it("actually blocks in production", async () => {
+    const { assertSafeWebhookUrl, UnsafeWebhookUrlError } = await guardUnder("production");
+
+    await expect(assertSafeWebhookUrl("https://169.254.169.254/hook")).rejects.toBeInstanceOf(UnsafeWebhookUrlError);
+    await expect(assertSafeWebhookUrl("https://127.0.0.1/hook")).rejects.toThrow(/not a public address/);
+    await expect(assertSafeWebhookUrl("https://[::1]/hook")).rejects.toThrow(/not a public address/);
+  });
+
+  it("lets a public destination through in production", async () => {
+    const { assertSafeWebhookUrl } = await guardUnder("production");
+    await expect(assertSafeWebhookUrl("https://93.184.216.34/hook")).resolves.toBeUndefined();
+  });
+
+  it("refuses a URL it cannot parse in production", async () => {
+    const { assertSafeWebhookUrl } = await guardUnder("production");
+    await expect(assertSafeWebhookUrl("not a url")).rejects.toThrow(/could not be parsed/);
+  });
+
+  it("stands down outside production, so local receivers still work", async () => {
+    const { assertSafeWebhookUrl } = await guardUnder("development");
+    // Deliberate: development receivers are http://localhost:…, and a guard that made
+    // local testing impossible would be turned off rather than worked around.
+    await expect(assertSafeWebhookUrl("http://localhost:3000/hook")).resolves.toBeUndefined();
+    await expect(assertSafeWebhookUrl("https://169.254.169.254/hook")).resolves.toBeUndefined();
   });
 });
