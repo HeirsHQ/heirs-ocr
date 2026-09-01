@@ -18,6 +18,7 @@ export const humanize = (key: string): string => {
 
 const FunctionCard = ({ fn }: { fn: OcrCatalogEntry }) => {
   const schema = fn.argsSchema ? JSON.stringify(fn.argsSchema, null, 2) : null;
+  const result = fn.resultSchema ? JSON.stringify(fn.resultSchema, null, 2) : null;
 
   return (
     <div className="space-y-3 rounded-md border p-4">
@@ -55,6 +56,21 @@ const FunctionCard = ({ fn }: { fn: OcrCatalogEntry }) => {
           </summary>
           <CodeBlock className="mt-2" language="json" code={schema} />
         </details>
+      )}
+
+      {/* What comes back under `result`. Dynamic-schema functions have no fixed shape to
+          publish, so they get a sentence rather than an empty disclosure. */}
+      {result && result !== "{}" ? (
+        <details className="group">
+          <summary className="cursor-pointer text-xs text-muted-foreground hover:text-foreground">
+            Response schema
+          </summary>
+          <CodeBlock className="mt-2" language="json" code={result} />
+        </details>
+      ) : (
+        <Prose className="text-xs">
+          The response shape follows the fields you request, so there is no fixed schema to publish for this function.
+        </Prose>
       )}
 
       {fn.sensitivity !== "standard" && (

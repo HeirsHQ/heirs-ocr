@@ -18,7 +18,7 @@
 8. [Data lifecycle](#data-lifecycle) — registry, archives, retention, logs, export
 9. [Webhooks](#webhooks)
 10. [Error handling and status codes](#error-handling-and-status-codes)
-11. [Function catalog](#function-catalog)
+11. [Function catalog](#function-catalog) — per-function args, sensitivity, expected responses
 12. [Deployment topology](#deployment-topology)
 13. [Appendix A — Tenant Portal API](#appendix-a--tenant-portal-api-tenantapi)
 14. [Appendix B — Admin API](#appendix-b--admin-api-adminapi)
@@ -30,6 +30,7 @@
 | ------- | ---------- | -------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | 0.0.1   | 2026-07-29 | Samson Okunola | Initial engineering specification for review.                                                                                                                                                                                                                                   |
 | 1.0.0   | 2026-08-12 | Samson Okunola | Reconciled with the shipped service: 13 functions; Postgres-backed auth; GLM-OCR and async paths wired; subscription/billing entitlements; new error codes (`NOT_FOUND`, `PAYMENT_REQUIRED`, `QUOTA_EXCEEDED`, `INTERNAL`); Tenant Portal and Admin management APIs documented. |
+| 1.0.1   | 2026-09-01 | Samson Okunola | Documented the expected response of every catalog function (`Expected responses`), plus a `Returns` column on the function catalog table. Documentation only — no endpoint, error code, auth or data-classification change.                                                     |
 
 This document is the source of truth for the **external contract and security posture** of
 the Heirs OCR Service. Changes to any endpoint, error code, authentication mechanism, or
@@ -196,7 +197,7 @@ multi-page uploads are queued instead (see [Async path](#3-async-path)).
 curl -X POST https://<host>/v1/ocr/RECEIPT_PARSING \
   -H "Authorization: Bearer <api-key>" \
   -F "file=@receipt.jpg" \
-  -F 'args={"currency":"NGN","expectedTaxRate":0.075}'
+  -F 'args={"currency":"NGN","expectedTaxRate":0.075,"lineItemMode":"multiple"}'
 ```
 
 **Pipeline stages** (all in `src/pipeline.ts`; identical for sync and async):
@@ -241,9 +242,10 @@ curl -X POST https://<host>/v1/ocr/RECEIPT_PARSING \
 }
 ```
 
-The `result` shape is function-specific (see the catalog schemas). `meta` is uniform across
-functions and reports which provider ran, whether a fallback occurred, page count, cache
-status, latency, and token usage where applicable.
+The `result` shape is function-specific — every function's expected response is shown in
+[Expected responses](#expected-responses). `meta` is uniform across functions and reports
+which provider ran, whether a fallback occurred, page count, cache status, latency, and
+token usage where applicable.
 
 ### 3. Async path
 
@@ -672,23 +674,307 @@ primary provider's name; only if the entire chain fails is `EXTRACTION_FAILED` r
 
 The live `GET /v1/ocr/functions` response is authoritative. Summary of the thirteen functions:
 
-| Function key              | Purpose                                                                | Accepts                | LLM    | Sensitivity |
-| ------------------------- | ---------------------------------------------------------------------- | ---------------------- | ------ | ----------- |
-| `TEXT_EXTRACTION`         | Return the canonical extracted text/markdown.                          | pdf, image, docx, text | no     | standard    |
-| `DOCUMENT_CLASSIFICATION` | Classify the document into a type.                                     | pdf, image, docx, text | yes    | standard    |
-| `RECEIPT_PARSING`         | Structured line items, totals, tax reconciliation.                     | pdf, image             | yes    | standard    |
-| `FORM_DATA_EXTRACTION`    | Extract caller-specified fields (dynamic schema).                      | pdf, image, docx, text | yes    | standard    |
-| `RESUME_PARSING`          | Structured résumé (contact, experience, education).                    | pdf, image, docx, text | yes    | standard    |
-| `ID_VERIFICATION`         | Read ID fields + MRZ; verify against expected values.                  | pdf, image             | yes    | **pii**     |
-| `SIGNING`                 | Detect signatures/seals and execution status.                          | pdf, image             | vision | standard    |
-| `DOCUMENT_AUTHENTICITY`   | Deterministic tamper analysis on raw bytes (no OCR, no LLM).           | pdf, image             | no     | standard    |
-| `AUTO_EXTRACTION`         | Classify the document, then route it to the matching parser.           | pdf, image, docx       | yes    | **pii**     |
-| `BUDGET_ANALYSIS`         | Categorized budget line items + deterministic totals reconciliation.   | pdf, image, docx       | yes    | standard    |
-| `EXPENSE_CLAIM`           | Claimant, line items, totals + reconciliation + missing-receipt check. | pdf, image, docx       | yes    | standard    |
-| `LOAN_REVIEW`             | Borrower financials + deterministic affordability recommendation.      | pdf, image             | yes    | **pii**     |
-| `BANK_STATEMENT_ANALYSIS` | Transactions/balances + inflow/outflow reconciliation.                 | pdf, image             | yes    | **pii**     |
+| Function key              | Purpose                                                                | Accepts                | LLM    | Sensitivity | Returns (`result` top level)                                                                                                                               |
+| ------------------------- | ---------------------------------------------------------------------- | ---------------------- | ------ | ----------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `TEXT_EXTRACTION`         | Return the canonical extracted text/markdown.                          | pdf, image, docx, text | no     | standard    | `text`, `format`, `pageCount`, `blocks?`                                                                                                                   |
+| `DOCUMENT_CLASSIFICATION` | Classify the document into a type.                                     | pdf, image, docx, text | yes    | standard    | `label`, `confidence`, `alternatives`, `rationale`                                                                                                         |
+| `RECEIPT_PARSING`         | Structured line items, totals, tax reconciliation.                     | pdf, image             | yes    | standard    | `merchant`, `dateTime`, `currency`, `lineItems`, `subtotal`, `tax`, `tip`, `total`, `paymentMethod`, `confidence`, `warnings`                              |
+| `FORM_DATA_EXTRACTION`    | Extract caller-specified fields (dynamic schema).                      | pdf, image, docx, text | yes    | standard    | `fields` — one key per requested field                                                                                                                     |
+| `RESUME_PARSING`          | Structured résumé (contact, experience, education).                    | pdf, image, docx, text | yes    | standard    | `contact`, `summary`, `experience`, `education`, `certifications`, `professionalBodies`, `languages`, `skills`                                             |
+| `ID_VERIFICATION`         | Read ID fields + MRZ; verify against expected values.                  | pdf, image             | yes    | **pii**     | `documentType`, `fields`, `checks`, `assuranceLevel`                                                                                                       |
+| `SIGNING`                 | Detect signatures/seals and execution status.                          | pdf, image             | vision | standard    | `fullyExecuted`, `blocks`, `unsignedBlocks`, `confidence`, `warnings`                                                                                      |
+| `DOCUMENT_AUTHENTICITY`   | Deterministic tamper analysis on raw bytes (no OCR, no LLM).           | pdf, image             | no     | standard    | `verdict`, `score`, `signals`, `analyzer`, `assuranceLevel`, `notes?`                                                                                      |
+| `AUTO_EXTRACTION`         | Classify the document, then route it to the matching parser.           | pdf, image, docx       | yes    | **pii**     | `documentType`, `handler`, `classification`, `data`, `validation`                                                                                          |
+| `BUDGET_ANALYSIS`         | Categorized budget line items + deterministic totals reconciliation.   | pdf, image, docx       | yes    | standard    | `title`, `period`, `currency`, `lineItems`, `totals`, `confidence`, `warnings`                                                                             |
+| `EXPENSE_CLAIM`           | Claimant, line items, totals + reconciliation + missing-receipt check. | pdf, image, docx       | yes    | standard    | `claimant`, `title`, `dateSubmitted`, `currency`, `lineItems`, `subtotal`, `tax`, `total`, `confidence`, `warnings`                                        |
+| `LOAN_REVIEW`             | Borrower financials + deterministic affordability recommendation.      | pdf, image             | yes    | **pii**     | `borrower`, `requestedAmount`, `tenorMonths`, `income`, `obligations`, `affordability`, `recommendation`, `riskFlags`, `summary`, `confidence`, `warnings` |
+| `BANK_STATEMENT_ANALYSIS` | Transactions/balances + inflow/outflow reconciliation.                 | pdf, image             | yes    | **pii**     | `accountHolder`, `accountNumber`, `bank`, `period`, `openingBalance`, `closingBalance`, `currency`, `transactions`, `summary`, `confidence`, `warnings`    |
 
 `pii` functions are never cached or queued and always run inline.
+
+### Expected responses
+
+Every function returns the same envelope — `requestId`, `function`, `meta`, and a
+per-function `result` — so only `result` is shown below. Fields typed `nullable` in the
+schema are **always present** and come back `null` when the document does not carry them;
+only fields marked `?` here are omitted entirely. Arrays come back `[]`, never `null`.
+The live JSON Schemas at `GET /v1/ocr/functions` remain authoritative.
+
+Where a `confidence` field appears it is a **deterministic** verdict recomputed in code
+(totals reconciliation, MRZ checksums, detection path), not the model's self-assessment —
+`"low"` means the recomputation disagreed or could not run, and `warnings` says why.
+
+#### `TEXT_EXTRACTION`
+
+`blocks` is returned only when the request set `includeBlocks: true`; `bbox` only when the
+provider reported layout geometry.
+
+```json
+{
+  "text": "# Invoice\n\nAcme Ltd\n\n| Item | Amount |\n| ---- | ------ |",
+  "format": "markdown",
+  "pageCount": 2,
+  "blocks": [
+    { "index": 0, "page": 1, "label": "text", "bbox": [0.08, 0.05, 0.92, 0.11], "content": "# Invoice" }
+  ]
+}
+```
+
+#### `DOCUMENT_CLASSIFICATION`
+
+```json
+{
+  "label": "Receipt",
+  "confidence": 0.94,
+  "alternatives": [{ "label": "Invoice", "confidence": 0.05 }],
+  "rationale": "Merchant header, itemized lines and a VAT total."
+}
+```
+
+#### `RECEIPT_PARSING`
+
+```json
+{
+  "merchant": { "name": "Shoprite", "address": "12 Awolowo Rd, Lagos", "tin": "01234567-0001" },
+  "dateTime": "2026-02-14T18:32:00+01:00",
+  "currency": "NGN",
+  "lineItems": [{ "description": "Milk 1L", "qty": 2, "unitPrice": 1500, "total": 3000 }],
+  "subtotal": 3000,
+  "tax": 225,
+  "tip": null,
+  "total": 3225,
+  "paymentMethod": "card",
+  "confidence": "high",
+  "warnings": []
+}
+```
+
+With `lineItemMode: "single"` the same response carries exactly one synthesized line
+holding the subtotal — see [`RECEIPT_PARSING` — itemized or single-line](#receipt_parsing--itemized-or-single-line).
+
+#### `FORM_DATA_EXTRACTION`
+
+The shape is the caller's own: one key under `fields` per requested field, typed as the
+spec declared it. Required fields are non-null; optional ones come back `null` when absent.
+
+```json
+{ "fields": { "policyNumber": "PL-88213", "premium": 45000, "renewalDate": "2026-11-01", "lapsed": false } }
+```
+
+#### `RESUME_PARSING`
+
+```json
+{
+  "contact": {
+    "name": "Ada Obi", "email": "ada@example.com", "phone": "+234...", "location": "Lagos",
+    "address": null, "state": "Lagos", "country": "Nigeria", "zip": null, "nationality": "Nigerian",
+    "links": ["https://linkedin.com/in/..."]
+  },
+  "summary": "Backend engineer, 8 years.",
+  "experience": [
+    { "company": "Acme", "title": "Senior Engineer", "startDate": "2021-03", "endDate": null, "current": true, "description": "Payments platform." }
+  ],
+  "education": [
+    { "institution": "University of Lagos", "degree": "BSc", "field": "Computer Science", "startDate": "2013", "endDate": "2017" }
+  ],
+  "certifications": [{ "name": "AWS SAA", "issuer": "Amazon", "date": "2023-06" }],
+  "professionalBodies": ["NCS"],
+  "languages": [{ "name": "English", "level": "native" }],
+  "skills": [{ "name": "TypeScript", "level": "expert" }]
+}
+```
+
+#### `ID_VERIFICATION`
+
+`checks.nameMatch` / `dobMatch` / `numberMatch` are `null` unless the request supplied the
+corresponding expected value; `mrzValid` is `null` when the document carries no MRZ.
+`assuranceLevel` is fixed at `"document-content-only"` — this verifies the document's own
+consistency, never that the holder is who they claim to be.
+
+```json
+{
+  "documentType": "PASSPORT",
+  "fields": {
+    "fullName": "ADA OBI", "dateOfBirth": "1995-04-02", "documentNumber": "A01234567",
+    "issueDate": "2021-05-10", "expiryDate": "2031-05-09", "nationality": "NGA",
+    "sex": "F", "placeOfBirth": "LAGOS", "address": null,
+    "licenceCategory": null, "issuingAuthority": "NIS"
+  },
+  "checks": {
+    "expired": false, "expiryDate": "2031-05-09",
+    "nameMatch": true, "dobMatch": true, "numberMatch": null, "mrzValid": true
+  },
+  "assuranceLevel": "document-content-only"
+}
+```
+
+#### `SIGNING`
+
+`bbox`, `signatoryName`, `signedDate` and `cropUrl` are omitted when the path that ran could
+not establish them — the whole-page fallback has no geometry. Read `confidence` before
+acting on `fullyExecuted`; see [`SIGNING` — two detection paths](#signing--two-detection-paths).
+
+```json
+{
+  "fullyExecuted": false,
+  "blocks": [
+    { "label": "Lessor", "page": 3, "bbox": [0.1, 0.72, 0.45, 0.8], "signed": true, "signatoryName": "Ada Obi", "signedDate": "2026-01-12", "hasSeal": true },
+    { "label": "Lessee", "page": 3, "bbox": [0.55, 0.72, 0.9, 0.8], "signed": false, "hasSeal": false }
+  ],
+  "unsignedBlocks": ["Lessee"],
+  "confidence": "high",
+  "warnings": []
+}
+```
+
+#### `DOCUMENT_AUTHENTICITY`
+
+No OCR and no LLM: the verdict comes from raw-bytes heuristics, so `assuranceLevel` is
+pinned to `"heuristic-only"` and a `clean` verdict is not a guarantee of authenticity.
+
+```json
+{
+  "verdict": "suspicious",
+  "score": 0.62,
+  "signals": [
+    { "code": "PDF_INCREMENTAL_UPDATE", "severity": "medium", "detail": "3 incremental saves after the original." }
+  ],
+  "assuranceLevel": "heuristic-only",
+  "analyzer": "pdf",
+  "notes": ["Producer metadata rewritten."]
+}
+```
+
+#### `AUTO_EXTRACTION`
+
+An envelope around whichever parser ran. `data` holds that parser's own result — its shape
+follows `handler` (`resume` → `RESUME_PARSING`, `id` → `ID_VERIFICATION`, `receipt` →
+`RECEIPT_PARSING`, `template` → `FORM_DATA_EXTRACTION`), so branch on `handler` before
+reading it. When classification confidence is too low to route, `documentType` is
+`"unknown"`, `handler` is `"none"`, and `data` and `validation` are `null`.
+
+```json
+{
+  "documentType": "Receipt",
+  "handler": "receipt",
+  "classification": {
+    "confidence": 0.93,
+    "alternatives": [{ "label": "Invoice", "confidence": 0.04 }],
+    "rationale": "Merchant header with itemized lines."
+  },
+  "data": { "merchant": { "name": "Shoprite" }, "total": 3225, "confidence": "high" },
+  "validation": null
+}
+```
+
+#### `BUDGET_ANALYSIS`
+
+```json
+{
+  "title": "Q1 Marketing Budget",
+  "period": "2026-Q1",
+  "currency": "NGN",
+  "lineItems": [
+    { "category": "Advertising", "description": "Paid social", "planned": 500000, "actual": 540000, "variance": -40000 }
+  ],
+  "totals": { "planned": 500000, "actual": 540000, "variance": -40000 },
+  "confidence": "high",
+  "warnings": []
+}
+```
+
+#### `EXPENSE_CLAIM`
+
+```json
+{
+  "claimant": { "name": "Ada Obi", "employeeId": "EMP-102", "department": "Engineering" },
+  "title": "Client visit — Abuja",
+  "dateSubmitted": "2026-03-04",
+  "currency": "NGN",
+  "lineItems": [
+    { "date": "2026-03-01", "category": "Transport", "description": "Flight LOS–ABV", "amount": 180000, "receiptAttached": true },
+    { "date": "2026-03-02", "category": "Meals", "description": "Dinner", "amount": 22000, "receiptAttached": false }
+  ],
+  "subtotal": 202000,
+  "tax": 0,
+  "total": 202000,
+  "confidence": "low",
+  "warnings": ["1 line item has no supporting receipt."]
+}
+```
+
+#### `LOAN_REVIEW`
+
+`affordability` and `recommendation` are computed from the extracted income and
+obligations, never taken from the model. `recommendation` is
+`approve` | `review` | `decline` | `insufficient-data` — the last when the document did not
+carry enough to compute a ratio at all.
+
+```json
+{
+  "borrower": { "name": "Ada Obi", "dateOfBirth": "1995-04-02", "bvn": "2214****91", "employmentStatus": "employed", "employer": "Acme Ltd" },
+  "requestedAmount": 5000000,
+  "currency": "NGN",
+  "tenorMonths": 24,
+  "income": { "monthly": 900000 },
+  "obligations": { "monthlyDebt": 250000 },
+  "riskFlags": ["Payslip employer differs from application employer."],
+  "summary": "Salaried applicant with one existing obligation.",
+  "affordability": { "debtToIncome": 0.28, "disposableIncome": 650000 },
+  "recommendation": "review",
+  "confidence": "high",
+  "warnings": []
+}
+```
+
+#### `BANK_STATEMENT_ANALYSIS`
+
+`summary` is recomputed from `transactions`; `confidence` is `"high"` only when
+`openingBalance + totalCredits − totalDebits` reconciles to `closingBalance`.
+
+```json
+{
+  "accountHolder": "ADA OBI",
+  "accountNumber": "0123456789",
+  "bank": "Heirs Bank",
+  "period": { "start": "2026-01-01", "end": "2026-01-31" },
+  "openingBalance": 120000,
+  "closingBalance": 415000,
+  "currency": "NGN",
+  "transactions": [
+    { "date": "2026-01-03", "description": "SALARY JAN", "debit": null, "credit": 900000, "balance": 1020000 },
+    { "date": "2026-01-05", "description": "RENT", "debit": 605000, "credit": null, "balance": 415000 }
+  ],
+  "summary": { "totalCredits": 900000, "totalDebits": 605000, "netFlow": 295000, "transactionCount": 2 },
+  "confidence": "high",
+  "warnings": []
+}
+```
+
+### `RECEIPT_PARSING` — itemized or single-line
+
+Callers decide how an upload is reported with the `lineItemMode` arg:
+
+| `lineItemMode` | `lineItems` returned                                   | Use when                                                    |
+| -------------- | ------------------------------------------------------ | ----------------------------------------------------------- |
+| `"multiple"`   | One entry per line printed on the receipt. *(default)* | You need the itemized basket.                               |
+| `"single"`     | Exactly one entry carrying the whole receipt.          | You book the upload as one expense and the items are noise. |
+
+This is a reporting choice, not a parsing one. The receipt is **always** parsed itemized and
+collapsed only afterwards, so totals reconciliation still runs against the real printed lines
+in both modes — a receipt whose items don't sum to its subtotal still comes back with
+`confidence: "low"` and the same warning. Collapsing cannot make a bad receipt look clean.
+
+The synthesized line carries the **subtotal**, not the grand total: line items sit below tax
+and tip in the result shape (`lineItems → subtotal → + tax + tip → total`), so a caller that
+re-adds VAT downstream does not double-count it. Its `description` is the merchant name plus
+the number of lines it replaced (e.g. `"Shoprite (7 items)"`), so the collapse stays visible.
+`subtotal`, `tax`, `tip`, and `total` are untouched in both modes.
+
+Edge cases: a receipt that already had exactly one line is returned unchanged, keeping its
+real description; an unitemized receipt that printed only a grand total still yields one line
+(subtotal recovered as `total - tax - tip`); and a receipt with no recoverable amount returns
+`lineItems: []` rather than a zero-value placeholder.
 
 ### `SIGNING` — two detection paths
 

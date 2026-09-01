@@ -4,7 +4,7 @@
   "private": true,
   "description": "Express service exposing a catalog of document OCR + interpretation functions (extraction shared, interpretation per-function).",
   "main": "build/index.js",
-  "packageManager": "pnpm@11.13.0",
+  "packageManager": "pnpm@11.24.0",
   "engines": {
     "node": ">=22",
     "pnpm": ">=10"
@@ -16,6 +16,7 @@
     "lint": "prettier --check \"src/**/*.{js,ts,tsx,md,json}\" \"test/**/*.ts\" && tsc -p tsconfig.test.json",
     "prettier:write": "prettier --write \"src/**/*.{js,ts,tsx,md,json}\" \"test/**/*.ts\"",
     "prettier:check": "prettier --check \"src/**/*.{js,ts,tsx,md,json}\"",
+    "format": "pnpm prettier:write",
     "dev": "nodemon",
     "build": "tsc && node scripts/copy-templates.cjs",
     "build:api": "tsc && node scripts/copy-templates.cjs",

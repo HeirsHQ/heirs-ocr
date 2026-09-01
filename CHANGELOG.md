@@ -21,6 +21,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   re-validated against Zod result schemas.
 - **Deterministic post-validation**: MRZ checksum parsing (`ID_VERIFICATION`) and
   receipt total reconciliation (`RECEIPT_PARSING`).
+- **`RECEIPT_PARSING` `lineItemMode` arg** — `"multiple"` (default) returns the receipt
+  itemized as printed; `"single"` collapses it to one line carrying the subtotal, for
+  callers that book an upload as a single expense. Purely a reporting choice: the
+  receipt is always parsed itemized and collapsed only afterwards, so totals
+  reconciliation still runs against the real printed lines and a receipt that doesn't
+  add up is still returned with `confidence: "low"`.
 - **`DOCUMENT_AUTHENTICITY`** deterministic tamper analysis (PDF structure/signature/
   metadata, image editor fingerprints/EXIF) with a `heuristic-only` assurance level.
 - **GLM-OCR provider** wired end-to-end (layout-aware, seal/stamp capable) behind a
@@ -69,6 +75,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   *not* blocked — that is an ordinary transient the retry path already handles.
 - **Provisioning CLIs**: `pnpm provision:tenant` and `pnpm provision:admin` for runtime
   create/revoke.
+- **`scripts/migrate-db.sh`** — guarded one-time Postgres data migration
+  (`preflight` → `dump` → `restore` → `verify`, each re-runnable). Because the schema is
+  created idempotently at boot, repointing `DATABASE_URL` at an empty server silently
+  produces a healthy-looking service with no tenants in it; the script moves the data
+  first, refuses a non-empty target, never uses `pg_restore --clean`, and confirms the
+  move by diffing per-table row counts. It does not touch `.env` — swapping the
+  connection string stays a manual step taken after `verify` passes. Dumps land in
+  `.dbdump/`, which is now gitignored as it holds credentials and tenant data.
 - **Readiness probe**: `GET /readyz` checks Redis (`PING`), Postgres (`SELECT 1`) and blob
   storage, answering `503` with a per-dependency breakdown when either hard dependency is
   unreachable so the instance leaves rotation instead of accepting traffic it can only

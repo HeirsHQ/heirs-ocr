@@ -94,11 +94,13 @@ Content-Type: multipart/form-data
   "requestId": "req_01J...",
   "function": "RECEIPT_PARSING",
   "result": {
-    "merchant": "Shoprite",
-    "total": 4750.00,
+    "merchant": { "name": "Shoprite" },
     "currency": "NGN",
+    "lineItems": [...],
+    "subtotal": 4275.00,
     "tax": 475.00,
-    "items": [...]
+    "total": 4750.00,
+    "confidence": "high"
   }
 }`;
 
