@@ -89,8 +89,9 @@ type RecognizedDocument = {
 
 Functions are declared with `defineOcrFunction` and collected in
 [`src/functions/registry.ts`](./src/functions/registry.ts). `GET /v1/ocr/functions` walks the
-registry and returns JSON Schema for args and result per function. The thirteen functions and
-their metadata:
+registry and returns JSON Schema for args and result per function — the response each one
+produces is written out in [API_SPEC.md](./API_SPEC.md#expected-responses). The thirteen
+functions and their metadata:
 
 | Function                  | LLM step             | Requires             | Sensitivity |
 | ------------------------- | -------------------- | -------------------- | ----------- |
@@ -174,6 +175,10 @@ What the service optimises for, so decisions can be checked against it rather th
 2. **Determinism over LLM where math suffices.** MRZ checksums, receipt/expense/budget totals,
    bank-statement reconciliation, tamper signals — computed in code. The LLM extracts what the
    document shows; verdicts are recomputed deterministically and never trust the model's arithmetic.
+   Presentation options must not route around this. `RECEIPT_PARSING`'s
+   `lineItemMode: "single"` collapses a receipt to one line *after* reconciliation has run over
+   the printed lines, never by asking the model for one line — the latter would leave the
+   arithmetic with nothing to check and make `confidence: "high"` vacuous on every receipt.
 3. **Fail closed on security, fail open on availability.** Auth and the tenant registry reject
    when their store is unreachable. Rate limiting and billing degrade toward serving.
 4. **Sensitivity is declarative and centrally enforced.** `sensitivity: "pii"` drives no-store,
@@ -590,6 +595,59 @@ failed job keeps a typed code recoverable via `GET /v1/ocr/jobs/:id`.
 - **Rollback:** processes are stateless and config-driven. The schema is applied additively at
   boot (`CREATE TABLE IF NOT EXISTS`, no destructive migrations), so redeploying the prior image
   is safe and loses no durable Postgres data. Re-check that any changed env var is reverted too.
+  The same additive schema is why *moving* to a different Postgres server needs a deliberate data
+  migration — see [Moving the database](#moving-the-database-scriptsmigrate-dbsh) below.
+
+### Moving the database (`scripts/migrate-db.sh`)
+
+There is no migration runner: `ensureSchema()` in [`src/db.ts`](./src/db.ts) creates every table
+with `CREATE TABLE IF NOT EXISTS` on each boot. That is what makes rollback safe (above), but it
+also makes the failure mode of a database move silent — **point `DATABASE_URL` at an empty server
+and the app cheerfully recreates the whole schema empty, passes `/readyz`, and serves as if every
+tenant had vanished.** So the data moves *before* `.env` is touched, and the script never edits
+`.env` itself: swapping the connection string stays a deliberate manual step, taken only after
+`verify` passes.
+
+`pg_dump`/`psql` are not installed on the dev machine, so each step runs them in a throwaway
+`postgres:*-alpine` container on `--network host` (a Postgres on `localhost` is reachable the
+same way a remote one is). Each step picks the image tag from the **major version of the server
+it is talking to** — the source's for `dump`, the target's for `restore` — because `pg_dump`
+refuses to dump a server newer than itself. If the docker daemon
+needs root the script falls back to `sudo docker` and says so; override with `DOCKER=...`, or fix
+it permanently with `sudo usermod -aG docker "$USER"`.
+
+Run the four steps in order — each is independently re-runnable:
+
+```bash
+export SOURCE_URL='postgres://…'   # current database
+export TARGET_URL='postgres://…'   # new database
+scripts/migrate-db.sh preflight    # reachability, versions, source row counts, target is empty
+scripts/migrate-db.sh dump         # pg_dump -Fc --no-owner --no-acl → .dbdump/heirs-ocr.dump
+scripts/migrate-db.sh restore      # pg_restore --exit-on-error into TARGET
+scripts/migrate-db.sh verify       # ANALYZE both sides, diff per-table row counts
+```
+
+What each guard is for:
+
+- **`preflight`** stops if either URL is unreachable, if the target is **older** than the source
+  (the restore would fail), or if the target's `public` schema already has tables. That last one
+  usually means the app booted against the new database first and `ensureSchema()` got there ahead
+  of you. Once you have confirmed the target holds nothing you need:
+  `DROP SCHEMA public CASCADE; CREATE SCHEMA public;` — then re-run.
+- **`dump`** stops if the dump file came back empty, before anything downstream can trust it.
+- **`restore`** stops on the first failed object (`--exit-on-error`) and is deliberately **not**
+  `--clean`: dropping existing objects to force a restore through is the one move that could
+  destroy the data being migrated, so a conflict fails loudly instead.
+- **`verify`** stops if row counts differ on any table, printing the diff as `-` source / `+` target.
+
+`--no-owner --no-acl` on both sides because the source's roles do not exist on the new provider;
+ownership lands on the connecting role. `verify` runs `ANALYZE` first — `pg_stat_user_tables` is
+an estimate until statistics are fresh, and stale estimates would make the comparison meaningless.
+
+Only when `verify` reports a clean diff is it safe to switch `DATABASE_URL`. Keep the previous
+connection string commented alongside it, and keep `.dbdump/heirs-ocr.dump` until the new database
+has run clean for a few days. **`.dbdump/` is gitignored and holds credentials and tenant data** —
+treat it as production data at rest and delete it when the migration is signed off.
 
 ### Tenant and admin management
 

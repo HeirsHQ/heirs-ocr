@@ -55,6 +55,25 @@ export type OcrFunctionDefinition<TArgs, TResult> = {
   accepts: readonly MimeGroup[];
   requires: readonly Capability[];
   sensitivity: Sensitivity;
+  /**
+   * Capabilities that improve the answer but are not needed to produce one.
+   *
+   * `requires` is a hard gate — a provider missing one of those is filtered out
+   * entirely, and a request no provider can serve fails. `prefers` only *ranks*:
+   * providers covering every preferred capability are tried ahead of those that
+   * don't, and the function still runs (degraded) when none of them are
+   * registered.
+   *
+   * This is the distinction that keeps an optional provider optional. Declaring a
+   * nice-to-have capability under `requires` makes the whole function unroutable
+   * the moment its one provider is disabled — SIGNING (`seals`), RECEIPT_PARSING
+   * (`tables`) and RESUME_PARSING (`layout` on DOCX) each shipped that way and
+   * returned an opaque 500 on every call with GLM off. A function listing a
+   * capability here must degrade without it — read `ctx.capabilities` and pick a
+   * strategy (see signing/execute.ts), or fall back on `doc.markdown` (see
+   * resume-parsing/execute.ts).
+   */
+  prefers?: readonly Capability[];
   maxPages: number;
   /**
    * Skip the extraction stage entirely. For functions that work on the raw
@@ -71,8 +90,13 @@ export type OcrFunctionDefinition<TArgs, TResult> = {
    * low-confidence quality SLI (`ocr_low_confidence_ratio`). Functions that carry
    * no meaningful confidence signal omit it. The pipeline reads it — a function
    * never touches metrics directly. Return `undefined` to record no observation.
+   *
+   * `args` is passed because a dynamic-schema function's result shape depends on
+   * them: RECEIPT_PARSING lets a caller rename its verdict field, and reading a
+   * fixed `result.confidence` would then see `undefined`, score every such request
+   * 0, and quietly drag down the SLI for a reason unrelated to quality.
    */
-  confidenceOf?: (result: TResult) => number | undefined;
+  confidenceOf?: (result: TResult, args: TArgs) => number | undefined;
 };
 
 /**

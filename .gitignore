@@ -91,3 +91,5 @@ HANDOFF.md
 .claude
 node_modules
 TODO.md
+# Local Postgres dumps from scripts/migrate-db.sh — contains credentials and tenant data.
+.dbdump/

@@ -45,8 +45,11 @@ portal — sharing `packages/*`), run separately from the backend:
 cd web && pnpm install && pnpm dev   # admin :3000, tenant :3001; both proxy to OCR_API_URL
 ```
 
-The Postgres schema is created idempotently at startup; no migration step is needed. For local
-work without auth, set `AUTH_ENABLED=false` (dev only — it throws at boot in production).
+The Postgres schema is created idempotently at startup; no migration step is needed to *create*
+it. Moving an existing database to another server is a different matter — the schema will happily
+recreate itself empty on the new one, so use `scripts/migrate-db.sh` before repointing
+`DATABASE_URL` ([TECHNICAL § Moving the database](./TECHNICAL.md#moving-the-database-scriptsmigrate-dbsh)).
+For local work without auth, set `AUTH_ENABLED=false` (dev only — it throws at boot in production).
 
 ## Build, test, and verify
 
@@ -55,7 +58,13 @@ pnpm test                   # vitest run (the suite is the CI gate)
 pnpm test:watch             # vitest watch
 pnpm lint                   # prettier --check + tsc --noEmit
 pnpm prettier:write         # auto-format
+pnpm format                 # alias for prettier:write (matches web/)
 ```
+
+The `packageManager` field pins the pnpm version for everyone on the project. Keep it on a
+release that actually installs — pnpm **11.13.0** shipped a broken `@pnpm/exe` and newer pnpm
+refuses to fetch it, so a pin to it breaks every command in both workspaces. The root and
+`web/` pins should stay in step.
 
 > **Verify with the direct binaries when the pnpm wrappers misbehave** in this environment
 > (snap-node + the `preinstall` precheck can interfere). Run the tools straight from

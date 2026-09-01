@@ -52,27 +52,35 @@ worker run the identical code. Large or multi-page uploads route to a BullMQ que
 ## Functions
 
 Thirteen functions, discoverable at runtime via `GET /v1/ocr/functions` (which returns
-JSON Schemas for args and result per function).
+JSON Schemas for args and result per function). The `Returns` column lists the top-level
+keys of the `result` object; a worked example response for each function is in
+[API_SPEC.md](API_SPEC.md#expected-responses). Keys marked `?` are omitted when they don't
+apply — everything else is always present, `null` when the document doesn't carry it.
 
-| Function                  | Does                                                  | LLM    | Sensitivity |
-| ------------------------- | ----------------------------------------------------- | ------ | ----------- |
-| `TEXT_EXTRACTION`         | Canonical markdown / plain text                       | no     | standard    |
-| `DOCUMENT_CLASSIFICATION` | Label a document into a type                          | yes    | standard    |
-| `RECEIPT_PARSING`         | Merchant, line items, totals, tax reconciliation      | yes    | standard    |
-| `FORM_DATA_EXTRACTION`    | Caller-defined fields (dynamic schema)                | yes    | standard    |
-| `RESUME_PARSING`          | Contact, experience, education                        | yes    | standard    |
-| `ID_VERIFICATION`         | ID fields + MRZ, verified deterministically           | yes    | **pii**     |
-| `SIGNING`                 | Signature/seal detection + execution status           | vision | standard    |
-| `DOCUMENT_AUTHENTICITY`   | Doctored-vs-filled tamper signals (raw bytes)         | no     | standard    |
-| `AUTO_EXTRACTION`         | Classify, then route to the matching parser           | yes    | **pii**     |
-| `BUDGET_ANALYSIS`         | Categorized budget line items + reconciliation        | yes    | standard    |
-| `EXPENSE_CLAIM`           | Claimant, line items, totals, missing-receipt check   | yes    | standard    |
-| `LOAN_REVIEW`             | Borrower financials + affordability recommendation    | yes    | **pii**     |
-| `BANK_STATEMENT_ANALYSIS` | Transactions, balances, inflow/outflow reconciliation | yes    | **pii**     |
+| Function                  | Does                                                  | LLM    | Sensitivity | Returns (top-level keys of `result`)                                                                                     |
+| ------------------------- | ----------------------------------------------------- | ------ | ----------- | ------------------------------------------------------------------------------------------------------------------------ |
+| `TEXT_EXTRACTION`         | Canonical markdown / plain text                       | no     | standard    | `text`, `format`, `pageCount`, `blocks?`                                                                                 |
+| `DOCUMENT_CLASSIFICATION` | Label a document into a type                          | yes    | standard    | `label`, `confidence`, `alternatives`, `rationale`                                                                       |
+| `RECEIPT_PARSING`         | Merchant, line items (itemized or single), totals     | yes    | standard    | `merchant`, `dateTime`, `lineItems`, `subtotal`, `tax`, `tip`, `total`, `confidence`, `warnings`                         |
+| `FORM_DATA_EXTRACTION`    | Caller-defined fields (dynamic schema)                | yes    | standard    | `fields` — one key per requested field                                                                                   |
+| `RESUME_PARSING`          | Contact, experience, education                        | yes    | standard    | `contact`, `summary`, `experience`, `education`, `certifications`, `professionalBodies`, `languages`, `skills`           |
+| `ID_VERIFICATION`         | ID fields + MRZ, verified deterministically           | yes    | **pii**     | `documentType`, `fields`, `checks`, `assuranceLevel`                                                                     |
+| `SIGNING`                 | Signature/seal detection + execution status           | vision | standard    | `fullyExecuted`, `blocks`, `unsignedBlocks`, `confidence`, `warnings`                                                    |
+| `DOCUMENT_AUTHENTICITY`   | Doctored-vs-filled tamper signals (raw bytes)         | no     | standard    | `verdict`, `score`, `signals`, `analyzer`, `assuranceLevel`, `notes?`                                                    |
+| `AUTO_EXTRACTION`         | Classify, then route to the matching parser           | yes    | **pii**     | `documentType`, `handler`, `classification`, `data`, `validation`                                                        |
+| `BUDGET_ANALYSIS`         | Categorized budget line items + reconciliation        | yes    | standard    | `title`, `period`, `lineItems`, `totals`, `confidence`, `warnings`                                                       |
+| `EXPENSE_CLAIM`           | Claimant, line items, totals, missing-receipt check   | yes    | standard    | `claimant`, `lineItems`, `subtotal`, `tax`, `total`, `confidence`, `warnings`                                            |
+| `LOAN_REVIEW`             | Borrower financials + affordability recommendation    | yes    | **pii**     | `borrower`, `income`, `obligations`, `affordability`, `recommendation`, `riskFlags`, `summary`, `confidence`, `warnings` |
+| `BANK_STATEMENT_ANALYSIS` | Transactions, balances, inflow/outflow reconciliation | yes    | **pii**     | `accountHolder`, `period`, `openingBalance`, `closingBalance`, `transactions`, `summary`, `confidence`, `warnings`       |
 
 Deterministic post-validation (MRZ checksums, receipt/expense/budget totals,
 bank-statement reconciliation, tamper heuristics) runs in code — the LLM extracts what
 the document shows; verdicts are recomputed and never trust the model's arithmetic.
+
+`RECEIPT_PARSING` takes `lineItemMode` (`"multiple"`, the default, or `"single"`) to control
+whether an upload comes back itemized or collapsed to one line. The collapse runs *after*
+reconciliation, so the `confidence` verdict still reflects the lines actually printed on the
+receipt — see [API_SPEC.md](API_SPEC.md#receipt_parsing--itemized-or-single-line).
 
 ## The API in one screen
 
@@ -216,6 +224,11 @@ invalid config throws immediately. Copy [`.env.example`](./.env.example) and fil
 | `GLM_ENABLED` (+ `_API_KEY`)                                                        | `false`              | GLM-OCR master switch                                        |
 | `GLM_BASE_URL` / `GLM_MAX_PAGES` / `GLM_CONCURRENCY`                                | z.ai / `30` / `8`    | GLM endpoint (swap for PII/self-host), chunk + concurrency   |
 
+> **Repointing `DATABASE_URL` does not move your data.** The schema is created idempotently at
+> boot, so an empty server comes up looking perfectly healthy — with no tenants in it. Migrate
+> first with `scripts/migrate-db.sh`, then swap the string:
+> [TECHNICAL § Moving the database](./TECHNICAL.md#moving-the-database-scriptsmigrate-dbsh).
+
 ## Project layout
 
 ```
@@ -232,6 +245,7 @@ src/
   jobs/           BullMQ queue + worker for async requests
   observability/  logger (redaction), metrics, tracing, usage
   scripts/        provision-admin CLI (admin lockout recovery only)
+scripts/          deploy + one-time Postgres data migration (migrate-db.sh)
 web/              Next.js frontend (admin dashboard + tenant portal)
 ```
 

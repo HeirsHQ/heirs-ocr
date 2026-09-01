@@ -14,5 +14,5 @@
     "check": "pnpm -r --filter \"./apps/*\" check",
     "typecheck": "pnpm -r typecheck"
   },
-  "packageManager": "pnpm@11.13.0"
+  "packageManager": "pnpm@11.24.0"
 }
