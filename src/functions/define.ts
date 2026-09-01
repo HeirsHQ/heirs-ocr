@@ -90,8 +90,13 @@ export type OcrFunctionDefinition<TArgs, TResult> = {
    * low-confidence quality SLI (`ocr_low_confidence_ratio`). Functions that carry
    * no meaningful confidence signal omit it. The pipeline reads it — a function
    * never touches metrics directly. Return `undefined` to record no observation.
+   *
+   * `args` is passed because a dynamic-schema function's result shape depends on
+   * them: RECEIPT_PARSING lets a caller rename its verdict field, and reading a
+   * fixed `result.confidence` would then see `undefined`, score every such request
+   * 0, and quietly drag down the SLI for a reason unrelated to quality.
    */
-  confidenceOf?: (result: TResult) => number | undefined;
+  confidenceOf?: (result: TResult, args: TArgs) => number | undefined;
 };
 
 /**

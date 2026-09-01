@@ -154,7 +154,7 @@ export const runPipeline = async <TArgs, TResult>(
 
     // Quality SLI: functions that carry a confidence signal expose `confidenceOf`;
     // the pipeline is the single place it's read and turned into a metric.
-    const confidence = def.confidenceOf?.(result);
+    const confidence = def.confidenceOf?.(result, args);
     const lowConfidence = confidence === undefined ? undefined : confidence <= env.LOW_CONFIDENCE_THRESHOLD;
     if (lowConfidence !== undefined) {
       metrics.recordConfidence(def.key, lowConfidence);

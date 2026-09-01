@@ -1,4 +1,4 @@
-import { OcrFunction, type OcrFunctionDefinition, type OcrFunctionKey } from "./define";
+import { OcrFunction, resolveResultSchema, type OcrFunctionDefinition, type OcrFunctionKey } from "./define";
 import { documentClassification } from "./document-classification";
 import { bankStatementAnalysis } from "./bank-statement-analysis";
 import { documentAuthenticity } from "./document-authenticity";
@@ -69,6 +69,25 @@ export const buildCatalog = (): CatalogEntry[] =>
     sensitivity: def.sensitivity,
     maxPages: def.maxPages,
     argsSchema: toJsonSchema(def.argsSchema, `${def.key}_args`),
-    resultSchema:
-      typeof def.resultSchema === "function" ? undefined : toJsonSchema(def.resultSchema, `${def.key}_result`),
+    resultSchema: catalogResultSchema(def),
   }));
+
+/**
+ * The result shape to publish for a function.
+ *
+ * A dynamic schema is resolved against the function's *default* args, so a
+ * function whose args are all optional (RECEIPT_PARSING, where `fieldMap` merely
+ * renames the canonical shape) still advertises something callers can generate
+ * forms from. Only a function with no shape at all until the caller supplies one
+ * — FORM_DATA_EXTRACTION, whose args are a required union — publishes none.
+ *
+ * Without this, giving a function a dynamic schema silently removed its entry from
+ * the catalog, which is a breaking change for any client reading it.
+ */
+const catalogResultSchema = (def: AnyOcrFunctionDefinition): JsonSchema | undefined => {
+  if (typeof def.resultSchema !== "function") return toJsonSchema(def.resultSchema, `${def.key}_result`);
+
+  const defaults = def.argsSchema.safeParse({});
+  if (!defaults.success) return undefined;
+  return toJsonSchema(resolveResultSchema(def, defaults.data), `${def.key}_result`);
+};
