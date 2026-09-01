@@ -50,6 +50,8 @@ export type CatalogEntry = {
   accepts: readonly string[];
   requires: readonly string[];
   sensitivity: string;
+  /** Capabilities that improve the result but are not needed to produce one. */
+  prefers?: readonly string[];
   maxPages: number;
   argsSchema: JsonSchema;
   /** Absent for dynamic-schema functions whose result shape depends on args. */
@@ -63,6 +65,7 @@ export const buildCatalog = (): CatalogEntry[] =>
     description: def.description,
     accepts: def.accepts,
     requires: def.requires,
+    prefers: def.prefers,
     sensitivity: def.sensitivity,
     maxPages: def.maxPages,
     argsSchema: toJsonSchema(def.argsSchema, `${def.key}_args`),

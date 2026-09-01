@@ -7,7 +7,14 @@ export const receiptParsing = defineOcrFunction({
   key: OcrFunction.RECEIPT_PARSING,
   description: "Parse a receipt into merchant, line items, totals, and payment method with totals reconciliation.",
   accepts: ["pdf", "image"],
-  requires: ["text", "tables"],
+  // `tables` is a preference, not a floor: `execute` reads `doc.markdown` and never
+  // touches table blocks, so Tesseract can serve a receipt — just less accurately on
+  // the thermal/handwritten ones GLM-OCR handles best. Gating on it made every
+  // receipt request unroutable (→ 500) whenever GLM_ENABLED was off, since GLM is
+  // the only provider offering `tables` for image/pdf. Mis-read totals still surface:
+  // `reconcileTotals` downgrades `confidence` to "low" and appends a warning.
+  requires: ["text"],
+  prefers: ["tables"],
   sensitivity: "standard",
   maxPages: 5,
   argsSchema: receiptParsingArgsSchema,

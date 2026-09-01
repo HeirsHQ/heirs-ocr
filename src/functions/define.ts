@@ -55,6 +55,25 @@ export type OcrFunctionDefinition<TArgs, TResult> = {
   accepts: readonly MimeGroup[];
   requires: readonly Capability[];
   sensitivity: Sensitivity;
+  /**
+   * Capabilities that improve the answer but are not needed to produce one.
+   *
+   * `requires` is a hard gate — a provider missing one of those is filtered out
+   * entirely, and a request no provider can serve fails. `prefers` only *ranks*:
+   * providers covering every preferred capability are tried ahead of those that
+   * don't, and the function still runs (degraded) when none of them are
+   * registered.
+   *
+   * This is the distinction that keeps an optional provider optional. Declaring a
+   * nice-to-have capability under `requires` makes the whole function unroutable
+   * the moment its one provider is disabled — SIGNING (`seals`), RECEIPT_PARSING
+   * (`tables`) and RESUME_PARSING (`layout` on DOCX) each shipped that way and
+   * returned an opaque 500 on every call with GLM off. A function listing a
+   * capability here must degrade without it — read `ctx.capabilities` and pick a
+   * strategy (see signing/execute.ts), or fall back on `doc.markdown` (see
+   * resume-parsing/execute.ts).
+   */
+  prefers?: readonly Capability[];
   maxPages: number;
   /**
    * Skip the extraction stage entirely. For functions that work on the raw

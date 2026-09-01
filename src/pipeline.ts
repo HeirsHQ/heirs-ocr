@@ -363,6 +363,7 @@ const extractDocument = async <TArgs, TResult>(
   const { provider, fallbacks } = routeProvider(deps.providers, {
     group: input.mimeGroup,
     required: def.requires,
+    preferred: def.prefers,
     fn: def.key,
     policy: deps.policy,
   });
