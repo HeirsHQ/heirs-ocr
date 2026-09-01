@@ -4,7 +4,10 @@ export interface OcrCatalogEntry {
   key: string;
   description: string;
   accepts: string[];
+  /** Hard capability gate: a provider missing one of these cannot serve the function. */
   requires: string[];
+  /** Capabilities that only rank providers — the function still runs, degraded, without them. */
+  prefers?: string[];
   sensitivity: string;
   maxPages: number;
   /** JSON Schema for the args object (used to hint/validate the args field). */

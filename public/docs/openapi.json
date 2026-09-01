@@ -62,7 +62,7 @@
                   },
                   "fields": {
                     "type": "string",
-                    "description": "JSON string with function-specific fields.\n\n**Per function:**\n- `TEXT_EXTRACTION`: `{\"language\": \"eng\"}` (optional, defaults to eng)\n- `SIGNING`: `{\"signerName\": \"John Doe\", \"expectedDate\": \"15/01/2026\"}` (signerName required)\n- `ID_VERIFICATION`: `{\"documentType\": \"passport\"}` (required, one of: national_id, passport, drivers_license)\n- `DOCUMENT_CLASSIFICATION`: `{\"expectedType\": \"code_of_conduct\"}` (optional)\n- `FORM_DATA_EXTRACTION`: `{\"targetFields\": [\"Name\", \"Email\"]}` (optional)\n- `RECEIPT_PARSING`: `{\"currency\": \"NGN\"}` (optional)",
+                    "description": "JSON string with function-specific fields.\n\n**Per function:**\n- `TEXT_EXTRACTION`: `{\"language\": \"eng\"}` (optional, defaults to eng)\n- `SIGNING`: `{\"signerName\": \"John Doe\", \"expectedDate\": \"15/01/2026\"}` (signerName required)\n- `ID_VERIFICATION`: `{\"documentType\": \"passport\"}` (required, one of: national_id, passport, drivers_license)\n- `DOCUMENT_CLASSIFICATION`: `{\"expectedType\": \"code_of_conduct\"}` (optional)\n- `FORM_DATA_EXTRACTION`: `{\"targetFields\": [\"Name\", \"Email\"]}` (optional)\n- `RECEIPT_PARSING`: `{\"currency\": \"NGN\", \"expectedTaxRate\": 0.075, \"lineItemMode\": \"multiple\", \"fieldMap\": {\"merchant.name\": \"vendor\", \"total\": \"amount_due\"}}` (all optional; `fieldMap` selects and renames the returned fields)",
                     "example": "{\"language\": \"eng\"}"
                   },
                   "comparisonData": {
@@ -92,12 +92,24 @@
                     },
                     "data": {
                       "oneOf": [
-                        { "$ref": "#/components/schemas/SigningResponseData" },
-                        { "$ref": "#/components/schemas/IdVerificationResponseData" },
-                        { "$ref": "#/components/schemas/DocumentClassificationResponseData" },
-                        { "$ref": "#/components/schemas/FormDataExtractionResponseData" },
-                        { "$ref": "#/components/schemas/ReceiptParsingResponseData" },
-                        { "$ref": "#/components/schemas/TextExtractionResponseData" }
+                        {
+                          "$ref": "#/components/schemas/SigningResponseData"
+                        },
+                        {
+                          "$ref": "#/components/schemas/IdVerificationResponseData"
+                        },
+                        {
+                          "$ref": "#/components/schemas/DocumentClassificationResponseData"
+                        },
+                        {
+                          "$ref": "#/components/schemas/FormDataExtractionResponseData"
+                        },
+                        {
+                          "$ref": "#/components/schemas/ReceiptParsingResponseData"
+                        },
+                        {
+                          "$ref": "#/components/schemas/TextExtractionResponseData"
+                        }
                       ],
                       "discriminator": {
                         "propertyName": "function"
@@ -213,22 +225,60 @@
                   "RECEIPT_PARSING": {
                     "summary": "Receipt parsing response",
                     "value": {
-                      "success": true,
-                      "message": "RECEIPT_PARSING completed successfully.",
-                      "data": {
-                        "function": "RECEIPT_PARSING",
-                        "result": {
-                          "vendor": "ABC Store",
-                          "date": "15/01/2026",
-                          "totalAmount": "25,000.00",
-                          "currency": "NGN",
-                          "lineItems": [
-                            { "description": "Item A", "amount": "15,000.00" },
-                            { "description": "Item B", "amount": "10,000.00" }
-                          ],
-                          "taxAmount": "1,875.00",
-                          "rawText": "ABC Store\nDate: 15/01/2026\n..."
-                        }
+                      "requestId": "req_01J7X9K2M4",
+                      "function": "RECEIPT_PARSING",
+                      "result": {
+                        "merchant": {
+                          "name": "Shoprite",
+                          "address": "12 Awolowo Rd, Lagos",
+                          "tin": "01234567-0001"
+                        },
+                        "dateTime": "2026-02-14T18:32:00+01:00",
+                        "currency": "NGN",
+                        "lineItems": [
+                          {
+                            "description": "Milk 1L",
+                            "qty": 2,
+                            "unitPrice": 1500,
+                            "total": 3000
+                          }
+                        ],
+                        "subtotal": 3000,
+                        "tax": 225,
+                        "tip": null,
+                        "total": 3225,
+                        "paymentMethod": "card",
+                        "confidence": "high",
+                        "warnings": []
+                      },
+                      "meta": {
+                        "provider": "glm-ocr",
+                        "fellBackFrom": null,
+                        "pageCount": 1,
+                        "cached": false,
+                        "confidence": 1,
+                        "durationMs": 4120,
+                        "tokensUsed": 1830
+                      }
+                    }
+                  },
+                  "RECEIPT_PARSING_fieldMap": {
+                    "summary": "Receipt parsing with a caller fieldMap",
+                    "description": "args = {\"fieldMap\":{\"merchant.name\":\"vendor\",\"total\":\"amount_due\",\"lineItems.description\":\"item\",\"lineItems.total\":\"line_total\"}}",
+                    "value": {
+                      "requestId": "req_01J7X9K2M5",
+                      "function": "RECEIPT_PARSING",
+                      "result": {
+                        "vendor": "Shoprite",
+                        "amount_due": 3225,
+                        "lineItems": [
+                          {
+                            "item": "Milk 1L",
+                            "line_total": 3000
+                          }
+                        ],
+                        "confidence": "high",
+                        "warnings": []
                       }
                     }
                   }
@@ -753,28 +803,65 @@
         "properties": {
           "currency": {
             "type": "string",
-            "description": "Expected currency code. If provided, overrides auto-detected currency.",
+            "default": "NGN",
+            "description": "ISO 4217 currency code. Defaults to NGN.",
             "example": "NGN"
+          },
+          "expectedTaxRate": {
+            "type": "number",
+            "default": 0.075,
+            "minimum": 0,
+            "maximum": 1,
+            "description": "Expected VAT rate as a fraction, used by the deterministic totals reconciliation. Nigeria: 0.075."
+          },
+          "lineItemMode": {
+            "type": "string",
+            "enum": ["multiple", "single"],
+            "default": "multiple",
+            "description": "How the upload is reported. 'multiple' returns the receipt itemized as printed; 'single' collapses it to one line carrying the subtotal. Reconciliation runs against the printed lines either way."
+          },
+          "fieldMap": {
+            "type": "object",
+            "additionalProperties": {
+              "type": "string",
+              "maxLength": 64,
+              "pattern": "^[A-Za-z_][A-Za-z0-9_]*$"
+            },
+            "description": "Optional { canonical field path -> your field name } map. Keys select which fields come back, values rename them. Valid keys: merchant.name, merchant.address, merchant.tin, dateTime, currency, subtotal, tax, tip, total, paymentMethod, lineItems, lineItems.description, lineItems.qty, lineItems.unitPrice, lineItems.total, confidence, warnings. The reconciliation verdict (confidence, warnings) is always returned; map it to rename it. Omit for the canonical shape.",
+            "example": {
+              "merchant.name": "vendor",
+              "total": "amount_due",
+              "lineItems.description": "item"
+            }
           }
         }
       },
       "ReceiptParsingResult": {
         "type": "object",
+        "description": "The canonical receipt shape. When the request supplies a `fieldMap`, the keys are the caller's own instead; `confidence` and `warnings` are always present under their mapped (or default) names.",
         "properties": {
-          "vendor": {
-            "type": "string",
-            "nullable": true,
-            "description": "Detected vendor or merchant name."
+          "merchant": {
+            "type": "object",
+            "description": "Merchant details as printed.",
+            "properties": {
+              "name": {
+                "type": "string",
+                "nullable": true
+              },
+              "address": {
+                "type": "string",
+                "nullable": true
+              },
+              "tin": {
+                "type": "string",
+                "nullable": true
+              }
+            }
           },
-          "date": {
+          "dateTime": {
             "type": "string",
             "nullable": true,
-            "description": "Date found on the receipt."
-          },
-          "totalAmount": {
-            "type": "string",
-            "nullable": true,
-            "description": "The total amount extracted from the receipt."
+            "description": "Date/time printed on the receipt."
           },
           "currency": {
             "type": "string",
@@ -783,29 +870,67 @@
           },
           "lineItems": {
             "type": "array",
+            "description": "One entry per printed line, or a single synthesized line when lineItemMode is 'single'.",
             "items": {
               "type": "object",
               "properties": {
                 "description": {
                   "type": "string"
                 },
-                "amount": {
-                  "type": "string"
+                "qty": {
+                  "type": "number",
+                  "nullable": true
+                },
+                "unitPrice": {
+                  "type": "number",
+                  "nullable": true
+                },
+                "total": {
+                  "type": "number",
+                  "nullable": true
                 }
               }
-            },
-            "description": "Individual line items parsed from the receipt."
+            }
           },
-          "taxAmount": {
+          "subtotal": {
+            "type": "number",
+            "nullable": true,
+            "description": "Subtotal before tax and tip."
+          },
+          "tax": {
+            "type": "number",
+            "nullable": true,
+            "description": "Tax/VAT amount if printed."
+          },
+          "tip": {
+            "type": "number",
+            "nullable": true,
+            "description": "Tip amount if printed."
+          },
+          "total": {
+            "type": "number",
+            "nullable": true,
+            "description": "Grand total as printed."
+          },
+          "paymentMethod": {
             "type": "string",
             "nullable": true,
-            "description": "Tax/VAT amount if found."
+            "description": "Payment method if printed."
           },
-          "rawText": {
+          "confidence": {
             "type": "string",
-            "description": "The full raw text extracted from the document."
+            "enum": ["high", "low"],
+            "description": "Deterministic totals-reconciliation verdict, recomputed in code — never the model's own assessment. 'low' means the arithmetic did not reconcile."
+          },
+          "warnings": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "Reconciliation warnings, e.g. line items not summing to the subtotal. Empty when everything reconciled."
           }
-        }
+        },
+        "required": ["merchant", "lineItems", "confidence", "warnings"]
       },
       "ReceiptParsingResponseData": {
         "type": "object",

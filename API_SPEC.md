@@ -160,7 +160,8 @@ capabilities, generate forms, and validate args client-side.
       "key": "RECEIPT_PARSING",
       "description": "Parse a receipt into structured line items and totals.",
       "accepts": ["pdf", "image"],
-      "requires": ["text", "tables"],
+      "requires": ["text"],
+      "prefers": ["tables"],
       "sensitivity": "standard",
       "maxPages": 5,
       "argsSchema": { "...": "JSON Schema for the args object" },
@@ -170,9 +171,18 @@ capabilities, generate forms, and validate args client-side.
 }
 ```
 
-`resultSchema` is omitted for dynamic-schema functions (e.g. `FORM_DATA_EXTRACTION`) whose
-output shape depends on the args. The live catalog is authoritative for the exact `accepts`,
-`maxPages`, and schemas; the [Function catalog](#function-catalog) table is a summary.
+`requires` is a hard gate — a provider missing one of those capabilities cannot serve the
+function — while `prefers` (optional) only ranks: a provider offering every preferred
+capability is tried first, and the function still runs, degraded, when none is registered.
+`RECEIPT_PARSING` prefers `tables` and `SIGNING` prefers `seals`, so both keep working with
+`GLM_ENABLED=false` instead of failing the request.
+
+`resultSchema` is omitted only for a function with no result shape at all until the caller
+supplies one — `FORM_DATA_EXTRACTION`, whose args are a required union. A function whose
+schema merely *varies* with its args still publishes its default shape: `RECEIPT_PARSING`
+advertises the canonical receipt even though `fieldMap` can rename it. The live catalog is
+authoritative for the exact `accepts`, `maxPages`, and schemas; the
+[Function catalog](#function-catalog) table is a summary.
 
 ### 2. `POST /v1/ocr/:function` — Run a function
 
@@ -751,6 +761,8 @@ provider reported layout geometry.
 
 With `lineItemMode: "single"` the same response carries exactly one synthesized line
 holding the subtotal — see [`RECEIPT_PARSING` — itemized or single-line](#receipt_parsing--itemized-or-single-line).
+With a `fieldMap` the keys are the caller's own — see
+[`RECEIPT_PARSING` — caller field names](#receipt_parsing--caller-field-names).
 
 #### `FORM_DATA_EXTRACTION`
 
@@ -976,6 +988,51 @@ real description; an unitemized receipt that printed only a grand total still yi
 (subtotal recovered as `total - tax - tip`); and a receipt with no recoverable amount returns
 `lineItems: []` rather than a zero-value placeholder.
 
+### `RECEIPT_PARSING` — caller field names
+
+By default the response uses the canonical field names above. The optional `fieldMap` arg
+reports the receipt under the caller's own names instead: **keys select** which fields come
+back, **values rename** them.
+
+```bash
+curl -X POST https://<host>/v1/ocr/RECEIPT_PARSING \
+  -H "Authorization: Bearer <api-key>" \
+  -F "file=@receipt.jpg" \
+  -F 'args={"fieldMap":{"merchant.name":"vendor","total":"amount_due","lineItems.description":"item","lineItems.total":"line_total"}}'
+```
+
+```json
+{
+  "vendor": "Shoprite",
+  "amount_due": 3225,
+  "lineItems": [{ "item": "Milk 1L", "line_total": 3000 }],
+  "confidence": "high",
+  "warnings": []
+}
+```
+
+Valid keys are the canonical paths: `merchant.name`, `merchant.address`, `merchant.tin`,
+`dateTime`, `currency`, `subtotal`, `tax`, `tip`, `total`, `paymentMethod`, `lineItems`,
+`lineItems.description`, `lineItems.qty`, `lineItems.unitPrice`, `lineItems.total`,
+`confidence`, `warnings`. Values must be identifiers (`[A-Za-z_][A-Za-z0-9_]*`, ≤ 64 chars).
+
+| Mapping                   | Effect                                                                  |
+| ------------------------- | ----------------------------------------------------------------------- |
+| `"total": "amount_due"`   | Returns that scalar under `amount_due`; unmapped scalars are omitted.   |
+| `"lineItems": "items"`    | Renames the array, keeping canonical item keys.                         |
+| `"lineItems.qty": "count"`| Selects and renames within each item; the array stays named `lineItems` unless also mapped. |
+
+Like `lineItemMode`, this is a **reporting** choice, not a parsing one. The receipt is always
+parsed and reconciled canonically and only projected afterwards, so the prompt never sees the
+caller's names and totals reconciliation is unaffected. The reconciliation verdict
+(`confidence`, `warnings`) is therefore **always returned** — map it to rename it, but it
+cannot be dropped: a caller who asked only for `total` must still be told the receipt did not
+add up.
+
+Rejected as `INVALID_ARGS` (400): an unknown field path, two fields mapped onto one output
+name, an empty map, and non-identifier or reserved names (`__proto__`, `constructor`,
+`prototype`). Omit `fieldMap` entirely for the canonical shape — the default is unchanged.
+
 ### `SIGNING` — two detection paths
 
 `SIGNING` requires `layout`, and *prefers* a provider that also offers `seals` (GLM-OCR).
@@ -1112,7 +1169,7 @@ first owner is seeded from env at startup.
 | Term                    | Definition                                                                                                                         |
 | ----------------------- | ---------------------------------------------------------------------------------------------------------------------------------- |
 | **Function**            | A named interpretation task (e.g. `RECEIPT_PARSING`) selected via the URL path.                                                    |
-| **Capability**          | A skill a provider offers (`text`, `layout`, `tables`, `handwriting`, `seals`); a function declares which it `requires`.           |
+| **Capability**          | A skill a provider offers (`text`, `layout`, `tables`, `handwriting`, `seals`); a function declares which it `requires` and which it `prefers`. |
 | **RecognizedDocument**  | The canonical extraction output (markdown, plain text, pages, layout blocks) every provider returns.                               |
 | **Provider**            | An extraction engine (pdf-parse, Mammoth, Tesseract, GLM-OCR, plain-text) that produces a `RecognizedDocument`.                    |
 | **Fallback chain**      | The ordered list of providers tried on error before an extraction is declared failed.                                              |
