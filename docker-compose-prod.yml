@@ -8,10 +8,31 @@ services:
       retries: 5
     restart: unless-stopped
 
+  # The database lives in the stack. `pgdata` is a named volume, so it survives
+  # `down`/`up` and image redeploys — but not `down -v`, which deletes it. Not
+  # published to the host: reachable only from `api`/`worker` over the compose
+  # network. Point DATABASE_URL at a managed instance instead to bypass it.
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-postgres}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD in your .env}
+      POSTGRES_DB: ${POSTGRES_DB:-heirs_ocr}
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-postgres} -d ${POSTGRES_DB:-heirs_ocr}"]
+      interval: 10s
+      timeout: 3s
+      retries: 5
+    restart: unless-stopped
+
   api:
     image: ${ECR_REGISTRY}/${ECR_REPOSITORY}:${IMAGE_TAG}
     depends_on:
       redis:
+        condition: service_healthy
+      postgres:
         condition: service_healthy
     ports:
       - "8080:8080"
@@ -19,7 +40,9 @@ services:
       NODE_ENV: production
       PORT: "8080"
       REDIS_URL: redis://redis:6379
-      DATABASE_URL: ${DATABASE_URL:?set DATABASE_URL in your .env}
+      # Defaults to the `postgres` service above; set DATABASE_URL in .env only to
+      # point at a database outside this stack.
+      DATABASE_URL: ${DATABASE_URL:-postgres://${POSTGRES_USER:-postgres}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB:-heirs_ocr}}
       AUTH_ENABLED: ${AUTH_ENABLED:-true}
       ADMIN_BOOTSTRAP_EMAIL: ${ADMIN_BOOTSTRAP_EMAIL:?set ADMIN_BOOTSTRAP_EMAIL in your .env}
       ADMIN_BOOTSTRAP_PASSWORD: ${ADMIN_BOOTSTRAP_PASSWORD:?set ADMIN_BOOTSTRAP_PASSWORD in your .env}
@@ -45,10 +68,14 @@ services:
     depends_on:
       redis:
         condition: service_healthy
+      postgres:
+        condition: service_healthy
     environment:
       NODE_ENV: production
       REDIS_URL: redis://redis:6379
-      DATABASE_URL: ${DATABASE_URL:?set DATABASE_URL in your .env}
+      # Defaults to the `postgres` service above; set DATABASE_URL in .env only to
+      # point at a database outside this stack.
+      DATABASE_URL: ${DATABASE_URL:-postgres://${POSTGRES_USER:-postgres}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB:-heirs_ocr}}
       ADMIN_BOOTSTRAP_EMAIL: ${ADMIN_BOOTSTRAP_EMAIL:?set ADMIN_BOOTSTRAP_EMAIL in your .env}
       ADMIN_BOOTSTRAP_PASSWORD: ${ADMIN_BOOTSTRAP_PASSWORD:?set ADMIN_BOOTSTRAP_PASSWORD in your .env}
       ADMIN_SESSION_TTL_SECONDS: ${ADMIN_SESSION_TTL_SECONDS:-28800}
@@ -66,3 +93,6 @@ services:
       S3_REGION: ${S3_REGION:-}
       S3_BUCKET_NAME: ${S3_BUCKET_NAME:-}
     restart: unless-stopped
+
+volumes:
+  pgdata:
