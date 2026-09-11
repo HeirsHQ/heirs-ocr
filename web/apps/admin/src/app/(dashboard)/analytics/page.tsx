@@ -3,8 +3,10 @@
 import { useState } from "react";
 import { Building2, ChartColumn, Clock } from "lucide-react";
 
-import { EmptyState, ErrorState, PageLayout, Shimmer, Skeleton, StatTile, cn } from "@/components/shared";
+import { EmptyState, ErrorState, PageLayout, Shimmer, Skeleton, StatTile } from "@/components/shared";
+import { DEFAULT_RANGE_HOURS, RangeToggle } from "@/components/admin/metrics-range";
 import {
+  ChartCard,
   FunctionVolumeChart,
   LatencyErrorChart,
   RequestsOverTimeChart,
@@ -16,29 +18,11 @@ import { getErrorMessage } from "@heirs/api-client";
 const pct = (ratio: number): string => `${(ratio * 100).toFixed(1)}%`;
 const num = (n: number): string => n.toLocaleString();
 
-/**
- * Presets rather than a free date picker: the buckets the endpoint returns are chosen
- * from the window (hourly up to 48h, daily beyond), so an arbitrary range would let a
- * reader pick one that renders as a thousand unreadable hour ticks.
- */
-const RANGES = [
-  { label: "24h", hours: 24 },
-  { label: "7d", hours: 24 * 7 },
-  { label: "30d", hours: 24 * 30 },
-] as const;
-
 /** The top tenants by request volume — the usage list is already sorted busiest-first. */
 const TENANT_LIMIT = 10;
 
-const Card = ({ title, children }: { title: string; children: React.ReactNode }) => (
-  <div className="space-y-4 rounded-lg border p-4">
-    <p className="text-sm font-medium">{title}</p>
-    {children}
-  </div>
-);
-
 const Page = () => {
-  const [hours, setHours] = useState<number>(RANGES[0].hours);
+  const [hours, setHours] = useState<number>(DEFAULT_RANGE_HOURS);
 
   const metrics = useMetricsSummary();
   const usage = useTenantUsage({ page: 1, pageSize: TENANT_LIMIT });
@@ -79,7 +63,7 @@ const Page = () => {
         )}
 
         <section className="grid gap-6 lg:grid-cols-2">
-          <Card title="By Function">
+          <ChartCard title="By Function">
             {metrics.isPending && <Shimmer className="h-72.5 w-full rounded-md" />}
             {m &&
               (byFunction.length === 0 ? (
@@ -91,9 +75,9 @@ const Page = () => {
               ) : (
                 <FunctionVolumeChart data={byFunction} />
               ))}
-          </Card>
+          </ChartCard>
 
-          <Card title="By Tenant">
+          <ChartCard title="By Tenant">
             {usage.isPending && <Shimmer className="h-72.5 w-full rounded-md" />}
             {usage.isError && (
               <ErrorState
@@ -113,7 +97,7 @@ const Page = () => {
               ) : (
                 <TenantVolumeChart data={tenants} />
               ))}
-          </Card>
+          </ChartCard>
         </section>
 
         <div className="flex items-center justify-between gap-4">
@@ -121,24 +105,10 @@ const Page = () => {
             Over time, from the request log — a rolling window that ages out with retention, and one that counts calls
             refused before they reached the pipeline. It will not tie out against the lifetime totals above.
           </p>
-          <div className="bg-muted flex w-fit shrink-0 items-center rounded-md p-1">
-            {RANGES.map((range) => (
-              <button
-                key={range.hours}
-                onClick={() => setHours(range.hours)}
-                aria-pressed={hours === range.hours}
-                className={cn(
-                  "rounded-md px-3 py-1 text-sm",
-                  hours === range.hours ? "bg-primary text-white" : "text-muted-foreground",
-                )}
-              >
-                {range.label}
-              </button>
-            ))}
-          </div>
+          <RangeToggle hours={hours} onChange={setHours} />
         </div>
         <section className="grid gap-6 lg:grid-cols-2">
-          <Card title="Function Latency & Error">
+          <ChartCard title="Function Latency & Error">
             {series.isPending && <Shimmer className="h-72.5 w-full rounded-md" />}
             {series.isError && (
               <ErrorState
@@ -158,9 +128,9 @@ const Page = () => {
               ) : (
                 <LatencyErrorChart data={series.data} />
               ))}
-          </Card>
+          </ChartCard>
 
-          <Card title="Requests over Time">
+          <ChartCard title="Requests over Time">
             {series.isPending && <Shimmer className="h-72.5 w-full rounded-md" />}
             {series.data &&
               (series.data.points.every((p) => p.requests === 0) ? (
@@ -172,7 +142,7 @@ const Page = () => {
               ) : (
                 <RequestsOverTimeChart data={series.data} />
               ))}
-          </Card>
+          </ChartCard>
         </section>
       </div>
     </PageLayout>

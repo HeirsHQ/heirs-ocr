@@ -49,7 +49,10 @@ export const adminKeys = {
   health: [...root, "health"] as const,
   queue: [...root, "queue"] as const,
   metrics: [...root, "metrics"] as const,
-  metricsTimeseries: (hours: number) => [...root, "metrics", "timeseries", hours] as const,
+  /** `tenantId` is part of the key: the tenant detail page reads a filtered series
+   *  from the same endpoint as the estate-wide analytics page. */
+  metricsTimeseries: (hours: number, tenantId?: string) =>
+    [...root, "metrics", "timeseries", hours, tenantId ?? null] as const,
   usage: [...root, "usage"] as const,
   usageList: (params?: unknown) => [...root, "usage", "list", params] as const,
   usageByFunctionList: (params?: unknown) => [...root, "usage", "by-function", params] as const,
