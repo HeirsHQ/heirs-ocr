@@ -1,3 +1,5 @@
+import type { TenantUsage } from "./metrics";
+
 /**
  * Admin-console view types for tenant provisioning. Lean projections of the backend
  * registry (`src/auth/tenants.ts`) and billing model (`src/types/subscription.ts`) —
@@ -46,4 +48,13 @@ export interface AdminTenantDetail {
   users: TenantUserView[];
   subscription: SubscriptionView | null;
   plan: SubscriptionView["plan"] | null;
+  /**
+   * Lifetime counters from the `tenant_usage` rollup — every call the pipeline ran
+   * for this tenant, with no time dimension and no expiry. Zeroed rather than absent
+   * for a tenant that has never been called.
+   *
+   * These do not tie out against the tenant's charts, which read the request log: see
+   * {@link import("./metrics").TenantFunctionUsage}.
+   */
+  usage: TenantUsage;
 }

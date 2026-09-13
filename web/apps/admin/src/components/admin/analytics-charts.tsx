@@ -10,7 +10,7 @@ import {
   ChartTooltipContent,
 } from "@/components/shared";
 import type { ChartConfig } from "@heirs/ui";
-import type { FunctionMetric, MetricsTimeseries, TenantUsage } from "@/types/metrics";
+import type { FunctionMetric, MetricsTimeseries, TenantFunctionUsage, TenantUsage } from "@/types/metrics";
 
 /**
  * The analytics charts.
@@ -28,6 +28,18 @@ import type { FunctionMetric, MetricsTimeseries, TenantUsage } from "@/types/met
  * deuteranopia (ΔE 3.7), so pairing them would encode a difference a colourblind
  * reader cannot see.
  */
+
+/**
+ * The frame every chart on the console sits in. Lives here rather than in each page
+ * so a card on the tenant detail page is the same object as one on the analytics
+ * page — same border, same title weight, same gap above the plot.
+ */
+export const ChartCard = ({ title, children }: { title: string; children: React.ReactNode }) => (
+  <div className="space-y-4 rounded-lg border p-4">
+    <p className="text-sm font-medium">{title}</p>
+    {children}
+  </div>
+);
 
 const num = (n: number): string => n.toLocaleString();
 const pct = (ratio: number): string => `${(ratio * 100).toFixed(1)}%`;
@@ -59,6 +71,16 @@ const tenantConfig = {
 } satisfies ChartConfig;
 
 /**
+ * Requests and errors only — see {@link TenantFunctionChart} for why there is no third
+ * series at this grain. Same neutral / `destructive` pairing the other charts use for
+ * these two measures, so the colours mean the same thing on every card.
+ */
+const tenantFunctionConfig = {
+  requests: { label: "Requests", color: "var(--chart-1)" },
+  errors: { label: "Errors", color: "var(--destructive)" },
+} satisfies ChartConfig;
+
+/**
  * Three series need three hues that stay apart under protanopia and deuteranopia, and
  * no trio from `--chart-1..5` manages it — that ramp runs teal → green → amber →
  * orange with no cool or red end, so slots 4 and 5 collapse into one colour (ΔE 3.7)
@@ -82,7 +104,7 @@ const axisProps = { tickLine: false, axisLine: false, tickMargin: 8 } as const;
 
 /** Reads the row's own key back out for the tooltip heading, not the truncated tick. */
 const fullLabel =
-  (field: "function" | "tenantId") =>
+  (field: "function" | "tenantId" | "functionKey") =>
   (_: unknown, payload: readonly { payload?: Record<string, unknown> }[] | undefined) =>
     String(payload?.[0]?.payload?.[field] ?? "");
 
@@ -90,11 +112,17 @@ const fullLabel =
 const BAR_SIZE = 24;
 
 /**
- * Width one function's group needs: three bars, the 2px gaps between them, and
- * breathing room either side. Below this the plot is scrolled rather than squeezed —
- * bars that thin to a few pixels stop being comparable, which is the whole job here.
+ * Width one group needs: its bars, the 2px gaps between them, and breathing room
+ * either side. Below this the plot is scrolled rather than squeezed — bars that thin
+ * to a few pixels stop being comparable, which is the whole job here.
+ *
+ * Parameterised by series count because the tenant-scoped chart plots two where the
+ * estate-wide ones plot three; a fixed three-bar width would leave a two-bar chart
+ * looking gappy.
  */
-const GROUP_WIDTH = BAR_SIZE * 3 + 2 * 2 + 28;
+const groupWidth = (series: number): number => BAR_SIZE * series + 2 * (series - 1) + 28;
+
+const GROUP_WIDTH = groupWidth(3);
 
 /**
  * Requests, errors and low-confidence results, grouped per function.
@@ -165,6 +193,47 @@ export const TenantVolumeChart = ({ data }: { data: TenantUsage[] }) => (
           <Bar dataKey="requests" fill="var(--color-requests)" radius={[...BAR_RADIUS]} barSize={BAR_SIZE} />
           <Bar dataKey="errors" fill="var(--color-errors)" radius={[...BAR_RADIUS]} barSize={BAR_SIZE} />
           <Bar dataKey="tokens" fill="var(--color-tokens)" radius={[...BAR_RADIUS]} barSize={BAR_SIZE} />
+        </BarChart>
+      </ChartContainer>
+    </div>
+  </div>
+);
+
+/**
+ * Requests and errors per function, for **one** tenant.
+ *
+ * Two series rather than the three the estate-wide function chart carries: the
+ * request log records a status code per call but no confidence signal, so there is no
+ * honest low-confidence count to plot at this grain. Showing the estate-wide ratio
+ * beside one tenant's counts would read as that tenant's, which it is not.
+ *
+ * Tokens are missing here for the same reason — they live in the `tenant_usage` and
+ * `function_usage` rollups, and neither can be crossed with the other after the fact.
+ * The tenant's lifetime token total is a tile above this chart instead.
+ *
+ * Grouped, not stacked: errors are a subset of requests, so stacking them would sum
+ * to a total that does not exist.
+ */
+export const TenantFunctionChart = ({ data }: { data: TenantFunctionUsage[] }) => (
+  <div className="w-full overflow-x-auto">
+    <div style={{ minWidth: data.length * groupWidth(2) }}>
+      <ChartContainer config={tenantFunctionConfig} className="aspect-auto h-72.5 w-full">
+        <BarChart accessibilityLayer data={data} barGap={2} margin={{ left: 4, right: 8 }}>
+          <CartesianGrid {...gridProps} />
+          <XAxis dataKey="functionKey" {...axisProps} tickFormatter={fnLabel} interval={0} height={28} />
+          <YAxis {...axisProps} width={44} allowDecimals={false} tickFormatter={compact} />
+          <ChartTooltip
+            cursor={false}
+            content={
+              <ChartTooltipContent
+                labelFormatter={fullLabel("functionKey")}
+                formatter={(value) => num(Number(value))}
+              />
+            }
+          />
+          <ChartLegend content={<ChartLegendContent />} />
+          <Bar dataKey="requests" fill="var(--color-requests)" radius={[...BAR_RADIUS]} barSize={BAR_SIZE} />
+          <Bar dataKey="errors" fill="var(--color-errors)" radius={[...BAR_RADIUS]} barSize={BAR_SIZE} />
         </BarChart>
       </ChartContainer>
     </div>
