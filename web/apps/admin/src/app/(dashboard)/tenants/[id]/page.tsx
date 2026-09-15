@@ -6,6 +6,7 @@ import { useMemo } from "react";
 import Link from "next/link";
 
 import { createTenantUserColumns } from "@/config/columns/tenant-users";
+import { TenantUsageSection } from "@/components/admin/tenant-usage";
 import { useTenant } from "@/hooks/api/use-admin-tenants";
 import { getErrorMessage } from "@heirs/api-client";
 import type { StatusTone } from "@heirs/ui";
@@ -65,7 +66,7 @@ const Page = () => {
     );
   }
 
-  const { tenant, keys, users, subscription, plan } = data;
+  const { tenant, keys, users, subscription, plan, usage } = data;
 
   return (
     <PageLayout
@@ -136,6 +137,7 @@ const Page = () => {
             <p className="text-sm text-muted-foreground">No subscription — tenant runs on unlimited defaults.</p>
           )}
         </section>
+        <TenantUsageSection tenantId={tenant.tenantId} usage={usage} />
         <section className="space-y-3">
           <h2 className="text-sm font-semibold">Portal users</h2>
           {users.length === 0 ? (

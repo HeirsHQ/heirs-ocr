@@ -196,8 +196,13 @@ export type TenantFunctionUsage = {
  *
  * `function_key IS NULL` rows are dropped: the catalog and job-status endpoints are
  * not function runs and would otherwise appear as a nameless row per tenant.
+ *
+ * `tenantId` narrows the result to one tenant, for the tenant detail page. It is a
+ * nullable bound parameter rather than an interpolated clause so the query text is
+ * the same either way — one prepared plan, and no path where a caller's string
+ * reaches the SQL.
  */
-export const getTenantFunctionUsage = async (): Promise<TenantFunctionUsage[]> => {
+export const getTenantFunctionUsage = async (tenantId?: string): Promise<TenantFunctionUsage[]> => {
   const { rows } = await query<{
     tenant_id: string;
     function_key: string;
@@ -210,8 +215,10 @@ export const getTenantFunctionUsage = async (): Promise<TenantFunctionUsage[]> =
             COUNT(*) FILTER (WHERE status_code >= 400)::text AS errors
        FROM request_logs
       WHERE function_key IS NOT NULL
+        AND ($1::text IS NULL OR tenant_id = $1)
       GROUP BY tenant_id, function_key
       ORDER BY COUNT(*) DESC, tenant_id ASC, function_key ASC`,
+    [tenantId ?? null],
   );
   return rows.map((r) => ({
     tenantId: r.tenant_id,
@@ -264,8 +271,12 @@ const BUCKET_MS = { hour: 60 * 60 * 1000, day: 24 * 60 * 60 * 1000 } as const;
  * enough that it stops describing anything a user experienced. Rows with a null
  * `duration_ms` (the request never completed) are excluded by `percentile_cont`
  * itself rather than counted as zero.
+ *
+ * `tenantId` narrows the series to one tenant. The empty-bucket fill below runs
+ * unchanged, so a quiet tenant returns a full-length series of zeroes rather than a
+ * short one — a chart that skipped its quiet hours would read as busier than it is.
  */
-export const getRequestTimeseries = async (hours: number): Promise<RequestTimeseries> => {
+export const getRequestTimeseries = async (hours: number, tenantId?: string): Promise<RequestTimeseries> => {
   const bucket = bucketFor(hours);
   const step = BUCKET_MS[bucket];
   const until = new Date();
@@ -285,9 +296,10 @@ export const getRequestTimeseries = async (hours: number): Promise<RequestTimese
             percentile_cont(0.95) WITHIN GROUP (ORDER BY duration_ms)::text    AS p95
        FROM request_logs
       WHERE created_at >= $2
+        AND ($3::text IS NULL OR tenant_id = $3)
       GROUP BY 1
       ORDER BY 1 ASC`,
-    [bucket, since],
+    [bucket, since, tenantId ?? null],
   );
 
   // Keyed on the bucket start so the fill below is a lookup rather than a scan.

@@ -49,10 +49,10 @@ export function useMetricsSummary() {
  * the headline tiles and is not meant to: it is a rolling window and it includes calls
  * that were refused before reaching the pipeline.
  */
-export function useMetricsTimeseries(hours: number) {
+export function useMetricsTimeseries(hours: number, tenantId?: string) {
   return useQuery({
-    queryKey: adminKeys.metricsTimeseries(hours),
-    queryFn: () => http.get<MetricsTimeseries>("/api/admin/metrics/timeseries", { hours }).then(unwrap),
+    queryKey: adminKeys.metricsTimeseries(hours, tenantId),
+    queryFn: () => http.get<MetricsTimeseries>("/api/admin/metrics/timeseries", { hours, tenantId }).then(unwrap),
     retry: false,
     refetchInterval: 30_000,
   });
@@ -67,8 +67,14 @@ export function useTenantUsage(params?: PaginatedParams) {
   });
 }
 
-/** Tenant x function volume, from the retained request log. See TenantFunctionUsage. */
-export function useTenantFunctionUsage(params?: PaginatedParams) {
+/**
+ * Tenant x function volume, from the retained request log. See TenantFunctionUsage.
+ *
+ * `tenantId` narrows it to one tenant, which is how the tenant detail page reads its
+ * own breakdown — the same endpoint, filtered server-side rather than a whole estate
+ * fetched and thrown away in the browser.
+ */
+export function useTenantFunctionUsage(params?: PaginatedParams & { tenantId?: string }) {
   return useQuery({
     queryKey: adminKeys.usageByFunctionList(params),
     queryFn: () => http.get<Paginated<TenantFunctionUsage>>("/api/admin/usage/by-function", params).then(unwrap),

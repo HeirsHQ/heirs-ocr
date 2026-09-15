@@ -1237,7 +1237,7 @@ first owner is seeded from env at startup.
 | `POST /api/security/mfa/verify` · `.../recovery-codes`    | session          | Confirm enrolment; re-mint recovery codes.                   |
 | `GET/POST /api/admins`, `PATCH/DELETE /api/admins/:id`    | owner            | Manage console users.                                        |
 | `DELETE /api/admins/:id/mfa`                              | owner            | Clear an admin's second factor (lockout recovery; audited).  |
-| `GET /api/tenants` · `GET /api/tenants/:id`               | viewer           | List tenants; one tenant with keys, users and subscription.  |
+| `GET /api/tenants` · `GET /api/tenants/:id`               | viewer           | List tenants; one tenant with keys, users, plan and usage.   |
 | `POST /api/tenants`, `PATCH/DELETE /api/tenants/:keyHash` | manager          | Create, edit and revoke tenants and their keys/limits.       |
 | `GET /api/tenants/:tenantId/users`                        | viewer           | A tenant's portal users.                                     |
 | `POST /api/tenants/:tenantId/users`                       | manager          | Seed a tenant's portal login.                                |
@@ -1250,6 +1250,8 @@ first owner is seeded from env at startup.
 | `GET /api/functions`                                      | viewer           | The function catalog (as `/v1/ocr/functions`).               |
 | `GET /api/metrics/summary`                                | viewer           | Request counts, error rate, tokens, fallbacks, per function. |
 | `GET /api/usage`                                          | viewer           | Per-tenant usage counters.                                   |
+| `GET /api/usage/by-function`                              | viewer           | Tenant x function volume; `tenantId` filters to one tenant.  |
+| `GET /api/metrics/timeseries`                             | viewer           | Requests/errors/latency over `hours`; `tenantId` filters.    |
 | `GET /api/documents`                                      | viewer           | Processed-document registry across all tenants.              |
 | `GET /api/queue`                                          | viewer           | BullMQ queue depth + recent jobs.                            |
 | `GET /api/health`                                         | viewer           | Health/provider matrix.                                      |

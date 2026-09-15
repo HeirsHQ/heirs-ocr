@@ -36,7 +36,7 @@ import { recentLogs, type LogLevel } from "../../observability/log-buffer";
 import { getMetricsSummary } from "../../observability/metrics";
 import { pageParams, paginate, paginatedFrom } from "../pagination";
 import { getRequestTimeseries, getTenantFunctionUsage } from "../../observability/request-log";
-import { getAllTenantUsage } from "../../observability/usage";
+import { getAllTenantUsage, getTenantUsage } from "../../observability/usage";
 import { parsePlanInput } from "../../billing/plan-schema";
 import { listFunctions } from "../../functions/registry";
 import { logger } from "../../observability/logger";
@@ -761,11 +761,15 @@ adminApiRouter.get(
       sendError(res, 404, "NOT_FOUND", "No such tenant");
       return;
     }
-    const [users, subscription] = await Promise.all([
+    // Usage rides along with the detail read rather than getting its own endpoint:
+    // it is a single row keyed by the tenant already being fetched, and the page
+    // renders the counters beside the registry fields.
+    const [users, subscription, usage] = await Promise.all([
       listTenantUsers(tenantId),
       resolveSubscription(tenantId)
         .then((sub) => (sub ? toEffectiveSubscription(sub) : undefined))
         .catch(() => undefined),
+      getTenantUsage(tenantId),
     ]);
     res.json({
       tenant: keys[0]!.tenant,
@@ -773,6 +777,7 @@ adminApiRouter.get(
       users,
       subscription: subscription ?? null,
       plan: subscription?.plan ?? null,
+      usage,
     });
   }),
 );
@@ -1075,6 +1080,17 @@ adminApiRouter.put(
 
 // ── Observability (viewer+) ───────────────────────────────────────────────────
 
+/**
+ * A `tenantId` query param, or undefined when it is absent or empty.
+ *
+ * Express types a repeated query param as an array, so this narrows to the single
+ * string case rather than letting `?tenantId=a&tenantId=b` reach the query layer as
+ * an array. An unknown id is not an error here: it is one of the shapes "this tenant
+ * has no recorded traffic" arrives in, and the charts already render that as empty.
+ */
+const optionalTenantId = (value: unknown): string | undefined =>
+  typeof value === "string" && value.length > 0 ? value : undefined;
+
 adminApiRouter.get(
   "/api/functions",
   adminAuth,
@@ -1104,7 +1120,7 @@ adminApiRouter.get(
   handler(async (req, res) => {
     const requested = Number(req.query.hours);
     const hours = Number.isFinite(requested) ? Math.min(Math.max(Math.trunc(requested), 1), 720) : 24;
-    res.json(await getRequestTimeseries(hours));
+    res.json(await getRequestTimeseries(hours, optionalTenantId(req.query.tenantId)));
   }),
 );
 
@@ -1124,7 +1140,7 @@ adminApiRouter.get(
   adminAuth,
   requireMinRole("viewer"),
   handler(async (req, res) => {
-    res.json(paginate(await getTenantFunctionUsage(), pageParams(req.query)));
+    res.json(paginate(await getTenantFunctionUsage(optionalTenantId(req.query.tenantId)), pageParams(req.query)));
   }),
 );
 
