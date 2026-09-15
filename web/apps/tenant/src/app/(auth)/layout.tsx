@@ -43,22 +43,16 @@ const AuthLayout = ({ children }: Props) => {
   );
 };
 
-/** A page being read, with the fields it yields lined up beside it. */
 const DocumentStack = () => (
   <div className="relative h-56 w-full max-w-sm" aria-hidden>
-    {/* Back sheets, offset to read as a stack. */}
-    <div className="bg-card absolute top-3 left-4 h-44 w-36 rotate-[-6deg] rounded-md border shadow-sm" />
-    <div className="bg-card absolute top-1 left-1 h-44 w-36 rotate-[-2deg] rounded-md border shadow-sm" />
-
-    {/* Front sheet: ruled lines standing in for body text. */}
+    <div className="bg-card absolute top-3 left-4 h-44 w-36 -rotate-6 rounded-md border shadow-sm" />
+    <div className="bg-card absolute top-1 left-1 h-44 w-36 -rotate-2 rounded-md border shadow-sm" />
     <div className="bg-card absolute top-0 left-0 flex h-44 w-36 flex-col gap-2 rounded-md border p-3 shadow-md">
       <div className="bg-primary/25 h-1.5 w-14 rounded-full" />
       {[16, 20, 18, 22, 12, 19].map((w, i) => (
         <div key={i} className="bg-muted-foreground/20 h-1 rounded-full" style={{ width: `${w * 4}%` }} />
       ))}
     </div>
-
-    {/* The extraction: mono key/value pairs, the shape of the actual result. */}
     <div className="bg-card absolute top-8 right-0 w-44 space-y-2 rounded-md border p-3 shadow-md">
       {[
         ["total", "₦48,250"],

@@ -179,7 +179,7 @@ capability is tried first, and the function still runs, degraded, when none is r
 
 `resultSchema` is omitted only for a function with no result shape at all until the caller
 supplies one — `FORM_DATA_EXTRACTION`, whose args are a required union. A function whose
-schema merely *varies* with its args still publishes its default shape: `RECEIPT_PARSING`
+schema merely _varies_ with its args still publishes its default shape: `RECEIPT_PARSING`
 advertises the canonical receipt even though `fieldMap` can rename it. The live catalog is
 authoritative for the exact `accepts`, `maxPages`, and schemas; the
 [Function catalog](#function-catalog) table is a summary.
@@ -282,12 +282,12 @@ error code on failure).
 
 ### 4. Health, readiness & metrics
 
-| Endpoint       | Purpose              | Auth                                 | Response                         |
-| -------------- | -------------------- | ------------------------------------ | -------------------------------- |
-| `GET /`        | Service banner       | none                                 | `{ "message": "Heirs OCR API" }` |
-| `GET /healthz` | Liveness             | none                                 | `{ "status": "ok" }`             |
-| `GET /readyz`  | Readiness            | none                                 | `{ "status": "ok", … }`          |
-| `GET /metrics` | Prometheus scrape    | bearer (`METRICS_AUTH_TOKEN`) if set | Prometheus text format           |
+| Endpoint       | Purpose           | Auth                                 | Response                         |
+| -------------- | ----------------- | ------------------------------------ | -------------------------------- |
+| `GET /`        | Service banner    | none                                 | `{ "message": "Heirs OCR API" }` |
+| `GET /healthz` | Liveness          | none                                 | `{ "status": "ok" }`             |
+| `GET /readyz`  | Readiness         | none                                 | `{ "status": "ok", … }`          |
+| `GET /metrics` | Prometheus scrape | bearer (`METRICS_AUTH_TOKEN`) if set | Prometheus text format           |
 
 > **Note:** `/readyz` probes Redis (`PING`), Postgres (`SELECT 1`) and blob storage, and answers
 > `503` with a per-dependency breakdown when Redis or Postgres is unreachable. Blob storage is
@@ -411,7 +411,7 @@ Ordering it this way means an abandoned form leaves nothing behind, and nobody c
 organisation — or a colleague's email address — without proving they can read that mailbox.
 
 Three abuse controls apply. Attempts are counted against the login throttle under a separate
-`signup` scope, so a spray cannot lock anyone out of signing *in*. A code tolerates five wrong
+`signup` scope, so a spray cannot lock anyone out of signing _in_. A code tolerates five wrong
 guesses before the pending sign-up is destroyed, and a wrong guess does not extend its window.
 Re-sends are rate-limited per sign-up so the endpoint cannot be used to mail-bomb an address.
 
@@ -465,6 +465,23 @@ beyond writing the new hash:
   session.
 - **Every other session is revoked.** Someone changing their password usually believes they are
   compromised; leaving the attacker's session alive defeats the point.
+
+Portal users who cannot sign in reset through two open routes:
+
+1. `POST /api/password/forgot` emails a link to `/reset-password?token=…`. It answers `202` with
+   the same body whether the address has an account, belongs to a disabled one, is inside the
+   60-second resend cooldown, or could not be mailed — a difference in any of those would make it
+   a membership oracle. Every request counts against the login throttle under a separate
+   `password-reset` scope.
+2. `POST /api/password/reset` takes the token and a new password. The token is 32 random bytes,
+   held in Redis only as its SHA-256, valid for 30 minutes, and redeemed atomically (`GETDEL`), so
+   it works exactly once. The password policy is checked **before** the token is spent, so a
+   too-short password does not burn the link. Requesting a new link revokes the previous one.
+
+A completed reset replaces the hash, **revokes every session**, clears the account's failed
+sign-in counters, records `tenant.password.reset` in the audit trail, and sends the
+password-changed email. It does **not** sign the user in: a session minted there would let an
+account with MFA skip its second factor.
 
 The `passwordMinLength` setting in the `security` namespace is enforced **wherever a password is
 set** — self-service changes, admin-created console users, tenant team members, and seeded
@@ -629,7 +646,7 @@ link-local (including `169.254.169.254`), CGNAT or multicast address, whether gi
 literal or reached by DNS; `400 INVALID_ARGS` at registration. The same check runs again before
 every send, because a hostname that resolved publicly when it was saved can be re-pointed
 afterwards — a delivery blocked at that point is marked `dead` immediately rather than retried.
-A host that fails to resolve is *not* blocked: that is a normal transient condition the retry
+A host that fails to resolve is _not_ blocked: that is a normal transient condition the retry
 path already handles. Combined with `redirect: "manual"` in the worker, this closes both the
 direct and redirect-based routes to internal services.
 
@@ -753,9 +770,7 @@ provider reported layout geometry.
   "text": "# Invoice\n\nAcme Ltd\n\n| Item | Amount |\n| ---- | ------ |",
   "format": "markdown",
   "pageCount": 2,
-  "blocks": [
-    { "index": 0, "page": 1, "label": "text", "bbox": [0.08, 0.05, 0.92, 0.11], "content": "# Invoice" }
-  ]
+  "blocks": [{ "index": 0, "page": 1, "label": "text", "bbox": [0.08, 0.05, 0.92, 0.11], "content": "# Invoice" }]
 }
 ```
 
@@ -807,16 +822,36 @@ spec declared it. Required fields are non-null; optional ones come back `null` w
 ```json
 {
   "contact": {
-    "name": "Ada Obi", "email": "ada@example.com", "phone": "+234...", "location": "Lagos",
-    "address": null, "state": "Lagos", "country": "Nigeria", "zip": null, "nationality": "Nigerian",
+    "name": "Ada Obi",
+    "email": "ada@example.com",
+    "phone": "+234...",
+    "location": "Lagos",
+    "address": null,
+    "state": "Lagos",
+    "country": "Nigeria",
+    "zip": null,
+    "nationality": "Nigerian",
     "links": ["https://linkedin.com/in/..."]
   },
   "summary": "Backend engineer, 8 years.",
   "experience": [
-    { "company": "Acme", "title": "Senior Engineer", "startDate": "2021-03", "endDate": null, "current": true, "description": "Payments platform." }
+    {
+      "company": "Acme",
+      "title": "Senior Engineer",
+      "startDate": "2021-03",
+      "endDate": null,
+      "current": true,
+      "description": "Payments platform."
+    }
   ],
   "education": [
-    { "institution": "University of Lagos", "degree": "BSc", "field": "Computer Science", "startDate": "2013", "endDate": "2017" }
+    {
+      "institution": "University of Lagos",
+      "degree": "BSc",
+      "field": "Computer Science",
+      "startDate": "2013",
+      "endDate": "2017"
+    }
   ],
   "certifications": [{ "name": "AWS SAA", "issuer": "Amazon", "date": "2023-06" }],
   "professionalBodies": ["NCS"],
@@ -836,14 +871,25 @@ consistency, never that the holder is who they claim to be.
 {
   "documentType": "PASSPORT",
   "fields": {
-    "fullName": "ADA OBI", "dateOfBirth": "1995-04-02", "documentNumber": "A01234567",
-    "issueDate": "2021-05-10", "expiryDate": "2031-05-09", "nationality": "NGA",
-    "sex": "F", "placeOfBirth": "LAGOS", "address": null,
-    "licenceCategory": null, "issuingAuthority": "NIS"
+    "fullName": "ADA OBI",
+    "dateOfBirth": "1995-04-02",
+    "documentNumber": "A01234567",
+    "issueDate": "2021-05-10",
+    "expiryDate": "2031-05-09",
+    "nationality": "NGA",
+    "sex": "F",
+    "placeOfBirth": "LAGOS",
+    "address": null,
+    "licenceCategory": null,
+    "issuingAuthority": "NIS"
   },
   "checks": {
-    "expired": false, "expiryDate": "2031-05-09",
-    "nameMatch": true, "dobMatch": true, "numberMatch": null, "mrzValid": true
+    "expired": false,
+    "expiryDate": "2031-05-09",
+    "nameMatch": true,
+    "dobMatch": true,
+    "numberMatch": null,
+    "mrzValid": true
   },
   "assuranceLevel": "document-content-only"
 }
@@ -859,7 +905,15 @@ acting on `fullyExecuted`; see [`SIGNING` — two detection paths](#signing--two
 {
   "fullyExecuted": false,
   "blocks": [
-    { "label": "Lessor", "page": 3, "bbox": [0.1, 0.72, 0.45, 0.8], "signed": true, "signatoryName": "Ada Obi", "signedDate": "2026-01-12", "hasSeal": true },
+    {
+      "label": "Lessor",
+      "page": 3,
+      "bbox": [0.1, 0.72, 0.45, 0.8],
+      "signed": true,
+      "signatoryName": "Ada Obi",
+      "signedDate": "2026-01-12",
+      "hasSeal": true
+    },
     { "label": "Lessee", "page": 3, "bbox": [0.55, 0.72, 0.9, 0.8], "signed": false, "hasSeal": false }
   ],
   "unsignedBlocks": ["Lessee"],
@@ -933,7 +987,13 @@ reading it. When classification confidence is too low to route, `documentType` i
   "dateSubmitted": "2026-03-04",
   "currency": "NGN",
   "lineItems": [
-    { "date": "2026-03-01", "category": "Transport", "description": "Flight LOS–ABV", "amount": 180000, "receiptAttached": true },
+    {
+      "date": "2026-03-01",
+      "category": "Transport",
+      "description": "Flight LOS–ABV",
+      "amount": 180000,
+      "receiptAttached": true
+    },
     { "date": "2026-03-02", "category": "Meals", "description": "Dinner", "amount": 22000, "receiptAttached": false }
   ],
   "subtotal": 202000,
@@ -953,7 +1013,13 @@ carry enough to compute a ratio at all.
 
 ```json
 {
-  "borrower": { "name": "Ada Obi", "dateOfBirth": "1995-04-02", "bvn": "2214****91", "employmentStatus": "employed", "employer": "Acme Ltd" },
+  "borrower": {
+    "name": "Ada Obi",
+    "dateOfBirth": "1995-04-02",
+    "bvn": "2214****91",
+    "employmentStatus": "employed",
+    "employer": "Acme Ltd"
+  },
   "requestedAmount": 5000000,
   "currency": "NGN",
   "tenorMonths": 24,
@@ -998,7 +1064,7 @@ Callers decide how an upload is reported with the `lineItemMode` arg:
 
 | `lineItemMode` | `lineItems` returned                                   | Use when                                                    |
 | -------------- | ------------------------------------------------------ | ----------------------------------------------------------- |
-| `"multiple"`   | One entry per line printed on the receipt. *(default)* | You need the itemized basket.                               |
+| `"multiple"`   | One entry per line printed on the receipt. _(default)_ | You need the itemized basket.                               |
 | `"single"`     | Exactly one entry carrying the whole receipt.          | You book the upload as one expense and the items are noise. |
 
 This is a reporting choice, not a parsing one. The receipt is **always** parsed itemized and
@@ -1045,11 +1111,11 @@ Valid keys are the canonical paths: `merchant.name`, `merchant.address`, `mercha
 `lineItems.description`, `lineItems.qty`, `lineItems.unitPrice`, `lineItems.total`,
 `confidence`, `warnings`. Values must be identifiers (`[A-Za-z_][A-Za-z0-9_]*`, ≤ 64 chars).
 
-| Mapping                   | Effect                                                                  |
-| ------------------------- | ----------------------------------------------------------------------- |
-| `"total": "amount_due"`   | Returns that scalar under `amount_due`; unmapped scalars are omitted.   |
-| `"lineItems": "items"`    | Renames the array, keeping canonical item keys.                         |
-| `"lineItems.qty": "count"`| Selects and renames within each item; the array stays named `lineItems` unless also mapped. |
+| Mapping                    | Effect                                                                                      |
+| -------------------------- | ------------------------------------------------------------------------------------------- |
+| `"total": "amount_due"`    | Returns that scalar under `amount_due`; unmapped scalars are omitted.                       |
+| `"lineItems": "items"`     | Renames the array, keeping canonical item keys.                                             |
+| `"lineItems.qty": "count"` | Selects and renames within each item; the array stays named `lineItems` unless also mapped. |
 
 Like `lineItemMode`, this is a **reporting** choice, not a parsing one. The receipt is always
 parsed and reconciled canonically and only projected afterwards, so the prompt never sees the
@@ -1064,14 +1130,14 @@ name, an empty map, and non-identifier or reserved names (`__proto__`, `construc
 
 ### `SIGNING` — two detection paths
 
-`SIGNING` requires `layout`, and *prefers* a provider that also offers `seals` (GLM-OCR).
+`SIGNING` requires `layout`, and _prefers_ a provider that also offers `seals` (GLM-OCR).
 Which path ran is reported on every response, and callers should branch on it rather than
 reading `fullyExecuted` alone:
 
-| Path            | When                            | `confidence` | `bbox`  | Cost                |
-| --------------- | ------------------------------- | ------------ | ------- | ------------------- |
-| Region crops    | provider offers `seals`         | `high`       | present | one crop per slot   |
-| Whole-page      | provider lacks `seals`          | `low`        | absent  | one call per page   |
+| Path         | When                    | `confidence` | `bbox`  | Cost              |
+| ------------ | ----------------------- | ------------ | ------- | ----------------- |
+| Region crops | provider offers `seals` | `high`       | present | one crop per slot |
+| Whole-page   | provider lacks `seals`  | `low`        | absent  | one call per page |
 
 The whole-page path exists so signature checking survives a GLM outage or a deliberate
 `GLM_ENABLED=false`. It cannot locate regions, so it hands whole page images to the vision
@@ -1117,6 +1183,8 @@ mutate another org's keys or users. Errors use a `{ error: { code, message } }` 
 | `POST /api/register`                    | open   | Start a sign-up: holds the details, emails a code. Creates nothing yet.  |
 | `POST /api/verification`                | open   | Redeem the code — creates the org, subscription and owner; signs in.     |
 | `POST /api/verification/resend`         | open   | Re-send the code for a sign-up in flight. Cooldown-limited.              |
+| `POST /api/password/forgot`             | open   | Email a single-use reset link. Same `202` for unknown addresses.         |
+| `POST /api/password/reset`              | open   | Redeem a reset link: new password, every session revoked, no sign-in.    |
 | `POST /api/login`                       | open   | Authenticate. Returns a session, or an MFA challenge. Login-throttled.   |
 | `POST /api/login/mfa`                   | open   | Redeem an MFA challenge for a session. Login-throttled.                  |
 | `POST /api/logout`                      | member | Destroy the session.                                                     |
@@ -1199,16 +1267,16 @@ first owner is seeded from env at startup.
 
 ## Glossary
 
-| Term                    | Definition                                                                                                                         |
-| ----------------------- | ---------------------------------------------------------------------------------------------------------------------------------- |
-| **Function**            | A named interpretation task (e.g. `RECEIPT_PARSING`) selected via the URL path.                                                    |
+| Term                    | Definition                                                                                                                                      |
+| ----------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------- |
+| **Function**            | A named interpretation task (e.g. `RECEIPT_PARSING`) selected via the URL path.                                                                 |
 | **Capability**          | A skill a provider offers (`text`, `layout`, `tables`, `handwriting`, `seals`); a function declares which it `requires` and which it `prefers`. |
-| **RecognizedDocument**  | The canonical extraction output (markdown, plain text, pages, layout blocks) every provider returns.                               |
-| **Provider**            | An extraction engine (pdf-parse, Mammoth, Tesseract, GLM-OCR, plain-text) that produces a `RecognizedDocument`.                    |
-| **Fallback chain**      | The ordered list of providers tried on error before an extraction is declared failed.                                              |
-| **Tenant**              | The identity resolved from an API key; scopes authorization, rate limiting, subscription, and caching.                             |
-| **Subscription / Plan** | A tenant's live enrolment in a catalog plan; drives entitlements, quotas, and rate ceilings.                                       |
-| **Sensitivity**         | A per-function classification (`standard`/`pii`/`restricted`) that centrally drives logging, caching, queueing, and cache-control. |
-| **MRZ**                 | Machine-Readable Zone — the checksum-bearing text band on passports/IDs, parsed and verified by `ID_VERIFICATION`.                 |
-| **Sniff**               | Determining a file's true type from its magic bytes rather than the client-supplied name/MIME.                                     |
-| **Structured output**   | Azure OpenAI generation constrained to a JSON Schema derived from the function's Zod result schema.                                |
+| **RecognizedDocument**  | The canonical extraction output (markdown, plain text, pages, layout blocks) every provider returns.                                            |
+| **Provider**            | An extraction engine (pdf-parse, Mammoth, Tesseract, GLM-OCR, plain-text) that produces a `RecognizedDocument`.                                 |
+| **Fallback chain**      | The ordered list of providers tried on error before an extraction is declared failed.                                                           |
+| **Tenant**              | The identity resolved from an API key; scopes authorization, rate limiting, subscription, and caching.                                          |
+| **Subscription / Plan** | A tenant's live enrolment in a catalog plan; drives entitlements, quotas, and rate ceilings.                                                    |
+| **Sensitivity**         | A per-function classification (`standard`/`pii`/`restricted`) that centrally drives logging, caching, queueing, and cache-control.              |
+| **MRZ**                 | Machine-Readable Zone — the checksum-bearing text band on passports/IDs, parsed and verified by `ID_VERIFICATION`.                              |
+| **Sniff**               | Determining a file's true type from its magic bytes rather than the client-supplied name/MIME.                                                  |
+| **Structured output**   | Azure OpenAI generation constrained to a JSON Schema derived from the function's Zod result schema.                                             |

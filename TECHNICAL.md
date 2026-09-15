@@ -110,14 +110,14 @@ functions and their metadata:
 | `BANK_STATEMENT_ANALYSIS` | yes                  | `text`               | **pii**     |
 
 `SIGNING`'s `requires` is a floor, not a guarantee: it needs `layout`, and takes a more
-precise path when the provider also offers `seals`. Declaring `seals` as *required* meant
+precise path when the provider also offers `seals`. Declaring `seals` as _required_ meant
 every `SIGNING` request failed routing — a 500 — whenever `GLM_ENABLED=false`. It now routes
 to Tesseract in that case and `execute` reads `ctx.capabilities` to pick its strategy:
 region crops when `seals` is present, whole-page vision otherwise. The degraded path is
 always labelled (`confidence: "low"` + a warning) and feeds `confidenceOf`, so a GLM outage
 shows up on the `ocr_low_confidence_ratio` SLI instead of silently changing answers.
 
-`ctx.capabilities` carries the capabilities of the provider that *actually ran*, resolved by
+`ctx.capabilities` carries the capabilities of the provider that _actually ran_, resolved by
 name after any fallback. It exists for exactly this shape of decision — a function that can
 degrade should be able to tell that it is degrading. Deriving the same thing from block
 labels does not work: "no `image` blocks" cannot distinguish an unsigned document from a
@@ -176,7 +176,7 @@ What the service optimises for, so decisions can be checked against it rather th
    bank-statement reconciliation, tamper signals — computed in code. The LLM extracts what the
    document shows; verdicts are recomputed deterministically and never trust the model's arithmetic.
    Presentation options must not route around this. `RECEIPT_PARSING`'s
-   `lineItemMode: "single"` collapses a receipt to one line *after* reconciliation has run over
+   `lineItemMode: "single"` collapses a receipt to one line _after_ reconciliation has run over
    the printed lines, never by asking the model for one line — the latter would leave the
    arithmetic with nothing to check and make `confidence: "high"` vacuous on every receipt.
 3. **Fail closed on security, fail open on availability.** Auth and the tenant registry reject
@@ -537,11 +537,11 @@ vendor without its key throws.
 
 ### Health, probes & scrape endpoints
 
-| Endpoint       | Auth                               | Use                                                                           |
-| -------------- | ---------------------------------- | ----------------------------------------------------------------------------- |
-| `GET /healthz` | none                               | Liveness — process is up.                                                     |
-| `GET /readyz`  | none                               | Readiness — probes Redis + Postgres (gating) and blob storage (reported).     |
-| `GET /metrics` | bearer if `METRICS_AUTH_TOKEN` set | Prometheus scrape. No tenant data in labels — keep on an internal net.        |
+| Endpoint       | Auth                               | Use                                                                       |
+| -------------- | ---------------------------------- | ------------------------------------------------------------------------- |
+| `GET /healthz` | none                               | Liveness — process is up.                                                 |
+| `GET /readyz`  | none                               | Readiness — probes Redis + Postgres (gating) and blob storage (reported). |
+| `GET /metrics` | bearer if `METRICS_AUTH_TOKEN` set | Prometheus scrape. No tenant data in labels — keep on an internal net.    |
 
 ### Key metrics & suggested alerts
 
@@ -595,7 +595,7 @@ failed job keeps a typed code recoverable via `GET /v1/ocr/jobs/:id`.
 - **Rollback:** processes are stateless and config-driven. The schema is applied additively at
   boot (`CREATE TABLE IF NOT EXISTS`, no destructive migrations), so redeploying the prior image
   is safe and loses no durable Postgres data. Re-check that any changed env var is reverted too.
-  The same additive schema is why *moving* to a different Postgres server needs a deliberate data
+  The same additive schema is why _moving_ to a different Postgres server needs a deliberate data
   migration — see [Moving the database](#moving-the-database-scriptsmigrate-dbsh) below.
 
 ### Moving the database (`scripts/migrate-db.sh`)
@@ -604,7 +604,7 @@ There is no migration runner: `ensureSchema()` in [`src/db.ts`](./src/db.ts) cre
 with `CREATE TABLE IF NOT EXISTS` on each boot. That is what makes rollback safe (above), but it
 also makes the failure mode of a database move silent — **point `DATABASE_URL` at an empty server
 and the app cheerfully recreates the whole schema empty, passes `/readyz`, and serves as if every
-tenant had vanished.** So the data moves *before* `.env` is touched, and the script never edits
+tenant had vanished.** So the data moves _before_ `.env` is touched, and the script never edits
 `.env` itself: swapping the connection string stays a deliberate manual step, taken only after
 `verify` passes.
 

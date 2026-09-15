@@ -14,6 +14,7 @@
     "test": "vitest run",
     "test:watch": "vitest",
     "lint": "prettier --check \"src/**/*.{js,ts,tsx,md,json}\" \"test/**/*.ts\" && tsc -p tsconfig.test.json",
+    "prettier:write-all": "prettier --write .",
     "prettier:write": "prettier --write \"src/**/*.{js,ts,tsx,md,json}\" \"test/**/*.ts\"",
     "prettier:check": "prettier --check \"src/**/*.{js,ts,tsx,md,json}\"",
     "format": "pnpm prettier:write",

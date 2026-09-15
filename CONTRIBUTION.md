@@ -45,7 +45,7 @@ portal — sharing `packages/*`), run separately from the backend:
 cd web && pnpm install && pnpm dev   # admin :3000, tenant :3001; both proxy to OCR_API_URL
 ```
 
-The Postgres schema is created idempotently at startup; no migration step is needed to *create*
+The Postgres schema is created idempotently at startup; no migration step is needed to _create_
 it. Moving an existing database to another server is a different matter — the schema will happily
 recreate itself empty on the new one, so use `scripts/migrate-db.sh` before repointing
 `DATABASE_URL` ([TECHNICAL § Moving the database](./TECHNICAL.md#moving-the-database-scriptsmigrate-dbsh)).

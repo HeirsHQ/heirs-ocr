@@ -87,7 +87,21 @@ import {
   resendOtp,
   startSignup,
 } from "../../auth/signup";
-import { appUrl, sendVerifyEmail, sendWelcomeEmail, type SendMailResult } from "../../notification/mail";
+import {
+  appUrl,
+  sendPasswordChangedEmail,
+  sendPasswordResetEmail,
+  sendVerifyEmail,
+  sendWelcomeEmail,
+  type SendMailResult,
+} from "../../notification/mail";
+import {
+  RESET_TTL_SECONDS,
+  consumePasswordReset,
+  discardPasswordReset,
+  peekPasswordReset,
+  startPasswordReset,
+} from "../../auth/password-reset";
 import { provisionTenant } from "../../auth/tenant-provisioning";
 import { getStoredPlan, listPlans } from "../../billing/plan-store";
 import type { SubscriptionPlan } from "../../types/subscription";
@@ -621,6 +635,201 @@ openApiRouter.post(
     if (sent.skipped) logOtpForDevelopment(email, result.otp);
 
     res.status(202).json({ pending: true, email, expiresInMinutes: SIGNUP_TTL_MINUTES });
+  }),
+);
+
+// ── Password reset ────────────────────────────────────────────────────────────
+//
+// Two open routes for someone who cannot sign in:
+//
+//   POST /api/password/forgot   mail a single-use link — same answer whether or not the account exists
+//   POST /api/password/reset    link + new password → hash replaced, every session revoked
+//
+// The link store is src/auth/password-reset.ts. Resetting deliberately does not sign
+// the user in: a session minted here would skip the second factor on an MFA account.
+
+/** Minutes, for the email copy and the response. */
+const RESET_TTL_MINUTES = Math.round(RESET_TTL_SECONDS / 60);
+
+/** Throttle scope for both routes, kept apart from `tenant` so a spray can't lock anyone out of signing in. */
+const RESET_SCOPE = "password-reset";
+
+/**
+ * The org's display name for an email greeting; its id when no key record carries
+ * one. Never throws — a greeting is not worth failing a reset over.
+ */
+const orgNameOf = async (tenantId: string): Promise<string> => {
+  try {
+    const keys = await listKeysForTenant(tenantId);
+    return keys.find((k) => k.tenant.name)?.tenant.name ?? tenantId;
+  } catch {
+    return tenantId;
+  }
+};
+
+/** Same development escape hatch as `logOtpForDevelopment`: a live reset link is a credential. */
+const logResetUrlForDevelopment = (email: string, resetUrl: string): void => {
+  if (env.NODE_ENV === "production") return;
+  logger.warn("password_reset.link.logged", { email, resetUrl, reason: "MAIL_ENABLED is false" });
+};
+
+const forgotPasswordSchema = z.object({ email: z.string().email() });
+
+/**
+ * Starts a reset. Answers `202` with the same body whether the address has an
+ * account, belongs to a disabled one, is inside the resend cooldown, or could not be
+ * mailed — any difference would make this a membership oracle. That includes mail
+ * failure: a 503 only ever arising for real accounts would give the game away, so a
+ * failed send is logged and the link revoked instead.
+ */
+openApiRouter.post(
+  "/password/forgot",
+  handler(async (req, res) => {
+    const parsed = forgotPasswordSchema.safeParse(req.body);
+    if (!parsed.success) {
+      sendError(res, 400, "INVALID_ARGS", "Enter a valid email address");
+      return;
+    }
+
+    const ip = req.ip ?? "unknown";
+    const email = parsed.data.email;
+    const accepted = { pending: true, email, expiresInMinutes: RESET_TTL_MINUTES };
+
+    // Every request counts, not just failures: this endpoint sends mail to an address
+    // the caller names.
+    if (!(await loginAllowed(RESET_SCOPE, ip, email))) {
+      logger.warn("password_reset.throttled", { email, ip });
+      sendError(res, 429, "RATE_LIMITED", "Too many attempts. Try again later.");
+      return;
+    }
+    await recordLoginFailure(RESET_SCOPE, ip, email);
+
+    const user = await getTenantUserByEmail(email);
+    if (!user || user.disabled) {
+      logger.info("password_reset.no_account", { email, ip, disabled: !!user?.disabled });
+      res.status(202).json(accepted);
+      return;
+    }
+
+    const started = await startPasswordReset(user);
+    if (!started.ok) {
+      logger.info("password_reset.cooldown", { userId: user.id, ip });
+      res.status(202).json(accepted);
+      return;
+    }
+
+    const resetUrl = appUrl(`/reset-password?token=${encodeURIComponent(started.token)}`);
+    const sent = await sendPasswordResetEmail(
+      { to: user.email, firstName: firstNameOf(user.name), tenantName: await orgNameOf(user.tenantId) },
+      {
+        Email: user.email,
+        ExpiresAt: formatInstant(started.expiresAt),
+        ExpiryMinutes: RESET_TTL_MINUTES,
+        RequestedAt: formatInstant(new Date()),
+        RequestIp: ip,
+        RequestLocation: "Unknown",
+        ResetUrl: resetUrl,
+        UserAgent: req.get("user-agent")?.slice(0, 200) ?? "Unknown",
+      },
+    );
+    if (undelivered(sent)) {
+      await discardPasswordReset(started.token, user.id);
+      logger.error("password_reset.mail_failed", { userId: user.id, ip });
+    } else if (sent.skipped) {
+      logResetUrlForDevelopment(user.email, resetUrl);
+    }
+
+    logger.info("password_reset.requested", { userId: user.id, tenantId: user.tenantId, ip });
+    res.status(202).json(accepted);
+  }),
+);
+
+const resetPasswordSchema = z.object({
+  token: z.string().min(1, "This reset link is incomplete. Request a new one."),
+  password: z.string().min(1, "Password is required"),
+});
+
+const INVALID_LINK = "This reset link is invalid or has expired. Request a new one.";
+
+/**
+ * Redeems a link. The link is read first and spent only once the new password has
+ * passed policy, so a too-short password doesn't burn it. Every session is revoked —
+ * someone resetting may well be locked out *by* whoever holds one.
+ */
+openApiRouter.post(
+  "/password/reset",
+  handler(async (req, res) => {
+    const parsed = resetPasswordSchema.safeParse(req.body);
+    if (!parsed.success) {
+      sendError(res, 400, "INVALID_ARGS", parsed.error.issues[0]?.message ?? "Invalid reset");
+      return;
+    }
+
+    const ip = req.ip ?? "unknown";
+    const { token, password } = parsed.data;
+
+    // Tokens are unguessable, so this bounds noise rather than a real brute force.
+    // Per-IP only: there is no email to key on until the token resolves.
+    if (!(await loginAllowed(RESET_SCOPE, ip, "redeem"))) {
+      sendError(res, 429, "RATE_LIMITED", "Too many attempts. Try again later.");
+      return;
+    }
+
+    if (!(await peekPasswordReset(token))) {
+      await recordLoginFailure(RESET_SCOPE, ip, "redeem");
+      logger.warn("password_reset.invalid_link", { ip });
+      sendError(res, 401, "UNAUTHORIZED", INVALID_LINK);
+      return;
+    }
+
+    try {
+      await assertPasswordPolicy(password);
+    } catch (err) {
+      sendError(res, 400, "INVALID_ARGS", err instanceof Error ? err.message : "Password does not meet policy");
+      return;
+    }
+
+    // Spent here, atomically; a concurrent redemption of the same link loses the race.
+    const record = await consumePasswordReset(token);
+    const user = record ? await getTenantUserById(record.userId) : undefined;
+    if (!record || !user || user.disabled || user.tenantId !== record.tenantId) {
+      sendError(res, 401, "UNAUTHORIZED", INVALID_LINK);
+      return;
+    }
+
+    await updateTenantUser(user.tenantId, user.id, { password }, user.id);
+    const revoked = await revokeOtherSessions(user.id);
+
+    // They have just proved they own the mailbox; don't leave them locked out by the
+    // failed sign-ins that probably brought them here.
+    await clearLoginFailures("tenant", ip, user.email);
+    await clearLoginFailures(RESET_SCOPE, ip, user.email);
+
+    await recordAuditEvent({
+      action: "tenant.password.reset",
+      actor: user.id,
+      actorLabel: personLabel(user),
+      target: user.tenantId,
+      targetLabel: user.tenantId,
+      metadata: { sessionsRevoked: revoked, ip },
+    });
+
+    // Best-effort, like the welcome email: the password has changed either way. This
+    // is the owner's alarm bell if the reset wasn't theirs.
+    void sendPasswordChangedEmail(
+      { to: user.email, firstName: firstNameOf(user.name), tenantName: await orgNameOf(user.tenantId) },
+      {
+        ChangedAt: formatInstant(new Date()),
+        Email: user.email,
+        RequestIp: ip,
+        RequestLocation: "Unknown",
+        SecurityUrl: appUrl("/security"),
+        UserAgent: req.get("user-agent")?.slice(0, 200) ?? "Unknown",
+      },
+    ).catch(() => undefined);
+
+    logger.info("password_reset.completed", { userId: user.id, tenantId: user.tenantId, ip, sessionsRevoked: revoked });
+    res.json({ ok: true });
   }),
 );
 

@@ -17,7 +17,7 @@ const Page = () => (
       subtitle="What's new in the Heirs OCR service."
     />
     <section className="py-16">
-      <div className="mx-auto max-w-3xl px-4 sm:px-6">
+      <div className="mx-auto max-w-5xl px-4 sm:px-6">
         <ChangelogContent />
       </div>
     </section>

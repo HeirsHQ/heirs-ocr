@@ -51,7 +51,7 @@ export const MfaChallengeForm = ({
           if (trimmed && !pending) onSubmit(trimmed);
         }}
       >
-        <Field label="Verification code" htmlFor="mfa-code" error={error}>
+        <Field label="" htmlFor="mfa-code" error={error}>
           <OtpInput
             aria-invalid={!!error}
             value={code}
@@ -59,7 +59,6 @@ export const MfaChallengeForm = ({
             disabled={pending}
           />
         </Field>
-
         <Button type="submit" className="w-full" disabled={pending || !trimmed}>
           {pending ? <Loader className="animate-spin" /> : "Verify"}
         </Button>

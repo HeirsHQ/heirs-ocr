@@ -78,7 +78,7 @@ bank-statement reconciliation, tamper heuristics) runs in code — the LLM extra
 the document shows; verdicts are recomputed and never trust the model's arithmetic.
 
 `RECEIPT_PARSING` takes `lineItemMode` (`"multiple"`, the default, or `"single"`) to control
-whether an upload comes back itemized or collapsed to one line. The collapse runs *after*
+whether an upload comes back itemized or collapsed to one line. The collapse runs _after_
 reconciliation, so the `confidence` verdict still reflects the lines actually printed on the
 receipt — see [API_SPEC.md](API_SPEC.md#receipt_parsing--itemized-or-single-line).
 

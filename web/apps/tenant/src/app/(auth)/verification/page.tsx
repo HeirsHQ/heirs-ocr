@@ -67,7 +67,6 @@ const VerificationForm = () => {
           is created the moment you enter it.
         </p>
       </div>
-
       <form className="space-y-4" onSubmit={onSubmit} noValidate>
         <Field label="Email" htmlFor="email">
           <Input
@@ -79,14 +78,13 @@ const VerificationForm = () => {
             readOnly
           />
         </Field>
-        <Field label="Verification code" error={error}>
+        <Field label="" error={error}>
           <OtpInput value={otp} onChange={setOtp} disabled={verify.isPending} />
         </Field>
         <Button type="submit" className="w-full" disabled={verify.isPending || !complete}>
           {verify.isPending ? <Loader className="animate-spin" /> : "Create workspace"}
         </Button>
       </form>
-
       <div className="text-muted-foreground space-y-2 text-sm">
         <p>
           Didn&rsquo;t get it? Check spam, then{" "}

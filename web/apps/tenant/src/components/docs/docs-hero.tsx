@@ -22,7 +22,7 @@ export const DocsHero = ({
 }) => (
   <section className="relative overflow-hidden border-b bg-linear-to-b from-background to-muted/30">
     <div className="mx-auto max-w-7xl px-4 py-16 sm:px-6 sm:py-20">
-      <Badge variant="outline" className="mb-6 gap-1.5">
+      <Badge variant="outline" className="mb-6 gap-1.5 uppercase">
         <Icon className="size-3" /> {eyebrow}
       </Badge>
       <h1 className="text-4xl font-bold tracking-tight sm:text-5xl">{title}</h1>

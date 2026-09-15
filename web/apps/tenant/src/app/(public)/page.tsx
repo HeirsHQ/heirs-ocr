@@ -1,3 +1,5 @@
+"use client";
+
 import Link from "next/link";
 import {
   ScanText,
@@ -12,9 +14,9 @@ import {
   Check,
 } from "lucide-react";
 
-import { Button, Badge } from "@heirs/ui";
 import { isFeaturedPlan, planFeatures, planPrice } from "@/lib/plans";
-import { fetchPublicPlans } from "@/lib/ocr";
+import { useTenantPlans } from "@/hooks/api/use-tenant-plan";
+import { Button, Badge } from "@heirs/ui";
 
 const functions = [
   { icon: ScanText, label: "Text Extraction", desc: "Canonical markdown from any file type" },
@@ -61,11 +63,9 @@ Content-Type: multipart/form-data
   }
 }`;
 
-export default async function Page() {
-  // Prices are catalog data — an operator edits a plan in the admin console and
-  // this page follows, with no deploy. Empty when the API is unreachable; the
-  // section below then says so rather than showing numbers nobody stands behind.
-  const plans = await fetchPublicPlans();
+export default function Page() {
+  const plans = useTenantPlans({ page: 1, pageSize: 20 });
+  const planOptions = plans.data?.items ?? [];
 
   return (
     <div className="overflow-y-auto">
@@ -185,7 +185,7 @@ export default async function Page() {
             <h2 className="mt-2 text-3xl font-bold tracking-tight">Simple, transparent pricing</h2>
             <p className="mt-3 text-muted-foreground">Start free. Scale as you grow. All prices in NGN.</p>
           </div>
-          {plans.length === 0 ? (
+          {planOptions.length === 0 ? (
             <div className="mx-auto mt-12 max-w-md rounded-xl border bg-card p-6 text-center">
               <p className="text-sm font-semibold">Pricing is on its way</p>
               <p className="mt-2 text-xs text-muted-foreground text-pretty">
@@ -196,9 +196,9 @@ export default async function Page() {
             </div>
           ) : (
             <div
-              className={`mt-12 grid gap-6 sm:grid-cols-2 ${plans.length >= 4 ? "lg:grid-cols-4" : "lg:grid-cols-3"}`}
+              className={`mt-12 grid gap-6 sm:grid-cols-2 ${planOptions.length >= 4 ? "lg:grid-cols-4" : "lg:grid-cols-3"}`}
             >
-              {plans.map((plan) => {
+              {planOptions.map((plan) => {
                 const price = planPrice(plan);
                 const featured = isFeaturedPlan(plan);
                 return (
@@ -267,7 +267,7 @@ export default async function Page() {
             <Button
               size="lg"
               render={
-                <Link href="/login">
+                <Link href="/register">
                   Create an account <ArrowRight className="size-4" />
                 </Link>
               }

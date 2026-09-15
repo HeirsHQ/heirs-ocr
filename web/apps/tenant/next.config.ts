@@ -6,7 +6,7 @@ const nextConfig: NextConfig = {
   // Emits .next/standalone — a self-contained server plus only the traced
   // dependencies. apps/tenant/Dockerfile copies it as the whole runtime image.
   outputFileTracingRoot: path.join(__dirname, "../.."),
-  allowedDevOrigins: ["192.168.100.3"],
+  allowedDevOrigins: ["192.168.100.3", "192.168.100.4"],
   images: {
     remotePatterns: []
   }
