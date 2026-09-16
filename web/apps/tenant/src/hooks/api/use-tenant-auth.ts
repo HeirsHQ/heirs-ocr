@@ -104,6 +104,42 @@ export function useTenantResendVerification() {
   });
 }
 
+export interface TenantResetPasswordPayload {
+  token: string;
+  password: string;
+}
+
+/**
+ * `POST /api/password/forgot` answers identically whether or not the address has an
+ * account — same status, same body. Anything built on it must not suggest otherwise:
+ * the only honest copy is "if an account exists, a link is on its way".
+ */
+export interface TenantPasswordResetPending {
+  pending: true;
+  email: string;
+  expiresInMinutes: number;
+}
+
+export function useTenantForgotPassword() {
+  return useMutation({
+    mutationKey: ["tenant-auth", "forgot-password"],
+    mutationFn: (payload: { email: string }) =>
+      http.post<TenantPasswordResetPending>("/api/password/forgot", payload).then(unwrap),
+  });
+}
+
+/**
+ * Redeems a reset link. Deliberately returns no session — every existing one is
+ * revoked, and the user signs in afresh (through MFA, if enrolled).
+ */
+export function useTenantResetPassword() {
+  return useMutation({
+    mutationKey: ["tenant-auth", "reset-password"],
+    mutationFn: (payload: TenantResetPasswordPayload) =>
+      http.post<{ ok: true }>("/api/password/reset", payload).then(unwrap),
+  });
+}
+
 export function useTenantLogin() {
   const qc = useQueryClient();
 

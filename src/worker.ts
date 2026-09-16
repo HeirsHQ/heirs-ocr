@@ -1,4 +1,5 @@
 import "dotenv/config";
+import http from "http";
 
 import { initTracing, shutdownTracing } from "./observability/otel";
 import { closeDb, ensureSchema } from "./db";
@@ -7,6 +8,7 @@ import { startBackgroundWorkers, waitForStores } from "./boot";
 import { verify as verifyMailer } from "./notification/mail";
 import { seedPlans } from "./billing/plan-store";
 import { logger } from "./observability/logger";
+import { env } from "./config/env";
 
 /**
  * Dedicated worker entrypoint. Runs the BullMQ loop in its own process so async
@@ -16,6 +18,26 @@ import { logger } from "./observability/logger";
 initTracing();
 
 let stopBackgroundWorkers: (() => Promise<void>) | undefined;
+
+/**
+ * Liveness endpoint. The image's HEALTHCHECK probes `GET /healthz` on `PORT` for
+ * every process type, so the worker answers it too — same contract as the API's
+ * `/healthz` (process is up, no store checks). Only listens once boot has finished,
+ * so a worker still waiting on the stores reads unhealthy, like the API.
+ */
+const healthServer = http.createServer((req, res) => {
+  if (req.method === "GET" && req.url === "/healthz") {
+    res.writeHead(200, { "Content-Type": "application/json" }).end(JSON.stringify({ status: "ok" }));
+    return;
+  }
+  res.writeHead(404).end();
+});
+
+// Not fatal: the probe is a container concern. Run locally beside the API, PORT is
+// already taken — keep draining jobs rather than exit over the health port.
+healthServer.on("error", (err) => {
+  logger.warn("worker health endpoint unavailable", { port: env.PORT, err: err.message });
+});
 
 /**
  * Wait for Redis + Postgres to be reachable before starting the BullMQ loop, then
@@ -45,6 +67,7 @@ const boot = async (): Promise<void> => {
   void verifyMailer();
 
   stopBackgroundWorkers = startBackgroundWorkers();
+  healthServer.listen(Number(env.PORT), () => logger.info("worker health endpoint listening", { port: env.PORT }));
   logger.info("ocr worker started");
 };
 
@@ -57,6 +80,7 @@ boot().catch((err) => {
 
 const shutdown = async (signal: string): Promise<void> => {
   logger.info("ocr worker shutting down", { signal });
+  healthServer.close();
   await stopBackgroundWorkers?.();
   await shutdownTracing();
   await closeDb();

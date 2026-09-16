@@ -1,8 +1,8 @@
 "use client";
 
+import { useRouter, useSearchParams } from "next/navigation";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { Controller, useForm } from "react-hook-form";
-import { useRouter, useSearchParams } from "next/navigation";
 import { Loader } from "lucide-react";
 import { Suspense, useState } from "react";
 import Link from "next/link";

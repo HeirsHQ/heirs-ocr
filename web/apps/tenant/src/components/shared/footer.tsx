@@ -5,9 +5,9 @@ const cols = [
   {
     heading: "Product",
     links: [
-      { href: "#features", label: "Features" },
-      { href: "#how-it-works", label: "How it works" },
-      { href: "#pricing", label: "Pricing" },
+      { href: "/#features", label: "Features" },
+      { href: "/#how-it-works", label: "How it works" },
+      { href: "/#pricing", label: "Pricing" },
     ],
   },
   {
@@ -21,9 +21,8 @@ const cols = [
   {
     heading: "Company",
     links: [
-      { href: "#", label: "About" },
-      { href: "#", label: "Privacy" },
-      { href: "#", label: "Terms" },
+      { href: "/privacy", label: "Privacy" },
+      { href: "/terms", label: "Terms" },
     ],
   },
 ];

@@ -24,6 +24,8 @@ const PUBLIC_PATHS = new Set([
   "/api-reference",
   "/sdks",
   "/changelog",
+  "/terms",
+  "/privacy",
 ]);
 
 export function proxy(request: NextRequest) {

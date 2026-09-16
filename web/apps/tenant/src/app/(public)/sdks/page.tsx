@@ -205,7 +205,7 @@ const Page = () => {
         subtitle="There is nothing to install. The API is one multipart endpoint — here is the whole client, in four languages."
       />
       <section className="py-16">
-        <div className="mx-auto max-w-3xl space-y-10 px-4 sm:px-6">
+        <div className="mx-auto max-w-5xl space-y-10 px-4 sm:px-6">
           <Section id="no-sdk" title="Why there is no package">
             <Prose>
               The whole API is a <code className="font-mono text-xs">POST</code> of one file to one URL with a bearer
@@ -225,7 +225,6 @@ const Page = () => {
               .
             </Prose>
           </Section>
-
           <Section id="typescript" title="TypeScript / Node">
             <Prose>
               No dependencies: <code className="font-mono text-xs">fetch</code>,{" "}
@@ -234,7 +233,6 @@ const Page = () => {
             </Prose>
             <CodeBlock language="typescript" code={typescript(host)} />
           </Section>
-
           <Section id="python" title="Python">
             <Prose>
               Using <code className="font-mono text-xs">requests</code>. Note that{" "}
@@ -244,14 +242,12 @@ const Page = () => {
             </Prose>
             <CodeBlock language="python" code={python(host)} />
           </Section>
-
           <Section id="php" title="PHP">
             <Prose>
               Using <code className="font-mono text-xs">ext-curl</code>, which ships with every supported PHP build.
             </Prose>
             <CodeBlock language="php" code={php(host)} />
           </Section>
-
           <Section id="go" title="Go">
             <Prose>
               Standard library only — <code className="font-mono text-xs">mime/multipart</code> writes the body and{" "}
@@ -259,7 +255,6 @@ const Page = () => {
             </Prose>
             <CodeBlock language="go" code={go(host)} />
           </Section>
-
           <Section id="async" title="Large documents">
             <Prose>
               Past a size or page threshold a document is queued and the call returns <strong>202</strong> with a job id
@@ -271,7 +266,6 @@ const Page = () => {
             </Prose>
             <CodeBlock language="typescript" code={POLLING} />
           </Section>
-
           <Section id="keys" title="Keys and secrets">
             <Prose>
               Every snippet reads the key from the environment, which is the only place it should live. The raw key is

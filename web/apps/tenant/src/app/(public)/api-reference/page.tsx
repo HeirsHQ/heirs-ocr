@@ -58,7 +58,7 @@ const Page = () => (
       subtitle="Integrate with the OCR API directly from your own systems."
     />
     <section className="py-16">
-      <div className="mx-auto max-w-3xl px-4 sm:px-6">
+      <div className="mx-auto max-w-5xl px-4 sm:px-6">
         <ApiReferenceContent functions={<CatalogSignIn />} host={publicApiUrl()} />
       </div>
     </section>

@@ -72,7 +72,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   re-pointed afterwards; a delivery blocked there is marked `dead` immediately rather than
   retried. With `redirect: "manual"` in the worker this closes both the direct and the
   redirect-based route to internal services. A host that fails to resolve is deliberately
-  *not* blocked — that is an ordinary transient the retry path already handles.
+  _not_ blocked — that is an ordinary transient the retry path already handles.
 - **Provisioning CLIs**: `pnpm provision:tenant` and `pnpm provision:admin` for runtime
   create/revoke.
 - **`scripts/migrate-db.sh`** — guarded one-time Postgres data migration
@@ -91,6 +91,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   consults Redis restarts every pod into the same outage.
 - **Configuration** validated at startup via Zod (`src/config/env.ts`), loaded through
   `dotenv`; `.env.example` documents every variable.
+- **Tenant password reset**: `POST /tenant/api/password/forgot` emails a single-use link
+  and `POST /tenant/api/password/reset` redeems it, backing the portal's forgot- and
+  reset-password pages (previously unwired stubs). The forgot route answers identically
+  whether or not the account exists; links are 32-byte tokens stored only as SHA-256,
+  expire after 30 minutes, are redeemed atomically, and are replaced by any newer request.
+  A reset revokes every session and sends the password-changed email, but does not sign
+  the user in, so MFA is never bypassed.
 
 ### Changed
 

@@ -25,6 +25,10 @@ export const http = {
 
 export const unwrap = <T>(response: Awaited<ReturnType<typeof http.get<T>>>): T => response.data;
 
+/** HTTP status of a failed request, or `undefined` when it never got a response. */
+export const getErrorStatus = (error: unknown): number | undefined =>
+  error instanceof AxiosError ? error.response?.status : undefined;
+
 export const getErrorMessage = (error: unknown): string => {
   if (error instanceof AxiosError) {
     const message = error.response?.data?.error?.message;

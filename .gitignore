@@ -83,7 +83,6 @@ Thumbs.db
 .claude/*
 .idea/
 postman/
-HANDOFF.md
 
 /texts
 
@@ -91,5 +90,6 @@ HANDOFF.md
 .claude
 node_modules
 TODO.md
+HANDOFF.md
 # Local Postgres dumps from scripts/migrate-db.sh — contains credentials and tenant data.
 .dbdump/
