@@ -9,6 +9,10 @@ import { parse as parseMrzLines } from "mrz";
 export type MrzFields = {
   documentNumber: string | null;
   fullName: string | null;
+  /** The primary identifier — the MRZ's own surname/given-names split, never guessed from word order. */
+  surname: string | null;
+  /** Secondary identifier: every given name, space-separated. */
+  givenNames: string | null;
   dateOfBirth: string | null;
   expiryDate: string | null;
   nationality: string | null;
@@ -55,6 +59,8 @@ const tryParse = (lines: string[]): MrzParseResult | undefined => {
       fields: {
         documentNumber: f.documentNumber ?? null,
         fullName,
+        surname: f.lastName || null,
+        givenNames: f.firstName || null,
         dateOfBirth: f.birthDate ?? null,
         expiryDate: f.expirationDate ?? null,
         nationality: f.nationality ?? null,

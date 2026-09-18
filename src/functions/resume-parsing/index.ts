@@ -1,4 +1,5 @@
 import { defineOcrFunction, OcrFunction } from "../define";
+import { assessResumeParsing } from "./confidence";
 import { resumeParsingResultSchema } from "./result";
 import { executeResumeParsing } from "./execute";
 import { resumeParsingArgsSchema } from "./args";
@@ -19,6 +20,7 @@ export const resumeParsing = defineOcrFunction({
   argsSchema: resumeParsingArgsSchema,
   resultSchema: resumeParsingResultSchema,
   execute: executeResumeParsing,
+  confidenceOf: assessResumeParsing,
 });
 
 export * from "./args";

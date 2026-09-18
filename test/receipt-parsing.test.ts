@@ -179,8 +179,10 @@ describe("RECEIPT_PARSING — parse + deterministic totals reconciliation", () =
       expect(data.amount_due).toBe(9999);
       expect(data.confidence).toBe("low");
       expect((data.warnings as string[]).length).toBeGreaterThan(0);
-      // And the SLI still sees the degraded verdict.
-      expect(meta.confidence).toBe(0);
+      // And the review flag still sees the degraded verdict: failed check × one warning.
+      expect(meta.confidence).toBe(0.45);
+      expect(meta.needsReview).toBe(true);
+      expect(meta.reviewReasons[0]).toBe("Receipt totals do not reconcile.");
     });
 
     it("rejects an unknown field with INVALID_ARGS rather than 500", async () => {

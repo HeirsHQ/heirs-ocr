@@ -1,5 +1,6 @@
 import { documentAuthenticityResultSchema } from "./result";
 import { defineOcrFunction, OcrFunction } from "../define";
+import { assessDocumentAuthenticity } from "./confidence";
 import { documentAuthenticityArgsSchema } from "./args";
 import { executeDocumentAuthenticity } from "./execute";
 
@@ -16,6 +17,7 @@ export const documentAuthenticity = defineOcrFunction({
   argsSchema: documentAuthenticityArgsSchema,
   resultSchema: documentAuthenticityResultSchema,
   execute: executeDocumentAuthenticity,
+  confidenceOf: assessDocumentAuthenticity,
 });
 
 export * from "./args";

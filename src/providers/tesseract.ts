@@ -31,6 +31,9 @@ export class TesseractProvider implements OcrProvider {
       const pages: PageResult[] = [];
       const blocks: LayoutBlock[] = [];
       let blockIndex = 0;
+      // Character-weighted word confidence across every page (Tesseract reports 0–100).
+      let weightedConfidence = 0;
+      let characters = 0;
 
       for (let i = 0; i < images.length; i++) {
         const image = images[i]!;
@@ -41,6 +44,9 @@ export class TesseractProvider implements OcrProvider {
         const words = (data.blocks ?? []).flatMap((b) => b.paragraphs.flatMap((p) => p.lines.flatMap((l) => l.words)));
         const dims = pageDimensions(words);
         for (const word of words) {
+          const length = word.text.trim().length;
+          weightedConfidence += length * word.confidence;
+          characters += length;
           blocks.push({
             index: blockIndex++,
             page,
@@ -63,6 +69,8 @@ export class TesseractProvider implements OcrProvider {
         pageCount: pages.length,
         provider: this.name,
         durationMs: Date.now() - start,
+        // No recognized characters is zero confidence, not an absent signal: the page was read and yielded nothing.
+        ocrConfidence: characters > 0 ? weightedConfidence / characters / 100 : 0,
       };
     } finally {
       await worker.terminate();
