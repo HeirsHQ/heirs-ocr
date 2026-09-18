@@ -490,9 +490,19 @@ const Page = () => {
                   <Meta label="Provider" value={result.meta.provider} />
                   <Meta label="Pages" value={result.meta.pageCount} />
                   <Meta label="Duration" value={`${result.meta.durationMs} ms`} />
-                  {result.meta.confidence !== undefined && <Meta label="Confidence" value={result.meta.confidence} />}
+                  {result.meta.confidence !== undefined && (
+                    <Meta label="Confidence" value={`${(result.meta.confidence * 100).toFixed(1)}%`} />
+                  )}
+                  {result.meta.needsReview && <Meta label="Review" value="needed" />}
                   {result.meta.cached && <Meta label="Source" value="cached" />}
                 </dl>
+              )}
+              {result.meta?.needsReview && result.meta.reviewReasons && result.meta.reviewReasons.length > 0 && (
+                <ul className="border-warning/40 bg-warning/10 text-warning list-inside list-disc rounded-md border px-3 py-2 text-xs">
+                  {result.meta.reviewReasons.map((reason) => (
+                    <li key={reason}>{reason}</li>
+                  ))}
+                </ul>
               )}
               {result.requestId && (
                 <p className="text-xs text-muted-foreground">

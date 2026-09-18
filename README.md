@@ -218,7 +218,7 @@ invalid config throws immediately. Copy [`.env.example`](./.env.example) and fil
 | `ASYNC_PAGE_THRESHOLD` / `ASYNC_SIZE_THRESHOLD_BYTES`                               | `5` / 5 MiB          | Above either → job goes async                                |
 | `EXTRACTION_CACHE_TTL_SECONDS`                                                      | 7 days               | Extraction cache TTL                                         |
 | `METRICS_AUTH_TOKEN`                                                                | unset                | Bearer token for `/metrics`; unset = open (private net only) |
-| `LLM_COST_NGN_PER_1K_TOKENS` / `LOW_CONFIDENCE_THRESHOLD`                           | `0` / `0.7`          | Cost + quality SLI knobs                                     |
+| `LLM_COST_NGN_PER_1K_TOKENS` / `LOW_CONFIDENCE_THRESHOLD`                           | `0` / `0.95`         | Cost knob / `needsReview` + quality SLI threshold            |
 | `OTEL_EXPORTER_OTLP_ENDPOINT`                                                       | unset                | Set → traces ship over OTLP/HTTP                             |
 | `AZURE_OPENAI_ENABLED` (+ `_API_KEY`/`_ENDPOINT`/`_API_VERSION`/`_DEPLOYMENT_NAME`) | `false`              | Interpretation layer master switch                           |
 | `GLM_ENABLED` (+ `_API_KEY`)                                                        | `false`              | GLM-OCR master switch                                        |

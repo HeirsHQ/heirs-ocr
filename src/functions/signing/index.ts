@@ -1,4 +1,5 @@
 import { defineOcrFunction, OcrFunction } from "../define";
+import { assessSigning } from "./confidence";
 import { signingResultSchema } from "./result";
 import { executeSigning } from "./execute";
 import { signingArgsSchema } from "./args";
@@ -26,9 +27,9 @@ export const signing = defineOcrFunction({
   argsSchema: signingArgsSchema,
   resultSchema: signingResultSchema,
   execute: executeSigning,
-  // Surfaces degraded (whole-page) runs on the low-confidence quality SLI, so a
-  // GLM outage shows up as a measurable drop rather than a silent quality change.
-  confidenceOf: (r) => (r.confidence === "high" ? 1 : 0),
+  // Degraded (whole-page) runs score low, so a GLM outage shows up as a measurable
+  // drop on the quality SLI rather than a silent quality change.
+  confidenceOf: assessSigning,
 });
 
 export * from "./args";

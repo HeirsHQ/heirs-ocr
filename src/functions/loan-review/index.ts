@@ -1,4 +1,5 @@
 import { defineOcrFunction, OcrFunction } from "../define";
+import { assessLoanReview } from "./confidence";
 import { loanReviewResultSchema } from "./result";
 import { executeLoanReview } from "./execute";
 import { loanReviewArgsSchema } from "./args";
@@ -15,7 +16,7 @@ export const loanReview = defineOcrFunction({
   argsSchema: loanReviewArgsSchema,
   resultSchema: loanReviewResultSchema,
   execute: executeLoanReview,
-  confidenceOf: (r) => (r.confidence === "high" ? 1 : 0),
+  confidenceOf: assessLoanReview,
 });
 
 export * from "./args";

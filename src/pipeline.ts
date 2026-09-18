@@ -7,6 +7,7 @@ import { isRecordable, recordDocument } from "./observability/documents";
 import { blobStorageEnabled, putDocument } from "./storage/blob";
 import { dispatchDocumentEvent } from "./webhooks/dispatch";
 import type { ProviderPolicy } from "./config/providers";
+import { withExtraction } from "./functions/confidence";
 import { withSpan } from "./observability/tracing";
 import { routeProvider } from "./providers/router";
 import { metrics } from "./observability/metrics";
@@ -45,7 +46,15 @@ export type OcrResponseMeta = {
   fellBackFrom: string | null;
   pageCount: number;
   cached: boolean;
-  confidence?: number;
+  /**
+   * 0–1 confidence the result can be used without human review: the function's own
+   * evidence-based assessment × the provider's OCR confidence (functions/confidence.ts).
+   */
+  confidence: number;
+  /** `confidence` fell below `LOW_CONFIDENCE_THRESHOLD` — route this result to a person. */
+  needsReview: boolean;
+  /** Why confidence is below 1, one entry per deduction. Empty when nothing was deducted. */
+  reviewReasons: string[];
   durationMs: number;
   tokensUsed?: number;
 };
@@ -152,13 +161,12 @@ export const runPipeline = async <TArgs, TResult>(
     });
     interpretMs = Date.now() - interpretStart;
 
-    // Quality SLI: functions that carry a confidence signal expose `confidenceOf`;
-    // the pipeline is the single place it's read and turned into a metric.
-    const confidence = def.confidenceOf?.(result, args);
-    const lowConfidence = confidence === undefined ? undefined : confidence <= env.LOW_CONFIDENCE_THRESHOLD;
-    if (lowConfidence !== undefined) {
-      metrics.recordConfidence(def.key, lowConfidence);
-    }
+    // Every function scores its result (`confidenceOf`); the pipeline folds in the
+    // extraction's OCR confidence and is the single place the score becomes a review
+    // flag and a metric. "At least the threshold" passes, so the comparison is strict.
+    const assessment = withExtraction(recognized, def.confidenceOf(result, args));
+    const needsReview = assessment.score < env.LOW_CONFIDENCE_THRESHOLD;
+    metrics.recordConfidence(def.key, needsReview);
 
     // Cost SLI: priced off the tokens we can see (extraction); 0-rate disables it.
     const estimatedCostNgn =
@@ -171,7 +179,9 @@ export const runPipeline = async <TArgs, TResult>(
       fellBackFrom: doc.fellBackFrom ?? null,
       pageCount: doc.pageCount,
       cached,
-      confidence,
+      confidence: assessment.score,
+      needsReview,
+      reviewReasons: assessment.reasons,
       durationMs: Date.now() - start,
       tokensUsed: doc.tokensUsed,
     };
@@ -196,7 +206,7 @@ export const runPipeline = async <TArgs, TResult>(
     recordFunctionUsage(def.key, {
       outcome: "success",
       tokensUsed: doc.tokensUsed,
-      lowConfidence,
+      lowConfidence: needsReview,
       fellBack: doc.fellBackFrom !== undefined,
     });
     // Metadata for the portal's document list, and — when blob storage is on — the
