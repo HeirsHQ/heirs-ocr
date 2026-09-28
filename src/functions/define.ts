@@ -2,6 +2,7 @@ import type { ZodType } from "zod";
 
 import type { Capability, MimeGroup, RecognizedDocument } from "../providers/types";
 import type { Logger } from "../observability/logger";
+import type { ConfidenceAssessment } from "./confidence";
 import type { LlmClient } from "../llm/azure";
 
 /** The catalog of document functions. Add a key here + a folder to extend. */
@@ -86,17 +87,22 @@ export type OcrFunctionDefinition<TArgs, TResult> = {
   resultSchema: ZodType<TResult> | ((args: TArgs) => ZodType<TResult>);
   execute: (ctx: OcrContext, args: TArgs) => Promise<TResult>;
   /**
-   * Optional: map a validated result to a 0–1 confidence, feeding the
-   * low-confidence quality SLI (`ocr_low_confidence_ratio`). Functions that carry
-   * no meaningful confidence signal omit it. The pipeline reads it — a function
-   * never touches metrics directly. Return `undefined` to record no observation.
+   * Required: score a validated result 0–1 for how far it can be used without human
+   * review, with a reason for every deduction (see ./confidence.ts). The pipeline
+   * multiplies in the extraction stage's OCR confidence, reports the result as
+   * `meta.confidence` / `meta.reviewReasons`, flags `meta.needsReview` below
+   * `LOW_CONFIDENCE_THRESHOLD`, and feeds the quality SLI — a function never touches
+   * metrics directly.
+   *
+   * Score from checkable evidence only — deterministic verdicts, their warnings, key
+   * fields found — never a model grading its own answer.
    *
    * `args` is passed because a dynamic-schema function's result shape depends on
-   * them: RECEIPT_PARSING lets a caller rename its verdict field, and reading a
-   * fixed `result.confidence` would then see `undefined`, score every such request
-   * 0, and quietly drag down the SLI for a reason unrelated to quality.
+   * them: RECEIPT_PARSING lets a caller rename or drop fields, so a fixed
+   * `result.confidence` read would see `undefined` and score for a reason unrelated
+   * to quality.
    */
-  confidenceOf?: (result: TResult, args: TArgs) => number | undefined;
+  confidenceOf: (result: TResult, args: TArgs) => ConfidenceAssessment;
 };
 
 /**

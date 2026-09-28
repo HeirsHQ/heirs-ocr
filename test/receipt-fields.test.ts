@@ -161,12 +161,26 @@ describe("receipt parsing definition", () => {
 
   it("reads confidence through the caller's name for the quality SLI", () => {
     // Reading a fixed `result.confidence` here would see undefined and score every
-    // renamed request 0, dragging the low-confidence SLI down for no quality reason.
+    // renamed request as failed, dragging the SLI down for no quality reason.
     const args = receiptParsingArgsSchema.parse({ fieldMap: { total: "amount_due", confidence: "verdict" } });
     const projected = projectReceipt(receipt(), args.fieldMap!);
-    expect(receiptParsing.confidenceOf?.(projected, args)).toBe(1);
+    expect(receiptParsing.confidenceOf(projected, args)).toEqual({ score: 1, reasons: [] });
 
     const low = projectReceipt(receipt({ confidence: "low" }), args.fieldMap!);
-    expect(receiptParsing.confidenceOf?.(low, args)).toBe(0);
+    expect(receiptParsing.confidenceOf(low, args).score).toBe(0.5);
+  });
+
+  it("scores only the key fields the caller selected", () => {
+    // `merchant.name` and `dateTime` are null in the fixture, but this caller never
+    // asked for them, so they are not theirs to review.
+    const args = receiptParsingArgsSchema.parse({ fieldMap: { total: "amount_due" } });
+    const projected = projectReceipt(receipt({ merchant: { name: null, address: null, tin: null } }), args.fieldMap!);
+    expect(receiptParsing.confidenceOf(projected, args).score).toBe(1);
+
+    const missingTotal = projectReceipt(receipt({ total: null }), args.fieldMap!);
+    expect(receiptParsing.confidenceOf(missingTotal, args)).toEqual({
+      score: 0,
+      reasons: ["Not found on the document: total."],
+    });
   });
 });

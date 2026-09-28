@@ -1,5 +1,6 @@
 import { documentClassificationResultSchema } from "./result";
 import { defineOcrFunction, OcrFunction } from "../define";
+import { assessDocumentClassification } from "./confidence";
 import { documentClassificationArgsSchema } from "./args";
 import { executeDocumentClassification } from "./execute";
 
@@ -13,7 +14,7 @@ export const documentClassification = defineOcrFunction({
   argsSchema: documentClassificationArgsSchema,
   resultSchema: documentClassificationResultSchema,
   execute: executeDocumentClassification,
-  confidenceOf: (r) => r.confidence,
+  confidenceOf: assessDocumentClassification,
 });
 
 export * from "./args";

@@ -136,6 +136,27 @@ const scalarAt = (result: ReceiptParsingResult, path: string): unknown => {
   return (root[head!] as Record<string, unknown> | null)?.[tail];
 };
 
+/**
+ * Reads a canonical field (`total`, `merchant.name`, `lineItems`) off a possibly
+ * projected receipt. `undefined` when the caller's `fieldMap` did not select it: a
+ * field the caller never asked for is not theirs to review, so it must not score.
+ */
+export const selectedReceiptField = (
+  output: ReceiptParsingOutput,
+  fieldMap: ReceiptFieldMap | undefined,
+  path: string,
+): { value: unknown } | undefined => {
+  if (!fieldMap) return { value: scalarAt(output as ReceiptParsingResult, path) };
+  const record = output as Record<string, unknown>;
+  if (path === LINE_ITEMS_PATH) {
+    const arrayName = fieldMap[LINE_ITEMS_PATH];
+    const selected = arrayName !== undefined || lineItemSubPaths(fieldMap).length > 0;
+    return selected ? { value: record[arrayName ?? LINE_ITEMS_PATH] } : undefined;
+  }
+  const name = fieldMap[path];
+  return name === undefined ? undefined : { value: record[name] };
+};
+
 /** The output key the reconciliation verdict is reported under. */
 export const verdictKey = (fieldMap: ReceiptFieldMap | undefined, field: "confidence" | "warnings"): string =>
   fieldMap?.[field] ?? field;

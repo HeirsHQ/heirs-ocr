@@ -1,4 +1,5 @@
 import { defineOcrFunction, OcrFunction } from "../define";
+import { assessFormDataExtraction } from "./confidence";
 import { executeFormDataExtraction } from "./execute";
 import { formDataExtractionArgsSchema } from "./args";
 import { buildFormResultSchema } from "./result";
@@ -14,6 +15,7 @@ export const formDataExtraction = defineOcrFunction({
   // Dynamic: the result shape depends on the caller's field spec.
   resultSchema: buildFormResultSchema,
   execute: executeFormDataExtraction,
+  confidenceOf: assessFormDataExtraction,
 });
 
 export * from "./args";

@@ -246,6 +246,9 @@ curl -X POST https://<host>/v1/ocr/RECEIPT_PARSING \
     "fellBackFrom": null,
     "pageCount": 1,
     "cached": false,
+    "confidence": 0.912,
+    "needsReview": true,
+    "reviewReasons": ["OCR read the text at 91.2% character confidence (tesseract)."],
     "durationMs": 812,
     "tokensUsed": 1340
   }
@@ -254,8 +257,24 @@ curl -X POST https://<host>/v1/ocr/RECEIPT_PARSING \
 
 The `result` shape is function-specific — every function's expected response is shown in
 [Expected responses](#expected-responses). `meta` is uniform across functions and reports
-which provider ran, whether a fallback occurred, page count, cache status, latency, and
-token usage where applicable.
+which provider ran, whether a fallback occurred, page count, cache status, result
+confidence, latency, and token usage where applicable.
+
+**Confidence and review.** Every function scores its result. `meta.confidence` (0–1) is how
+far the result can be used without a person checking it. `meta.needsReview` is `true` when
+the score is below the service's threshold (default **0.95**; a score equal to it passes).
+`meta.reviewReasons` lists one reason per deduction. A flagged result is still returned in
+full, so route it to a human rather than discarding it. The score comes from checkable
+evidence, not from a model grading itself:
+
+| Evidence                                                                       | Effect                                    |
+| ------------------------------------------------------------------------------ | ----------------------------------------- |
+| OCR character confidence (Tesseract only; text layers and GLM-OCR are neutral) | × that confidence                         |
+| A deterministic verdict of `"low"` (totals, balances, degraded signing path)   | × 0.5                                     |
+| Each entry in `warnings`, or a failed MRZ checksum / `expected` mismatch       | × 0.9 per warning; × 0.5 per failed check |
+| Key fields the function exists to find are missing                             | × the share of key fields found           |
+| `DOCUMENT_CLASSIFICATION` / `AUTO_EXTRACTION` routing                          | × classifier confidence; `unknown` → 0    |
+| `DOCUMENT_AUTHENTICITY`                                                        | 1 − suspicion `score`; `inconclusive` → 0 |
 
 ### 3. Async path
 
@@ -867,11 +886,26 @@ corresponding expected value; `mrzValid` is `null` when the document carries no 
 `assuranceLevel` is fixed at `"document-content-only"` — this verifies the document's own
 consistency, never that the holder is who they claim to be.
 
+Names and dates are normalized in code, so the same file reads the same on every run:
+
+- **Names** come back uppercase as `surname`, `firstName` and `middleName` (every given name after the
+  first), and `fullName` is always composed as `FIRST MIDDLE SURNAME`. When a valid MRZ is present, its
+  surname/given-names split wins.
+- **Dates** (`dateOfBirth`, `issueDate`, `expiryDate`) come back as ISO `YYYY-MM-DD` whatever the document
+  prints. Numeric dates are read day first (`03/04/1990` is 3 April) unless that is impossible. A date that
+  cannot be read is returned as printed.
+- **`nameMatch`** ignores word order, case, punctuation and accents, but every name must appear on both
+  sides, so a missing middle name is still `false`. **`dobMatch`** compares calendar days, so
+  `expected.dateOfBirth` may be in any common format.
+
 ```json
 {
   "documentType": "PASSPORT",
   "fields": {
-    "fullName": "ADA OBI",
+    "fullName": "ADA CHIOMA OBI",
+    "surname": "OBI",
+    "firstName": "ADA",
+    "middleName": "CHIOMA",
     "dateOfBirth": "1995-04-02",
     "documentNumber": "A01234567",
     "issueDate": "2021-05-10",

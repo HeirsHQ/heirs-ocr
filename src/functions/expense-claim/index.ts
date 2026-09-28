@@ -1,4 +1,5 @@
 import { defineOcrFunction, OcrFunction } from "../define";
+import { assessExpenseClaim } from "./confidence";
 import { expenseClaimResultSchema } from "./result";
 import { executeExpenseClaim } from "./execute";
 import { expenseClaimArgsSchema } from "./args";
@@ -14,7 +15,7 @@ export const expenseClaim = defineOcrFunction({
   argsSchema: expenseClaimArgsSchema,
   resultSchema: expenseClaimResultSchema,
   execute: executeExpenseClaim,
-  confidenceOf: (r) => (r.confidence === "high" ? 1 : 0),
+  confidenceOf: assessExpenseClaim,
 });
 
 export * from "./args";

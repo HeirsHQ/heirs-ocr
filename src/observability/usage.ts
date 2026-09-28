@@ -95,9 +95,9 @@ export type FunctionUsage = {
   requests: number;
   errors: number;
   tokens: number;
-  /** Requests whose function exposes a confidence signal — the ratio's denominator. */
+  /** Successful requests that produced a scored result — the ratio's denominator. */
   confidenceObservations: number;
-  /** Of those, how many landed at or below `LOW_CONFIDENCE_THRESHOLD`. */
+  /** Of those, how many landed below `LOW_CONFIDENCE_THRESHOLD` (flagged `needsReview`). */
   lowConfidence: number;
   /** Requests served by a fallback provider rather than the primary. */
   fallbacks: number;
@@ -107,9 +107,9 @@ export type FunctionUsage = {
  * Records one request against a function. **Fire-and-forget**, exactly like
  * {@link recordTenantUsage} — analytics must never fail or slow a request.
  *
- * `lowConfidence` is `undefined` for functions that carry no confidence signal, which
- * records no observation at all: counting those as "not low" would silently inflate
- * the denominator and drag every ratio toward zero.
+ * `lowConfidence` is `undefined` when there is no result to score (the error path),
+ * which records no observation at all: counting those as "not low" would silently
+ * inflate the denominator and drag every ratio toward zero.
  */
 export const recordFunctionUsage = (
   fn: string,

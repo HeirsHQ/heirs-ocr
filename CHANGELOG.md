@@ -98,8 +98,33 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   expire after 30 minutes, are redeemed atomically, and are replaced by any newer request.
   A reset revokes every session and sends the password-changed email, but does not sign
   the user in, so MFA is never bypassed.
+- **A review flag on every response.** All thirteen functions now score their result, and
+  `meta` always carries `confidence` (0–1), `needsReview`, and `reviewReasons`. The score
+  comes from checkable evidence, not from a model grading itself. It multiplies Tesseract's
+  character-level OCR confidence (new `RecognizedDocument.ocrConfidence`) by the function's
+  own checks: a failed deterministic verdict halves it, each warning costs 10%, and a
+  missing key field lowers it by the share of key fields not found. Results below
+  `LOW_CONFIDENCE_THRESHOLD` come back with `needsReview: true` instead of failing.
+  `confidenceOf` is now required on every function definition.
 
 ### Changed
+
+- **`ID_VERIFICATION` names and dates are consistent across runs, and the match checks ignore
+  order and format.**
+  - **Names:** the model now returns name parts instead of one string. `fields` gains `surname`,
+    `firstName` and `middleName`; names come back uppercase, and `fullName` is always composed as
+    `FIRST MIDDLE SURNAME`. `nameMatch` compares the names as a set, so order no longer matters,
+    but every name must still be present on both sides.
+  - **Dates:** `dateOfBirth`, `issueDate` and `expiryDate` are normalized in code to ISO
+    `YYYY-MM-DD`, reading numeric dates day first. `dobMatch` compares calendar days in any
+    format. Previously `new Date()` read `12/08/1974` as December 8, and a two-digit birth year
+    such as `45` became 2045.
+  - **Expiry:** a document is no longer reported as expired on its expiry day.
+
+- **`LOW_CONFIDENCE_THRESHOLD` defaults to `0.95` (was `0.7`), and a score equal to it now
+  passes** (the check was "at or below"). Previously eight functions reported a confidence,
+  six of them as a bare `high`/`low` → 1/0. The low-confidence ratio SLI now covers all
+  thirteen and will read higher than before for the same traffic.
 
 - **`SIGNING` no longer requires the `seals` capability, and runs without GLM-OCR.**
   It declared `requires: ["layout", "seals"]`, which only GLM satisfies, so with

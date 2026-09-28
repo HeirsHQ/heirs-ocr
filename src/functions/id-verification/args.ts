@@ -9,8 +9,14 @@ export const idVerificationArgsSchema = z.object({
     .describe("Which kind of ID this is. Leave on AUTO to let it work that out from the document."),
   expected: z
     .object({
-      fullName: z.string().optional().describe("The name you have on file, checked against the one on the ID."),
-      dateOfBirth: z.string().optional().describe("The date of birth you have on file, as YYYY-MM-DD."),
+      fullName: z
+        .string()
+        .optional()
+        .describe("The name you have on file, in any order, checked against the one on the ID."),
+      dateOfBirth: z
+        .string()
+        .optional()
+        .describe("The date of birth you have on file, in any common format (e.g. 1990-04-03, 03/04/1990)."),
       documentNumber: z.string().optional().describe("The ID number you have on file."),
     })
     .optional()

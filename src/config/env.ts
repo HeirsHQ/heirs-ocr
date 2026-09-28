@@ -114,9 +114,9 @@ const schema = z
     // Estimated LLM price in NGN per 1,000 tokens, feeding the cost SLI
     // (`ocr_estimated_cost_ngn_total`). 0 disables cost accounting.
     LLM_COST_NGN_PER_1K_TOKENS: z.coerce.number().nonnegative().default(0),
-    // A result confidence at or below this (0–1) counts as "low" for the
-    // low-confidence quality ratio SLI.
-    LOW_CONFIDENCE_THRESHOLD: z.coerce.number().min(0).max(1).default(0.7),
+    // A result confidence (0–1) below this is flagged `meta.needsReview` and counts
+    // as "low" for the low-confidence quality ratio SLI. At least this passes.
+    LOW_CONFIDENCE_THRESHOLD: z.coerce.number().min(0).max(1).default(0.95),
     MAX_FILE_SIZE_BYTES: z.coerce
       .number()
       .int()

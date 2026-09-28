@@ -25,7 +25,12 @@ export interface OcrResponseMeta {
   fellBackFrom: string | null;
   pageCount: number;
   cached: boolean;
+  /** 0–1 confidence the result can be used without human review. Absent on responses from older API builds. */
   confidence?: number;
+  /** Confidence fell below the service's review threshold (default 0.95). */
+  needsReview?: boolean;
+  /** One reason per deduction from a perfect score. */
+  reviewReasons?: string[];
   durationMs: number;
   tokensUsed?: number;
 }

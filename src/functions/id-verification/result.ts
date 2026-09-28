@@ -5,7 +5,16 @@ import { idDocumentTypeSchema } from "./args";
 export const idVerificationResultSchema = z.object({
   documentType: idDocumentTypeSchema,
   fields: z.object({
+    /**
+     * Composed in code as `FIRST MIDDLE SURNAME` from the parts below, so the order is the
+     * same on every run whatever order the document prints them in.
+     */
     fullName: z.string().nullable(),
+    surname: z.string().nullable(),
+    firstName: z.string().nullable(),
+    /** Every given name after the first, space-separated. */
+    middleName: z.string().nullable(),
+    /** Dates are ISO `YYYY-MM-DD` whatever format the document prints; the printed text only when unreadable. */
     dateOfBirth: z.string().nullable(),
     documentNumber: z.string().nullable(),
     issueDate: z.string().nullable(),
@@ -21,6 +30,7 @@ export const idVerificationResultSchema = z.object({
   }),
   checks: z.object({
     expired: z.boolean().nullable(),
+    /** ISO `YYYY-MM-DD` when the printed date could be read; the printed text otherwise. */
     expiryDate: z.string().nullable(),
     nameMatch: z.boolean().nullable(),
     dobMatch: z.boolean().nullable(),

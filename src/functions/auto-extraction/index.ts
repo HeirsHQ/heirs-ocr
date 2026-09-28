@@ -1,4 +1,5 @@
 import { defineOcrFunction, OcrFunction } from "../define";
+import { assessAutoExtraction } from "./confidence";
 import { autoExtractionResultSchema } from "./result";
 import { autoExtractionArgsSchema } from "./args";
 import { executeAutoExtraction } from "./execute";
@@ -19,8 +20,8 @@ export const autoExtraction = defineOcrFunction({
   argsSchema: autoExtractionArgsSchema,
   resultSchema: autoExtractionResultSchema,
   execute: executeAutoExtraction,
-  // The routing classifier's confidence is the quality signal for auto-routing.
-  confidenceOf: (r) => r.classification.confidence,
+  // Routing confidence × the routed parser's own assessment (see confidence.ts).
+  confidenceOf: assessAutoExtraction,
 });
 
 export * from "./args";

@@ -1,5 +1,6 @@
 import { defineOcrFunction, OcrFunction } from "../define";
-import { buildReceiptResultSchema, verdictKey } from "./fields";
+import { assessReceiptParsing } from "./confidence";
+import { buildReceiptResultSchema } from "./fields";
 import { receiptParsingArgsSchema } from "./args";
 import { executeReceiptParsing } from "./execute";
 
@@ -21,11 +22,9 @@ export const receiptParsing = defineOcrFunction({
   // Dynamic: canonical by default, or the caller's field map (see fields.ts).
   resultSchema: (args) => buildReceiptResultSchema(args.fieldMap),
   execute: executeReceiptParsing,
-  // Deterministic totals-reconciliation verdict → a 0/1 confidence for the SLI.
-  // Read through `verdictKey` so a caller renaming the field cannot detach the
-  // quality signal from the metric.
-  confidenceOf: (r, args) =>
-    (r as Record<string, unknown>)[verdictKey(args.fieldMap, "confidence")] === "high" ? 1 : 0,
+  // Reads through the caller's field map so renaming or dropping fields cannot
+  // detach the score from the receipt actually returned (see confidence.ts).
+  confidenceOf: assessReceiptParsing,
 });
 
 export * from "./args";

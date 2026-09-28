@@ -1,4 +1,5 @@
 import { defineOcrFunction, OcrFunction } from "../define";
+import { assessTextExtraction } from "./confidence";
 import { textExtractionResultSchema } from "./result";
 import { executeTextExtraction } from "./execute";
 import { textExtractionArgsSchema } from "./args";
@@ -13,6 +14,7 @@ export const textExtraction = defineOcrFunction({
   argsSchema: textExtractionArgsSchema,
   resultSchema: textExtractionResultSchema,
   execute: executeTextExtraction,
+  confidenceOf: assessTextExtraction,
 });
 
 export * from "./args";

@@ -37,6 +37,13 @@ export type RecognizedDocument = {
   fellBackFrom?: string;
   tokensUsed?: number;
   durationMs: number;
+  /**
+   * The provider's own 0–1 character-level recognition confidence, weighted by text
+   * length. Absent when the provider has no such signal — text layers (pdf-text,
+   * mammoth, plain text) are exact, and GLM-OCR does not expose one — which the
+   * result confidence treats as neutral (see functions/confidence.ts).
+   */
+  ocrConfidence?: number;
 };
 
 /** Raw input handed to a provider. `mimeGroup` is already sniffed. */

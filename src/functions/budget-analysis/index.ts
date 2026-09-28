@@ -1,4 +1,5 @@
 import { defineOcrFunction, OcrFunction } from "../define";
+import { assessBudgetAnalysis } from "./confidence";
 import { budgetAnalysisResultSchema } from "./result";
 import { budgetAnalysisArgsSchema } from "./args";
 import { executeBudgetAnalysis } from "./execute";
@@ -16,8 +17,7 @@ export const budgetAnalysis = defineOcrFunction({
   argsSchema: budgetAnalysisArgsSchema,
   resultSchema: budgetAnalysisResultSchema,
   execute: executeBudgetAnalysis,
-  // Deterministic reconciliation verdict → a 0/1 confidence for the SLI.
-  confidenceOf: (r) => (r.confidence === "high" ? 1 : 0),
+  confidenceOf: assessBudgetAnalysis,
 });
 
 export * from "./args";

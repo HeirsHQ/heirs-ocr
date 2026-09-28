@@ -1,5 +1,6 @@
 import { bankStatementAnalysisResultSchema } from "./result";
 import { defineOcrFunction, OcrFunction } from "../define";
+import { assessBankStatementAnalysis } from "./confidence";
 import { bankStatementAnalysisArgsSchema } from "./args";
 import { executeBankStatementAnalysis } from "./execute";
 
@@ -15,7 +16,7 @@ export const bankStatementAnalysis = defineOcrFunction({
   argsSchema: bankStatementAnalysisArgsSchema,
   resultSchema: bankStatementAnalysisResultSchema,
   execute: executeBankStatementAnalysis,
-  confidenceOf: (r) => (r.confidence === "high" ? 1 : 0),
+  confidenceOf: assessBankStatementAnalysis,
 });
 
 export * from "./args";
