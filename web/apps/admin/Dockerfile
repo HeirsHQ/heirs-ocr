@@ -3,7 +3,7 @@
 #   docker build -f apps/admin/Dockerfile -t heirs-admin .   # run from web/
 # (docker-compose sets context: ./web and dockerfile: apps/admin/Dockerfile.)
 
-FROM node:22-slim AS base
+FROM node:22.23.4-slim AS base
 ENV PNPM_HOME=/pnpm \
     PATH=/pnpm:$PATH
 RUN corepack enable
@@ -16,7 +16,7 @@ RUN pnpm install --frozen-lockfile
 RUN pnpm -C apps/admin build
 
 # ---- runtime: minimal image running the traced standalone output --------------
-FROM node:22-slim AS runtime
+FROM node:22.23.4-slim AS runtime
 WORKDIR /app
 ENV NODE_ENV=production \
     PORT=3000
