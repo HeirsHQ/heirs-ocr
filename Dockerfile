@@ -16,7 +16,7 @@
 # baked in — see .env.example for the full set validated by src/config/env.ts.
 
 # ---- base: Node + pnpm via corepack --------------------------------------
-FROM node:22-slim AS base
+FROM node:22.23.4-slim AS base
 ENV PNPM_HOME=/pnpm \
     PATH=/pnpm:$PATH
 RUN corepack enable
@@ -42,7 +42,7 @@ COPY scripts ./scripts
 RUN pnpm install --frozen-lockfile --prod
 
 # ---- runtime: minimal image, non-root ------------------------------------
-FROM node:22-slim AS runtime
+FROM node:22.23.4-slim AS runtime
 ENV NODE_ENV=production \
     PORT=8080
 WORKDIR /app
